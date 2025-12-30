@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Table Wars Puck - Firmware Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .version-info {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .version-badge {
+            background: #667eea;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+
+        .upload-section {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .upload-form {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        input[type="file"] {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #667eea;
+            border-radius: 5px;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #764ba2;
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .pucks-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .puck-card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s;
+        }
+
+        .puck-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .puck-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .puck-id {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .status-badge {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .status-online {
+            background: #10b981;
+            color: white;
+        }
+
+        .status-offline {
+            background: #ef4444;
+            color: white;
+        }
+
+        .status-updating {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .puck-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .info-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .puck-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-update {
+            flex: 1;
+            background: #10b981;
+            padding: 10px;
+        }
+
+        .btn-update:hover {
+            background: #059669;
+        }
+
+        .btn-restart {
+            flex: 1;
+            background: #f59e0b;
+            padding: 10px;
+        }
+
+        .btn-restart:hover {
+            background: #d97706;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e5e7eb;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .logs-section {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .logs-container {
+            background: #1e293b;
+            color: #10b981;
+            padding: 20px;
+            border-radius: 5px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+        }
+
+        .log-timestamp {
+            color: #64748b;
+        }
+
+        .log-success {
+            color: #10b981;
+        }
+
+        .log-error {
+            color: #ef4444;
+        }
+
+        .log-warning {
+            color: #f59e0b;
+        }
+
+        .refresh-btn {
+            float: right;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🎮 Table Wars Puck - Firmware Dashboard</h1>
+            <p>Manage and update all your pucks wirelessly</p>
+            <div class="version-info">
+                <div class="version-badge" id="current-version">Current Version: Loading...</div>
+                <div class="version-badge" id="latest-version">Latest Version: Loading...</div>
+            </div>
+        </div>
+
+        <!-- Upload New Firmware -->
+        <div class="upload-section">
+            <h2>📤 Upload New Firmware</h2>
+            <p style="color: #666; margin: 10px 0 20px 0;">Upload a new .bin file to deploy to all pucks</p>
+            <div class="upload-form">
+                <input type="file" id="firmware-file" accept=".bin">
+                <input type="text" id="version-number" placeholder="Version (e.g., 1.0.1)" style="width: 200px; padding: 10px; border: 2px solid #667eea; border-radius: 5px;">
+                <button onclick="uploadFirmware()">Upload Firmware</button>
+            </div>
+        </div>
+
+        <!-- Pucks Grid -->
+        <div class="pucks-grid" id="pucks-grid">
+            <!-- Puck cards will be dynamically generated -->
+        </div>
+
+        <!-- Logs Section -->
+        <div class="logs-section">
+            <h2>📋 Deployment Logs</h2>
+            <button class="refresh-btn" onclick="refreshLogs()">Refresh Logs</button>
+            <div style="clear: both;"></div>
+            <div class="logs-container" id="logs-container">
+                <div class="log-entry"><span class="log-timestamp">[00:00:00]</span> <span class="log-success">Dashboard initialized</span></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Puck configuration
+        const PUCKS = [
+            { id: 1, name: "Puck 1", ip: "192.168.1.101" },
+            { id: 2, name: "Puck 2", ip: "192.168.1.102" },
+            { id: 3, name: "Puck 3", ip: "192.168.1.103" },
+            { id: 4, name: "Puck 4", ip: "192.168.1.104" },
+            { id: 5, name: "Puck 5", ip: "192.168.1.105" },
+            { id: 6, name: "Puck 6", ip: "192.168.1.106" }
+        ];
+
+        // Initialize dashboard
+        function initDashboard() {
+            renderPuckCards();
+            loadVersionInfo();
+            loadPuckStatus();
+
+            // Auto-refresh every 5 seconds
+            setInterval(loadPuckStatus, 5000);
+        }
+
+        // Render puck cards
+        function renderPuckCards() {
+            const grid = document.getElementById('pucks-grid');
+            grid.innerHTML = '';
+
+            PUCKS.forEach(puck => {
+                const card = document.createElement('div');
+                card.className = 'puck-card';
+                card.id = `puck-${puck.id}`;
+                card.innerHTML = `
+                    <div class="puck-header">
+                        <div class="puck-id">${puck.name}</div>
+                        <div class="status-badge status-offline" id="status-${puck.id}">Offline</div>
+                    </div>
+                    <div class="puck-info">
+                        <div class="info-item">
+                            <div class="info-label">IP Address</div>
+                            <div class="info-value">${puck.ip}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Version</div>
+                            <div class="info-value" id="version-${puck.id}">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Uptime</div>
+                            <div class="info-value" id="uptime-${puck.id}">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Battery</div>
+                            <div class="info-value" id="battery-${puck.id}">-</div>
+                        </div>
+                    </div>
+                    <div class="puck-actions">
+                        <button class="btn-update" onclick="updatePuck(${puck.id})">Update Firmware</button>
+                        <button class="btn-restart" onclick="restartPuck(${puck.id})">Restart</button>
+                    </div>
+                    <div class="progress-bar" id="progress-${puck.id}">
+                        <div class="progress-fill" id="progress-fill-${puck.id}" style="width: 0%;">0%</div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // Load version information
+        async function loadVersionInfo() {
+            try {
+                const response = await fetch('/firmware/version');
+                const data = await response.json();
+
+                document.getElementById('current-version').textContent = `Current Version: ${data.version}`;
+                document.getElementById('latest-version').textContent = `Latest Version: ${data.version}`;
+            } catch (error) {
+                addLog('error', 'Failed to load version info');
+            }
+        }
+
+        // Load puck status
+        async function loadPuckStatus() {
+            for (const puck of PUCKS) {
+                try {
+                    const response = await fetch(`/api/puck/${puck.id}/status`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        updatePuckCard(puck.id, data);
+                    } else {
+                        setPuckOffline(puck.id);
+                    }
+                } catch (error) {
+                    setPuckOffline(puck.id);
+                }
+            }
+        }
+
+        // Update puck card with status data
+        function updatePuckCard(puckId, data) {
+            const statusBadge = document.getElementById(`status-${puckId}`);
+            statusBadge.textContent = 'Online';
+            statusBadge.className = 'status-badge status-online';
+
+            document.getElementById(`version-${puckId}`).textContent = data.version || '1.0.0';
+            document.getElementById(`uptime-${puckId}`).textContent = formatUptime(data.uptime || 0);
+            document.getElementById(`battery-${puckId}`).textContent = `${data.battery || 100}%`;
+        }
+
+        // Set puck as offline
+        function setPuckOffline(puckId) {
+            const statusBadge = document.getElementById(`status-${puckId}`);
+            statusBadge.textContent = 'Offline';
+            statusBadge.className = 'status-badge status-offline';
+        }
+
+        // Format uptime
+        function formatUptime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            return `${hours}h ${minutes}m`;
+        }
+
+        // Upload firmware
+        async function uploadFirmware() {
+            const fileInput = document.getElementById('firmware-file');
+            const versionInput = document.getElementById('version-number');
+
+            if (!fileInput.files.length) {
+                alert('Please select a firmware file');
+                return;
+            }
+
+            if (!versionInput.value) {
+                alert('Please enter a version number');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('firmware', fileInput.files[0]);
+            formData.append('version', versionInput.value);
+
+            try {
+                addLog('info', `Uploading firmware version ${versionInput.value}...`);
+                const response = await fetch('/firmware/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    addLog('success', 'Firmware uploaded successfully!');
+                    loadVersionInfo();
+                } else {
+                    addLog('error', 'Failed to upload firmware');
+                }
+            } catch (error) {
+                addLog('error', `Upload error: ${error.message}`);
+            }
+        }
+
+        // Update single puck
+        async function updatePuck(puckId) {
+            const statusBadge = document.getElementById(`status-${puckId}`);
+            const progressBar = document.getElementById(`progress-${puckId}`);
+            const progressFill = document.getElementById(`progress-fill-${puckId}`);
+
+            statusBadge.textContent = 'Updating';
+            statusBadge.className = 'status-badge status-updating';
+            progressBar.style.display = 'block';
+
+            addLog('info', `Starting update for Puck ${puckId}...`);
+
+            // Simulate progress (in real implementation, use WebSocket for live progress)
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += 10;
+                progressFill.style.width = `${progress}%`;
+                progressFill.textContent = `${progress}%`;
+
+                if (progress >= 100) {
+                    clearInterval(interval);
+                    statusBadge.textContent = 'Online';
+                    statusBadge.className = 'status-badge status-online';
+                    progressBar.style.display = 'none';
+                    progressFill.style.width = '0%';
+                    addLog('success', `Puck ${puckId} updated successfully!`);
+                }
+            }, 500);
+        }
+
+        // Restart puck
+        async function restartPuck(puckId) {
+            if (!confirm(`Restart Puck ${puckId}?`)) return;
+
+            try {
+                addLog('info', `Restarting Puck ${puckId}...`);
+                const response = await fetch(`/api/puck/${puckId}/restart`, {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    addLog('success', `Puck ${puckId} restarted`);
+                    setTimeout(() => loadPuckStatus(), 5000);
+                } else {
+                    addLog('error', `Failed to restart Puck ${puckId}`);
+                }
+            } catch (error) {
+                addLog('error', `Restart error: ${error.message}`);
+            }
+        }
+
+        // Add log entry
+        function addLog(type, message) {
+            const container = document.getElementById('logs-container');
+            const timestamp = new Date().toLocaleTimeString();
+            const logClass = `log-${type}`;
+
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span> <span class="${logClass}">${message}</span>`;
+
+            container.insertBefore(entry, container.firstChild);
+
+            // Keep only last 100 logs
+            while (container.children.length > 100) {
+                container.removeChild(container.lastChild);
+            }
+        }
+
+        // Refresh logs
+        function refreshLogs() {
+            addLog('info', 'Logs refreshed');
+            loadPuckStatus();
+        }
+
+        // Initialize on load
+        window.onload = initDashboard;
+    </script>
+</body>
+</html>

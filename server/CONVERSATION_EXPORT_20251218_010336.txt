@@ -1,0 +1,37 @@
+TABLE WARS PUCK - CONVERSATION EXPORT
+=====================================
+Date: $(date)
+
+CRITICAL INFORMATION PRESERVED:
+
+1. 41 YDKJ-STYLE GAMES (See YDKJ_41_GAMES.md)
+2. 51 Skill Games (See customer_dashboard.html)
+3. 10 Deployment Scenarios (bars, airports, senior centers, etc.)
+4. Curated 20-min session structure
+5. 34 trivia questions currently in database
+
+DEPLOYMENT SCENARIOS:
+- Bars & Breweries (primary revenue)
+- Airport Lounges (time-killer for travelers)
+- Senior Living Centers (cognitive stimulation, slower pace, 60s-80s trivia)
+- College Campuses (dorm/frat entertainment)
+- Corporate Events (team building)
+- Cruise Ships (passenger entertainment)
+- Sports Bars (halftime competitions)
+- Hotel Lobbies (guest engagement)
+- Waiting Rooms (medical/dental)
+- Food Courts (mall entertainment)
+
+FILES TO PRESERVE:
+- YDKJ_41_GAMES.md (all 41 game descriptions)
+- CURATED_SESSION_GUIDE.md (session structure)
+- TRIVIA_README.md (setup guide)
+- trivia_questions_ydkj_style.py (24 questions)
+- trivia_questions_balanced.py (10 questions)
+
+NEXT STEPS:
+- Implement remaining 34 game engines (currently have 7)
+- Add 500+ YDKJ questions
+- Build TV displays for all 41 games
+- Voice commentary generation
+- Test with hardware

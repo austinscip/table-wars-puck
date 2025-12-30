@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TABLE WARS - Admin Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 250px;
+            height: 100vh;
+            background: #1e293b;
+            padding: 20px;
+            border-right: 1px solid #334155;
+        }
+
+        .logo {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #4ade80;
+            margin-bottom: 40px;
+            text-align: center;
+        }
+
+        .nav-item {
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-item:hover {
+            background: #334155;
+        }
+
+        .nav-item.active {
+            background: #4ade80;
+            color: #0f172a;
+        }
+
+        .main-content {
+            margin-left: 250px;
+            padding: 30px;
+        }
+
+        header {
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #94a3b8;
+            font-size: 0.95em;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: #1e293b;
+            padding: 25px;
+            border-radius: 12px;
+            border: 1px solid #334155;
+        }
+
+        .stat-label {
+            color: #94a3b8;
+            font-size: 0.9em;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #4ade80;
+        }
+
+        .stat-change {
+            font-size: 0.85em;
+            margin-top: 8px;
+            color: #4ade80;
+        }
+
+        .stat-change.negative {
+            color: #ef4444;
+        }
+
+        .card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            border: 1px solid #334155;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 1.3em;
+            font-weight: 600;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95em;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #4ade80;
+            color: #0f172a;
+        }
+
+        .btn-primary:hover {
+            background: #22c55e;
+        }
+
+        .btn-secondary {
+            background: #334155;
+            color: #e2e8f0;
+        }
+
+        .btn-secondary:hover {
+            background: #475569;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: #0f172a;
+        }
+
+        th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid #334155;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #334155;
+        }
+
+        tbody tr:hover {
+            background: #0f172a;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+
+        .badge-success {
+            background: #22c55e;
+            color: white;
+        }
+
+        .badge-warning {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .badge-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #cbd5e1;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            color: #e2e8f0;
+            font-size: 0.95em;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #4ade80;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: #1e293b;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 500px;
+            width: 90%;
+            border: 1px solid #334155;
+        }
+
+        .modal-header {
+            margin-bottom: 20px;
+        }
+
+        .modal-title {
+            font-size: 1.5em;
+            font-weight: 600;
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        .section {
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        .qr-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .qr-card {
+            background: #0f172a;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid #334155;
+        }
+
+        .qr-card img {
+            width: 150px;
+            height: 150px;
+            margin: 10px 0;
+        }
+
+        .chart-container {
+            height: 300px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="logo">🎮 TABLE WARS</div>
+        <div class="nav-item active" onclick="showSection('overview')">
+            📊 Overview
+        </div>
+        <div class="nav-item" onclick="showSection('bars')">
+            🏢 Bars
+        </div>
+        <div class="nav-item" onclick="showSection('games')">
+            🎮 Games
+        </div>
+        <div class="nav-item" onclick="showSection('trivia')">
+            🎭 Trivia Questions
+        </div>
+        <div class="nav-item" onclick="showSection('analytics')">
+            📈 Analytics
+        </div>
+        <div class="nav-item" onclick="showSection('qr-codes')">
+            📱 QR Codes
+        </div>
+        <div class="nav-item" onclick="showSection('settings')">
+            ⚙️ Settings
+        </div>
+    </div>
+
+    <div class="main-content">
+        <!-- Overview Section -->
+        <section id="overview" class="section active">
+            <header>
+                <h1>Dashboard Overview</h1>
+                <p class="subtitle">Welcome back! Here's what's happening with TABLE WARS.</p>
+            </header>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Total Bars</div>
+                    <div class="stat-value" id="total-bars">0</div>
+                    <div class="stat-change">+2 this week</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Active Pucks</div>
+                    <div class="stat-value" id="total-pucks">0</div>
+                    <div class="stat-change">12 online now</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Games Played Today</div>
+                    <div class="stat-value" id="games-today">0</div>
+                    <div class="stat-change">+45% vs yesterday</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Revenue</div>
+                    <div class="stat-value">$<span id="revenue">0</span></div>
+                    <div class="stat-change">+12% this month</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Recent Activity</h2>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Bar</th>
+                            <th>Table</th>
+                            <th>Game</th>
+                            <th>Score</th>
+                            <th>Time</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recent-activity">
+                        <tr>
+                            <td colspan="5" style="text-align: center; color: #64748b;">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Bars Section -->
+        <section id="bars" class="section">
+            <header>
+                <h1>Bar Management</h1>
+                <p class="subtitle">Manage your bar locations and settings</p>
+            </header>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">All Bars</h2>
+                    <button class="btn btn-primary" onclick="showModal('addBarModal')">+ Add New Bar</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Location</th>
+                            <th>Tables</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bars-list">
+                        <!-- Populated via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Games Section -->
+        <section id="games" class="section">
+            <header>
+                <h1>Game Library</h1>
+                <p class="subtitle">All 51 games available on TABLE WARS</p>
+            </header>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">51 Games</h2>
+                    <input type="text" id="game-search" placeholder="Search games..."
+                           style="max-width: 300px;" onkeyup="filterGames()">
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Category</th>
+                            <th>Times Played</th>
+                            <th>Avg Score</th>
+                            <th>Popularity</th>
+                        </tr>
+                    </thead>
+                    <tbody id="games-list">
+                        <!-- Populated via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Trivia Questions Section -->
+        <section id="trivia" class="section">
+            <header>
+                <h1>Trivia Questions</h1>
+                <p class="subtitle">Manage YDKJ-style trivia questions and categories</p>
+            </header>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Total Questions</div>
+                    <div class="stat-value" id="total-questions">0</div>
+                    <div class="stat-change">Across 10 categories</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Active Categories</div>
+                    <div class="stat-value" id="total-categories">0</div>
+                    <div class="stat-change">All active</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Most Played</div>
+                    <div class="stat-value" style="font-size: 1.3em;" id="most-played-category">Loading...</div>
+                    <div class="stat-change">Category</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Avg Difficulty</div>
+                    <div class="stat-value" style="font-size: 1.8em;">Medium</div>
+                    <div class="stat-change">Balanced mix</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">All Questions</h2>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <select id="trivia-category-filter" onchange="filterTriviaQuestions()"
+                                style="max-width: 200px; padding: 10px;">
+                            <option value="">All Categories</option>
+                        </select>
+                        <select id="trivia-difficulty-filter" onchange="filterTriviaQuestions()"
+                                style="max-width: 150px; padding: 10px;">
+                            <option value="">All Difficulties</option>
+                            <option value="easy">Easy</option>
+                            <option value="medium">Medium</option>
+                            <option value="hard">Hard</option>
+                        </select>
+                        <input type="text" id="trivia-search" placeholder="Search questions..."
+                               style="max-width: 250px;" onkeyup="filterTriviaQuestions()">
+                        <button class="btn btn-primary" onclick="showModal('addQuestionModal')">+ Add Question</button>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Question</th>
+                            <th>Category</th>
+                            <th>Difficulty</th>
+                            <th>Correct</th>
+                            <th>Times Played</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trivia-questions-list">
+                        <tr>
+                            <td colspan="7" style="text-align: center; color: #64748b;">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Categories</h2>
+                    <button class="btn btn-primary" onclick="alert('Add category feature coming soon!')">+ Add Category</button>
+                </div>
+                <div id="categories-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px;">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Analytics Section -->
+        <section id="analytics" class="section">
+            <header>
+                <h1>Analytics</h1>
+                <p class="subtitle">Deep dive into your TABLE WARS data</p>
+            </header>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Most Popular Game</div>
+                    <div class="stat-value" style="font-size: 1.5em;">🦆 Duck Hunt</div>
+                    <div class="stat-change">1,247 plays</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Peak Hour</div>
+                    <div class="stat-value" style="font-size: 1.8em;">9 PM</div>
+                    <div class="stat-change">387 games/hour</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Avg Session</div>
+                    <div class="stat-value" style="font-size: 1.8em;">23min</div>
+                    <div class="stat-change">4.2 games/session</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Top Bar</div>
+                    <div class="stat-value" style="font-size: 1.3em;">Demo Bar</div>
+                    <div class="stat-change">45% of total plays</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Game Popularity (Last 30 Days)</h2>
+                </div>
+                <div class="chart-container" id="popularity-chart">
+                    <p style="text-align: center; padding: 100px 0; color: #64748b;">
+                        📊 Chart visualization would go here<br>
+                        <small>(Integrate Chart.js or similar)</small>
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- QR Codes Section -->
+        <section id="qr-codes" class="section">
+            <header>
+                <h1>QR Code Generator</h1>
+                <p class="subtitle">Generate QR codes for your bar tables</p>
+            </header>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Select Bar</h2>
+                </div>
+                <div class="form-group">
+                    <label>Choose a bar to generate QR codes:</label>
+                    <select id="qr-bar-select" onchange="loadQRCodes()">
+                        <option value="">Select a bar...</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="card" id="qr-display" style="display: none;">
+                <div class="card-header">
+                    <h2 class="card-title">QR Codes</h2>
+                    <button class="btn btn-primary" onclick="printQRCodes()">🖨️ Print All</button>
+                </div>
+                <div class="qr-grid" id="qr-grid">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Settings Section -->
+        <section id="settings" class="section">
+            <header>
+                <h1>Settings</h1>
+                <p class="subtitle">Configure your TABLE WARS system</p>
+            </header>
+
+            <div class="card">
+                <h2 class="card-title">System Settings</h2>
+                <div class="form-group">
+                    <label>Default Game Duration (seconds)</label>
+                    <input type="number" value="120">
+                </div>
+                <div class="form-group">
+                    <label>Auto-restart Games</label>
+                    <select>
+                        <option>Enabled</option>
+                        <option>Disabled</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Leaderboard Display Time (seconds)</label>
+                    <input type="number" value="30">
+                </div>
+                <button class="btn btn-primary">Save Settings</button>
+            </div>
+        </section>
+    </div>
+
+    <!-- Add Bar Modal -->
+    <div class="modal" id="addBarModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Add New Bar</h2>
+            </div>
+            <div class="form-group">
+                <label>Bar Name *</label>
+                <input type="text" id="bar-name" placeholder="Shamrock Tavern">
+            </div>
+            <div class="form-group">
+                <label>URL Slug *</label>
+                <input type="text" id="bar-slug" placeholder="shamrock-tavern">
+                <small style="color: #64748b;">Used in URLs: tablewars.io/bar/shamrock-tavern</small>
+            </div>
+            <div class="form-group">
+                <label>Location</label>
+                <input type="text" id="bar-location" placeholder="Chicago, IL">
+            </div>
+            <div class="form-group">
+                <label>Number of Tables</label>
+                <input type="number" id="bar-tables" value="4">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('addBarModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="createBar()">Create Bar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Question Modal -->
+    <div class="modal" id="addQuestionModal">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2 class="modal-title">Add Trivia Question</h2>
+            </div>
+            <div class="form-group">
+                <label>Category *</label>
+                <select id="question-category">
+                    <option value="">Select category...</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Setup Text (Optional)</label>
+                <textarea id="question-setup" rows="2" placeholder="Chuck thought it'd be hilarious to deep-fry a frozen turkey..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>Question Text *</label>
+                <textarea id="question-text" rows="2" placeholder="What actually happened?"></textarea>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div class="form-group">
+                    <label>Answer A *</label>
+                    <input type="text" id="question-answer-a" placeholder="Turkey exploded">
+                </div>
+                <div class="form-group">
+                    <label>Answer B *</label>
+                    <input type="text" id="question-answer-b" placeholder="It was delicious">
+                </div>
+                <div class="form-group">
+                    <label>Answer C *</label>
+                    <input type="text" id="question-answer-c" placeholder="Turkey came back to life">
+                </div>
+                <div class="form-group">
+                    <label>Answer D *</label>
+                    <input type="text" id="question-answer-d" placeholder="Nothing happened">
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                <div class="form-group">
+                    <label>Correct Answer *</label>
+                    <select id="question-correct">
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                        <option value="D">D</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Difficulty *</label>
+                    <select id="question-difficulty">
+                        <option value="easy">Easy</option>
+                        <option value="medium">Medium</option>
+                        <option value="hard">Hard</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Time Limit (seconds)</label>
+                    <input type="number" id="question-time-limit" value="15">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Explanation</label>
+                <textarea id="question-explanation" rows="2" placeholder="Water in frozen turkey + hot oil = explosion. Physics is a bitch."></textarea>
+            </div>
+            <div class="form-group">
+                <label>Host Commentary (Correct)</label>
+                <textarea id="question-commentary-correct" rows="2" placeholder="Correct! Chuck learned that frozen + 350°F oil = insurance claim!"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Host Commentary (Wrong)</label>
+                <textarea id="question-commentary-wrong" rows="2" placeholder="Wrong! It's ALWAYS the explosion with frozen turkeys."></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideModal('addQuestionModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="createQuestion()">Create Question</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Navigation
+        function showSection(sectionId) {
+            // Hide all sections
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+            // Show selected section
+            document.getElementById(sectionId).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // Modals
+        function showModal(modalId) {
+            document.getElementById(modalId).classList.add('active');
+        }
+
+        function hideModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+
+        // Load initial data
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDashboardStats();
+            loadBars();
+            loadGames();
+            loadRecentActivity();
+            loadTriviaQuestions();
+            loadTriviaCategories();
+        });
+
+        // Dashboard Stats
+        async function loadDashboardStats() {
+            try {
+                const barsResponse = await fetch('/api/bars');
+                const bars = await barsResponse.json();
+                document.getElementById('total-bars').textContent = bars.length;
+
+                const statsResponse = await fetch('/api/stats');
+                const stats = await statsResponse.json();
+                document.getElementById('total-pucks').textContent = stats.total_pucks;
+                document.getElementById('games-today').textContent = stats.total_games;
+                document.getElementById('revenue').textContent = (bars.length * 99).toLocaleString();
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        // Load Bars
+        async function loadBars() {
+            try {
+                const response = await fetch('/api/bars');
+                const bars = await response.json();
+
+                const barsList = document.getElementById('bars-list');
+                const barSelect = document.getElementById('qr-bar-select');
+
+                barsList.innerHTML = bars.map(bar => `
+                    <tr>
+                        <td><strong>${bar.name}</strong></td>
+                        <td>${bar.location || 'N/A'}</td>
+                        <td>${bar.total_tables}</td>
+                        <td><span class="badge badge-success">Active</span></td>
+                        <td>
+                            <button class="btn btn-secondary" onclick="viewBar('${bar.slug}')">View</button>
+                            <button class="btn btn-danger" onclick="deleteBar(${bar.id})">Delete</button>
+                        </td>
+                    </tr>
+                `).join('');
+
+                barSelect.innerHTML = '<option value="">Select a bar...</option>' +
+                    bars.map(bar => `<option value="${bar.slug}">${bar.name}</option>`).join('');
+            } catch (error) {
+                console.error('Error loading bars:', error);
+            }
+        }
+
+        // Load Games
+        async function loadGames() {
+            const games = [
+                { id: 1, name: "Speed Tap Battle", category: "Speed", plays: 1234, avgScore: 450 },
+                { id: 2, name: "Shake Duel", category: "Physical", plays: 987, avgScore: 523 },
+                { id: 41, name: "Duck Hunt", category: "Physical", plays: 2341, avgScore: 1100 },
+                { id: 45, name: "All In", category: "Gambling", plays: 1876, avgScore: 4500 },
+                // ... add more games as needed
+            ];
+
+            const gamesList = document.getElementById('games-list');
+            gamesList.innerHTML = games.map(game => {
+                const popularity = game.plays > 2000 ? 'High' : game.plays > 1000 ? 'Medium' : 'Low';
+                const badgeClass = game.plays > 2000 ? 'badge-success' : game.plays > 1000 ? 'badge-warning' : 'badge-danger';
+
+                return `
+                    <tr>
+                        <td>${game.id}</td>
+                        <td><strong>${game.name}</strong></td>
+                        <td>${game.category}</td>
+                        <td>${game.plays.toLocaleString()}</td>
+                        <td>${game.avgScore}</td>
+                        <td><span class="badge ${badgeClass}">${popularity}</span></td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Load Recent Activity
+        async function loadRecentActivity() {
+            try {
+                const response = await fetch('/api/recent?limit=10');
+                const games = await response.json();
+
+                const activityTable = document.getElementById('recent-activity');
+                if (games.length === 0) {
+                    activityTable.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #64748b;">No recent activity</td></tr>';
+                    return;
+                }
+
+                activityTable.innerHTML = games.map(game => `
+                    <tr>
+                        <td>${game.puck_name || 'Unknown'}</td>
+                        <td>Table ${game.puck_id || 'N/A'}</td>
+                        <td>${game.game_type}</td>
+                        <td><strong>${game.score}</strong></td>
+                        <td>${timeAgo(game.timestamp)}</td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading recent activity:', error);
+            }
+        }
+
+        // Create Bar
+        async function createBar() {
+            const name = document.getElementById('bar-name').value;
+            const slug = document.getElementById('bar-slug').value;
+            const location = document.getElementById('bar-location').value;
+            const tables = document.getElementById('bar-tables').value;
+
+            if (!name || !slug) {
+                alert('Name and slug are required!');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/bars', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, slug, location, total_tables: parseInt(tables) })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    hideModal('addBarModal');
+                    loadBars();
+                    loadDashboardStats();
+                    alert('Bar created successfully!');
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                alert('Failed to create bar: ' + error);
+            }
+        }
+
+        // View Bar
+        function viewBar(slug) {
+            window.open(`/bar/${slug}/table/1`, '_blank');
+        }
+
+        // Delete Bar
+        async function deleteBar(barId) {
+            if (!confirm('Are you sure you want to delete this bar?')) return;
+
+            // TODO: Implement delete API
+            alert('Delete functionality coming soon!');
+        }
+
+        // Load QR Codes
+        async function loadQRCodes() {
+            const barSlug = document.getElementById('qr-bar-select').value;
+            if (!barSlug) {
+                document.getElementById('qr-display').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('qr-display').style.display = 'block';
+
+            // Get bar info
+            const barsResponse = await fetch('/api/bars');
+            const bars = await barsResponse.json();
+            const bar = bars.find(b => b.slug === barSlug);
+
+            if (!bar) return;
+
+            const qrGrid = document.getElementById('qr-grid');
+            qrGrid.innerHTML = '';
+
+            for (let i = 1; i <= bar.total_tables; i++) {
+                const response = await fetch(`/api/qr/${barSlug}/${i}`);
+                const data = await response.json();
+
+                const qrCard = document.createElement('div');
+                qrCard.className = 'qr-card';
+                qrCard.innerHTML = `
+                    <h3>Table ${i}</h3>
+                    <img src="${data.qr_code}" alt="QR Code Table ${i}">
+                    <p style="font-size: 0.85em; color: #64748b; word-break: break-all;">${data.url}</p>
+                    <button class="btn btn-secondary" onclick="downloadQR('${data.qr_code}', 'table-${i}.png')">Download</button>
+                `;
+                qrGrid.appendChild(qrCard);
+            }
+        }
+
+        // Download QR Code
+        function downloadQR(dataUrl, filename) {
+            const link = document.createElement('a');
+            link.href = dataUrl;
+            link.download = filename;
+            link.click();
+        }
+
+        // Print QR Codes
+        function printQRCodes() {
+            window.print();
+        }
+
+        // Filter Games
+        function filterGames() {
+            const search = document.getElementById('game-search').value.toLowerCase();
+            const rows = document.querySelectorAll('#games-list tr');
+
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(search) ? '' : 'none';
+            });
+        }
+
+        // Helper: Time Ago
+        function timeAgo(timestamp) {
+            const seconds = Math.floor((new Date() - new Date(timestamp)) / 1000);
+
+            if (seconds < 60) return 'Just now';
+            if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+            if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+            return `${Math.floor(seconds / 86400)}d ago`;
+        }
+
+        // ============================================================================
+        // TRIVIA QUESTION MANAGEMENT
+        // ============================================================================
+
+        let allTriviaQuestions = [];
+        let allTriviaCategories = [];
+
+        // Load Trivia Questions
+        async function loadTriviaQuestions() {
+            try {
+                const response = await fetch('/api/trivia/admin/questions');
+                const data = await response.json();
+
+                if (data.success) {
+                    allTriviaQuestions = data.questions;
+                    displayTriviaQuestions(allTriviaQuestions);
+
+                    // Update stats
+                    document.getElementById('total-questions').textContent = data.questions.length;
+                }
+            } catch (error) {
+                console.error('Error loading trivia questions:', error);
+                document.getElementById('trivia-questions-list').innerHTML =
+                    '<tr><td colspan="7" style="text-align: center; color: #ef4444;">Failed to load questions</td></tr>';
+            }
+        }
+
+        // Display Trivia Questions
+        function displayTriviaQuestions(questions) {
+            const tableBody = document.getElementById('trivia-questions-list');
+
+            if (questions.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #64748b;">No questions found</td></tr>';
+                return;
+            }
+
+            tableBody.innerHTML = questions.map(q => {
+                const difficultyBadge = q.difficulty === 'easy' ? 'badge-success' :
+                                       q.difficulty === 'medium' ? 'badge-warning' : 'badge-danger';
+
+                return `
+                    <tr>
+                        <td>${q.id}</td>
+                        <td style="max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                            ${q.question_text}
+                        </td>
+                        <td>${q.category_name || 'N/A'}</td>
+                        <td><span class="badge ${difficultyBadge}">${q.difficulty}</span></td>
+                        <td><strong>${q.correct_answer}</strong></td>
+                        <td>${q.times_played || 0}</td>
+                        <td>
+                            <button class="btn btn-secondary" onclick="viewQuestion(${q.id})" style="padding: 6px 12px; font-size: 0.85em;">View</button>
+                            <button class="btn btn-danger" onclick="deleteQuestion(${q.id})" style="padding: 6px 12px; font-size: 0.85em;">Delete</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Load Trivia Categories
+        async function loadTriviaCategories() {
+            try {
+                const response = await fetch('/api/trivia/categories');
+                const data = await response.json();
+
+                if (data.success) {
+                    allTriviaCategories = data.categories;
+
+                    // Update stats
+                    document.getElementById('total-categories').textContent = data.categories.length;
+
+                    // Update category filter dropdown
+                    const categoryFilter = document.getElementById('trivia-category-filter');
+                    const questionCategorySelect = document.getElementById('question-category');
+
+                    const options = data.categories.map(cat =>
+                        `<option value="${cat.id}">${cat.emoji || ''} ${cat.name}</option>`
+                    ).join('');
+
+                    categoryFilter.innerHTML = '<option value="">All Categories</option>' + options;
+                    questionCategorySelect.innerHTML = '<option value="">Select category...</option>' + options;
+
+                    // Display categories grid
+                    displayCategories(data.categories);
+                }
+            } catch (error) {
+                console.error('Error loading trivia categories:', error);
+            }
+        }
+
+        // Display Categories
+        function displayCategories(categories) {
+            const grid = document.getElementById('categories-grid');
+
+            grid.innerHTML = categories.map(cat => `
+                <div style="background: #0f172a; padding: 20px; border-radius: 8px; border: 1px solid #334155;">
+                    <div style="font-size: 2em; margin-bottom: 10px;">${cat.emoji || '📝'}</div>
+                    <div style="font-size: 1.2em; font-weight: 600; margin-bottom: 5px;">${cat.name}</div>
+                    <div style="font-size: 0.9em; color: #94a3b8; margin-bottom: 10px;">${cat.description || ''}</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+                        <span class="badge ${cat.difficulty === 'easy' ? 'badge-success' : cat.difficulty === 'hard' ? 'badge-danger' : 'badge-warning'}">
+                            ${cat.difficulty || 'medium'}
+                        </span>
+                        <span style="color: #64748b; font-size: 0.85em;">
+                            ${allTriviaQuestions.filter(q => q.category_id === cat.id).length} questions
+                        </span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Filter Trivia Questions
+        function filterTriviaQuestions() {
+            const categoryFilter = document.getElementById('trivia-category-filter').value;
+            const difficultyFilter = document.getElementById('trivia-difficulty-filter').value;
+            const searchText = document.getElementById('trivia-search').value.toLowerCase();
+
+            let filtered = allTriviaQuestions;
+
+            // Filter by category
+            if (categoryFilter) {
+                filtered = filtered.filter(q => q.category_id === parseInt(categoryFilter));
+            }
+
+            // Filter by difficulty
+            if (difficultyFilter) {
+                filtered = filtered.filter(q => q.difficulty === difficultyFilter);
+            }
+
+            // Filter by search text
+            if (searchText) {
+                filtered = filtered.filter(q =>
+                    q.question_text.toLowerCase().includes(searchText) ||
+                    (q.setup_text && q.setup_text.toLowerCase().includes(searchText)) ||
+                    q.answer_a.toLowerCase().includes(searchText) ||
+                    q.answer_b.toLowerCase().includes(searchText) ||
+                    q.answer_c.toLowerCase().includes(searchText) ||
+                    q.answer_d.toLowerCase().includes(searchText)
+                );
+            }
+
+            displayTriviaQuestions(filtered);
+        }
+
+        // Create Question
+        async function createQuestion() {
+            const categoryId = document.getElementById('question-category').value;
+            const setupText = document.getElementById('question-setup').value;
+            const questionText = document.getElementById('question-text').value;
+            const answerA = document.getElementById('question-answer-a').value;
+            const answerB = document.getElementById('question-answer-b').value;
+            const answerC = document.getElementById('question-answer-c').value;
+            const answerD = document.getElementById('question-answer-d').value;
+            const correct = document.getElementById('question-correct').value;
+            const difficulty = document.getElementById('question-difficulty').value;
+            const timeLimit = document.getElementById('question-time-limit').value;
+            const explanation = document.getElementById('question-explanation').value;
+            const commentaryCorrect = document.getElementById('question-commentary-correct').value;
+            const commentaryWrong = document.getElementById('question-commentary-wrong').value;
+
+            // Validation
+            if (!categoryId || !questionText || !answerA || !answerB || !answerC || !answerD) {
+                alert('Please fill in all required fields!');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/trivia/admin/questions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        category_id: parseInt(categoryId),
+                        setup_text: setupText,
+                        question_text: questionText,
+                        answer_a: answerA,
+                        answer_b: answerB,
+                        answer_c: answerC,
+                        answer_d: answerD,
+                        correct_answer: correct,
+                        difficulty: difficulty,
+                        time_limit: parseInt(timeLimit),
+                        explanation: explanation,
+                        host_commentary_correct: commentaryCorrect,
+                        host_commentary_wrong: commentaryWrong
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    hideModal('addQuestionModal');
+                    loadTriviaQuestions();
+                    alert('Question created successfully!');
+
+                    // Clear form
+                    document.getElementById('question-category').value = '';
+                    document.getElementById('question-setup').value = '';
+                    document.getElementById('question-text').value = '';
+                    document.getElementById('question-answer-a').value = '';
+                    document.getElementById('question-answer-b').value = '';
+                    document.getElementById('question-answer-c').value = '';
+                    document.getElementById('question-answer-d').value = '';
+                    document.getElementById('question-explanation').value = '';
+                    document.getElementById('question-commentary-correct').value = '';
+                    document.getElementById('question-commentary-wrong').value = '';
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                alert('Failed to create question: ' + error);
+            }
+        }
+
+        // View Question
+        function viewQuestion(questionId) {
+            const question = allTriviaQuestions.find(q => q.id === questionId);
+            if (!question) return;
+
+            alert(`QUESTION: ${question.question_text}\n\nA: ${question.answer_a}\nB: ${question.answer_b}\nC: ${question.answer_c}\nD: ${question.answer_d}\n\nCorrect: ${question.correct_answer}\n\n${question.explanation || ''}`);
+        }
+
+        // Delete Question
+        async function deleteQuestion(questionId) {
+            if (!confirm('Are you sure you want to delete this question?')) return;
+
+            // TODO: Implement delete API endpoint
+            alert('Delete question functionality coming soon!');
+        }
+
+        // Auto-refresh
+        setInterval(() => {
+            loadDashboardStats();
+            loadRecentActivity();
+        }, 30000);
+    </script>
+</body>
+</html>

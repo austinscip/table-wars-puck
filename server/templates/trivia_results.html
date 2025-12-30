@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TABLE WARS - Final Results</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial Black', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 3.5em;
+            color: #ffd700;
+            text-shadow: 0 0 30px rgba(255, 215, 0, 0.8);
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        .podium {
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            gap: 30px;
+            margin-bottom: 50px;
+        }
+
+        .podium-place {
+            text-align: center;
+            padding: 30px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 3px solid;
+        }
+
+        .place-1 {
+            order: 2;
+            border-color: #ffd700;
+            padding-bottom: 80px;
+        }
+
+        .place-2 {
+            order: 1;
+            border-color: #c0c0c0;
+            padding-bottom: 50px;
+        }
+
+        .place-3 {
+            order: 3;
+            border-color: #cd7f32;
+            padding-bottom: 30px;
+        }
+
+        .medal {
+            font-size: 4em;
+            margin-bottom: 15px;
+        }
+
+        .player-name {
+            font-size: 1.8em;
+            margin-bottom: 10px;
+        }
+
+        .player-score {
+            font-size: 2.5em;
+            color: #00d9ff;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(0, 217, 255, 0.3);
+            border-radius: 15px;
+            padding: 20px;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            color: #aaa;
+            margin-bottom: 10px;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            color: #00d9ff;
+        }
+
+        .skill-breaks {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(255, 107, 107, 0.3);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 40px;
+        }
+
+        .skill-breaks h2 {
+            color: #ff6b6b;
+            margin-bottom: 20px;
+        }
+
+        .skill-break-item {
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+
+        .play-again-btn {
+            display: block;
+            margin: 0 auto;
+            padding: 20px 60px;
+            font-size: 1.5em;
+            background: linear-gradient(135deg, #00d9ff, #0099cc);
+            border: none;
+            border-radius: 15px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .play-again-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 40px rgba(0, 217, 255, 0.8);
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2.5em;
+            }
+
+            .podium {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .podium-place {
+                order: initial !important;
+                padding-bottom: 30px !important;
+            }
+
+            .stats {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏆 FINAL RESULTS</h1>
+
+        <div class="podium" id="podium">
+            <!-- Populated via JavaScript -->
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-label">Total Questions</div>
+                <div class="stat-value" id="totalQuestions">15</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total Rounds</div>
+                <div class="stat-value" id="totalRounds">3</div>
+            </div>
+        </div>
+
+        <div class="skill-breaks">
+            <h2>🎮 Skill Break Winners</h2>
+            <div id="skillBreaksList">
+                <!-- Populated via JavaScript -->
+            </div>
+        </div>
+
+        <button class="play-again-btn" onclick="playAgain()">🔁 Play Again</button>
+    </div>
+
+    <script>
+        const sessionCode = "{{ session_code }}";
+        const barSlug = "{{ bar_slug }}";
+        const tableNumber = {{ table_number }};
+
+        async function loadResults() {
+            const response = await fetch(`/api/trivia/results/${sessionCode}`);
+            const data = await response.json();
+
+            if (data.success) {
+                displayPodium(data.players);
+                displaySkillBreaks(data.skill_breaks);
+                document.getElementById('totalQuestions').textContent = data.total_questions;
+                document.getElementById('totalRounds').textContent = data.total_rounds;
+            }
+        }
+
+        function displayPodium(players) {
+            const podium = document.getElementById('podium');
+
+            const medals = ['🥇', '🥈', '🥉'];
+            const classes = ['place-1', 'place-2', 'place-3'];
+
+            players.slice(0, 3).forEach((player, index) => {
+                const accuracy = player.total_answers > 0
+                    ? Math.round((player.correct_answers / player.total_answers) * 100)
+                    : 0;
+
+                const html = `
+                    <div class="podium-place ${classes[index]}">
+                        <div class="medal">${medals[index]}</div>
+                        <div class="player-name">${player.player_name || 'Player ' + player.puck_id}</div>
+                        <div class="player-score">${player.total_score}</div>
+                        <div style="font-size: 0.9em; color: #aaa; margin-top: 10px;">
+                            ${player.correct_answers}/${player.total_answers} correct (${accuracy}%)
+                        </div>
+                    </div>
+                `;
+                podium.innerHTML += html;
+            });
+        }
+
+        function displaySkillBreaks(skillBreaks) {
+            const container = document.getElementById('skillBreaksList');
+
+            if (skillBreaks.length === 0) {
+                container.innerHTML = '<p style="color: #aaa;">No skill breaks played</p>';
+                return;
+            }
+
+            skillBreaks.forEach((sb, index) => {
+                const html = `
+                    <div class="skill-break-item">
+                        <strong>Round ${index + 1}:</strong> ${sb.skill_game_name}
+                        <br>
+                        <span style="color: #00d9ff;">Winner: Player ${sb.winner_puck_id} (+${sb.bonus_points} bonus points)</span>
+                    </div>
+                `;
+                container.innerHTML += html;
+            });
+        }
+
+        function playAgain() {
+            window.location.href = `/bar/${barSlug}/table/${tableNumber}`;
+        }
+
+        // Load results on page load
+        loadResults();
+    </script>
+</body>
+</html>

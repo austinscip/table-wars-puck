@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🏎️ PUCK RACER - Game 52</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(to bottom, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%);
+            font-family: 'Arial Black', sans-serif;
+            overflow: hidden;
+            color: white;
+        }
+
+        #gameCanvas {
+            display: block;
+            margin: 0 auto;
+            background: #0f0f0f;
+            border: 5px solid #00ff00;
+            box-shadow: 0 0 30px rgba(0, 255, 0, 0.5);
+        }
+
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-around;
+            padding: 0 50px;
+            font-size: 28px;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+            z-index: 10;
+        }
+
+        .hud-item {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px 30px;
+            border-radius: 10px;
+            border: 2px solid #00ff00;
+        }
+
+        .hud-value {
+            color: #00ff00;
+            font-size: 36px;
+            font-weight: bold;
+        }
+
+        #nitroBar {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+        }
+
+        .nitro {
+            width: 60px;
+            height: 60px;
+            background: #ff00ff;
+            border-radius: 50%;
+            border: 3px solid white;
+            box-shadow: 0 0 20px rgba(255, 0, 255, 0.8);
+        }
+
+        .nitro.used {
+            background: #333;
+            box-shadow: none;
+        }
+
+        #gameOver {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.95);
+            padding: 60px;
+            border-radius: 20px;
+            border: 5px solid #ff0000;
+            text-align: center;
+            z-index: 100;
+        }
+
+        #gameOver h1 {
+            font-size: 72px;
+            color: #ff0000;
+            margin-bottom: 30px;
+            text-shadow: 0 0 20px rgba(255, 0, 0, 0.8);
+        }
+
+        #gameOver .finalScore {
+            font-size: 96px;
+            color: #00ff00;
+            margin: 30px 0;
+        }
+
+        .combo {
+            position: absolute;
+            top: 150px;
+            right: 50px;
+            font-size: 48px;
+            color: #ffff00;
+            text-shadow: 0 0 15px rgba(255, 255, 0, 0.8);
+            animation: pulse 0.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+        }
+
+        .crash-flash {
+            animation: crash 0.3s;
+        }
+
+        @keyframes crash {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; background: red; }
+        }
+    </style>
+</head>
+<body>
+    <div id="hud">
+        <div class="hud-item">
+            <div>SCORE</div>
+            <div class="hud-value" id="score">0</div>
+        </div>
+        <div class="hud-item">
+            <div>SPEED</div>
+            <div class="hud-value" id="speed">0</div>
+        </div>
+        <div class="hud-item">
+            <div>CRASHES</div>
+            <div class="hud-value" id="crashes">0</div>
+        </div>
+        <div class="hud-item">
+            <div>TIME</div>
+            <div class="hud-value" id="time">90</div>
+        </div>
+    </div>
+
+    <div id="nitroBar">
+        <div class="nitro" id="nitro1"></div>
+        <div class="nitro" id="nitro2"></div>
+        <div class="nitro" id="nitro3"></div>
+    </div>
+
+    <div id="combo" class="combo" style="display: none;">
+        COMBO x<span id="comboValue">2</span>
+    </div>
+
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <div id="gameOver">
+        <h1>🏁 GAME OVER</h1>
+        <div class="finalScore" id="finalScore">0</div>
+        <div style="font-size: 36px; margin-top: 30px;">
+            Distance: <span id="finalDistance">0</span>m
+        </div>
+    </div>
+
+    <script>
+        const PUCK_ID = {{ puck_id }};
+        const socket = io();
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let gameState = null;
+        let lastCrashes = 0;
+
+        // Connect to WebSocket
+        socket.on('connect', () => {
+            console.log('✅ Connected to server');
+            socket.emit('join_game_room', { puck_id: PUCK_ID });
+            socket.emit('request_game_state', { puck_id: PUCK_ID });
+        });
+
+        // Receive game state updates
+        socket.on('game_state_update', (state) => {
+            gameState = state;
+            updateHUD(state);
+            render(state);
+
+            // Detect crashes (flash screen)
+            if (state.crashes > lastCrashes) {
+                document.body.classList.add('crash-flash');
+                setTimeout(() => document.body.classList.remove('crash-flash'), 300);
+                lastCrashes = state.crashes;
+            }
+        });
+
+        // Game over
+        socket.on('game_over', (data) => {
+            document.getElementById('finalScore').textContent = data.state.score;
+            document.getElementById('finalDistance').textContent = data.state.distance;
+            document.getElementById('gameOver').style.display = 'block';
+        });
+
+        // Update HUD
+        function updateHUD(state) {
+            document.getElementById('score').textContent = state.score;
+            document.getElementById('speed').textContent = state.speed + ' mph';
+            document.getElementById('crashes').textContent = state.crashes + '/3';
+            document.getElementById('time').textContent = state.time_remaining + 's';
+
+            // Nitro indicators
+            for (let i = 1; i <= 3; i++) {
+                const nitro = document.getElementById('nitro' + i);
+                if (i <= state.nitro_count) {
+                    nitro.classList.remove('used');
+                } else {
+                    nitro.classList.add('used');
+                }
+            }
+
+            // Combo display
+            if (state.combo >= 3) {
+                document.getElementById('comboValue').textContent = 2;
+                document.getElementById('combo').style.display = 'block';
+            } else {
+                document.getElementById('combo').style.display = 'none';
+            }
+        }
+
+        // Render game
+        function render(state) {
+            // Clear canvas
+            ctx.fillStyle = '#0f0f0f';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw road
+            drawRoad();
+
+            // Draw lanes
+            drawLanes();
+
+            // Draw obstacles
+            state.obstacles.forEach(obs => {
+                drawObstacle(obs);
+            });
+
+            // Draw collectibles
+            state.collectibles.forEach(col => {
+                drawCollectible(col);
+            });
+
+            // Draw player car
+            drawCar(state.car_lane);
+
+            // Nitro effect
+            if (state.nitro_active) {
+                drawNitroEffect();
+            }
+        }
+
+        function drawRoad() {
+            // Road background
+            ctx.fillStyle = '#222';
+            ctx.fillRect(100, 0, 600, 600);
+
+            // Road edges
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(100, 0, 10, 600);
+            ctx.fillRect(690, 0, 10, 600);
+        }
+
+        function drawLanes() {
+            // Lane markers (dashed lines)
+            ctx.strokeStyle = '#ffff00';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([20, 20]);
+
+            for (let lane = 1; lane < 4; lane++) {
+                const x = 100 + (lane * 150);
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, 600);
+                ctx.stroke();
+            }
+
+            ctx.setLineDash([]);
+        }
+
+        function drawCar(lane) {
+            const laneX = 100 + ((lane - 0.5) * 150);
+            const carY = 500;
+
+            // Car body
+            ctx.fillStyle = '#00ff00';
+            ctx.fillRect(laneX - 30, carY - 50, 60, 100);
+
+            // Car top
+            ctx.fillStyle = '#00cc00';
+            ctx.fillRect(laneX - 25, carY - 40, 50, 50);
+
+            // Wheels
+            ctx.fillStyle = '#000';
+            ctx.fillRect(laneX - 35, carY - 40, 10, 30);
+            ctx.fillRect(laneX + 25, carY - 40, 10, 30);
+            ctx.fillRect(laneX - 35, carY + 10, 10, 30);
+            ctx.fillRect(laneX + 25, carY + 10, 10, 30);
+
+            // Headlights (if nitro active)
+            if (gameState && gameState.nitro_active) {
+                ctx.fillStyle = '#ff00ff';
+                ctx.fillRect(laneX - 20, carY - 60, 15, 10);
+                ctx.fillRect(laneX + 5, carY - 60, 15, 10);
+            }
+        }
+
+        function drawObstacle(obs) {
+            const x = 100 + ((obs.lane - 0.5) * 150);
+            const y = 50 + (obs.distance * 0.8);  // Scale distance to screen
+
+            if (obs.type === 'cone') {
+                // Orange cone
+                ctx.fillStyle = '#ff8800';
+                ctx.beginPath();
+                ctx.moveTo(x, y - 30);
+                ctx.lineTo(x - 15, y + 10);
+                ctx.lineTo(x + 15, y + 10);
+                ctx.closePath();
+                ctx.fill();
+            } else if (obs.type === 'skull') {
+                // Skull (red circle with X)
+                ctx.fillStyle = '#ff0000';
+                ctx.beginPath();
+                ctx.arc(x, y, 20, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(x - 10, y - 10);
+                ctx.lineTo(x + 10, y + 10);
+                ctx.moveTo(x + 10, y - 10);
+                ctx.lineTo(x - 10, y + 10);
+                ctx.stroke();
+            } else if (obs.type === 'warning') {
+                // Warning sign
+                ctx.fillStyle = '#ffff00';
+                ctx.beginPath();
+                ctx.moveTo(x, y - 20);
+                ctx.lineTo(x - 17, y + 15);
+                ctx.lineTo(x + 17, y + 15);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillStyle = '#000';
+                ctx.font = '20px Arial Black';
+                ctx.textAlign = 'center';
+                ctx.fillText('!', x, y + 5);
+            }
+        }
+
+        function drawCollectible(col) {
+            const x = 100 + ((col.lane - 0.5) * 150);
+            const y = 50 + (col.distance * 0.8);
+
+            if (col.type === 'coin') {
+                // Gold coin
+                ctx.fillStyle = '#ffff00';
+                ctx.beginPath();
+                ctx.arc(x, y, 15, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#ff8800';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                ctx.fillStyle = '#ff8800';
+                ctx.font = '16px Arial Black';
+                ctx.textAlign = 'center';
+                ctx.fillText('$', x, y + 6);
+            } else if (col.type === 'nitro') {
+                // Nitro boost
+                ctx.fillStyle = '#ff00ff';
+                ctx.beginPath();
+                ctx.arc(x, y, 18, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.font = '20px Arial Black';
+                ctx.textAlign = 'center';
+                ctx.fillText('N', x, y + 7);
+            }
+        }
+
+        function drawNitroEffect() {
+            // Speed lines effect
+            ctx.strokeStyle = 'rgba(255, 0, 255, 0.5)';
+            ctx.lineWidth = 3;
+
+            for (let i = 0; i < 10; i++) {
+                const x = Math.random() * 800;
+                const y = Math.random() * 600;
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x - 50, y + 30);
+                ctx.stroke();
+            }
+        }
+
+        // Render loop (60fps)
+        function gameLoop() {
+            if (gameState && !gameState.game_over) {
+                render(gameState);
+            }
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>

@@ -1,0 +1,206 @@
+# EASY (27 questions)
+
+### You're filling out a form. It asks 'Number of U.S. States'.
+What number do you write?
+
+### You're a Chinese emperor in 200 BC. Mongol raiders keep attacking from the north.
+What megaproject do you force millions of people to build?
+
+### You're voting in the first U.S. presidential election ever. Who's on the ballot?
+Who wins?
+
+### You're Neo in The Matrix. Morpheus offers you two pills: one shows you reality, one keeps you asleep.
+Which pill does Neo actually take in the movie?
+
+### You're in a movie theater in 1993. Dinosaurs are eating people on screen and it looks REAL.
+Who directed this masterpiece?
+
+### You're in a bookstore. A kid asks you how many Harry Potter books there are.
+What do you tell them?
+
+### You're filling out a calendar for next year. It's a leap year.
+How many total days do you need to mark?
+
+### You're making ice cubes. The thermometer reads 0°C.
+What's happening to the water right now?
+
+### You're in biology class. The teacher asks what part of the cell makes energy.
+What's the only thing you remember from high school?
+
+### Your teacher asks you what number, when multiplied by itself, equals 144.
+What do you answer?
+
+### You're playing poker. You want to count the cards in the deck.
+How many cards are in a standard deck?
+
+### You're on a first date at a planetarium. Your date points to a rusty-looking sphere and asks which planet that is.
+What do you tell them to sound smart?
+
+### Todd wanted to win a bet by eating 20 raw eggs in one sitting.
+What actually happened?
+
+### You're at Guitar Center pretending you know how to play. The salesperson asks how many strings you need.
+What's the standard number so you don't look like an idiot?
+
+### Florida Man arrested for throwing alligator through Wendy's drive-thru window.
+What charge did he actually face?
+
+### Florida Man calls 911 because Taco Bell forgot his Crunchwrap.
+What happened?
+
+### You cut yourself cooking. The bleeding won't stop after 15 minutes of pressure.
+What's the next step?
+
+### You're in a tech job interview. The interviewer asks what protocol your web browser uses to fetch cat videos.
+What do you say?
+
+### You're in med school. First day of anatomy class. Professor points to a skeleton and asks how many bones you'll need to memorize.
+What's the number?
+
+### Someone invented edible deodorant pills in the 1960s.
+What was supposed to happen?
+
+### A bank robber wrote his holdup note on the back of his own deposit slip.
+What happened?
+
+### Guy tries to rob a gun store. At 3pm. On a Saturday.
+What went wrong?
+
+### Florida Man arrested for calling 911 to complain about the quality of his cocaine.
+What did the cops find when they showed up?
+
+### Florida Man breaks into restaurant, doesn't steal money. Instead, makes himself a burger and leaves.
+What did he forget to do?
+
+### Florida Man tries to pay for McDonald's with bag of weed.
+What happened next?
+
+### You're in Saudi Arabia with a deck of playing cards.
+Why are they banned?
+
+### You're in North Korea trying to watch a movie. But blue jeans are banned in all films.
+What's the official reason?
+
+### In the 1950s, someone invented glasses with tiny windshield wipers.
+What problem were they trying to solve?
+
+# MEDIUM (30 questions)
+
+### Your dad stepped on a rusty nail 3 days ago. Now his leg is turning black and smells like death.
+The doctor says it's gangrene. What's your move?
+
+### You're hiking in the woods and get bitten by a snake. Your friend screams 'SUCK OUT THE VENOM!'
+Should you listen to your idiot friend?
+
+### You're trapped in a sealed room. The oxygen generator breaks. You check the air readout.
+Which gas is STILL there at 78%, keeping you alive?
+
+### You're standing on Mount Everest's summit, gasping for air.
+How high up are you right now?
+
+### You're in chemistry class. Your teacher hands you a gold ring and asks what symbol is on the periodic table.
+What do you write?
+
+### It's 1945. You're a German soldier and you just heard Hitler shot himself in his bunker.
+What month is it?
+
+### Steve Jobs is on stage holding a rectangular device with a touchscreen. No keyboard. Just a screen.
+What year is this happening?
+
+### You're arguing with your friend about which movie made the most money ever.
+Which film actually won the box office war?
+
+### Your browser won't load a website. The error says 'HTTP connection failed.'
+What does HTTP actually stand for?
+
+### You're in med school. First day of anatomy class. Professor points to a skeleton and asks how many bones you'll need to memorize.
+What's the number?
+
+### You're calculating a tip at a restaurant. The bill is $200. You want to leave 15%.
+How much money do you leave?
+
+### You flip a coin twice. You want heads both times.
+What are your odds?
+
+### You're scuba diving and your buddy signals he's out of air. You both rush to the surface.
+What's the biggest danger of ascending too fast?
+
+### You're arguing with a boomer music exec who claims record labels never make mistakes.
+Which company do you bring up to destroy their argument?
+
+### In 2007, this toy was banned because kids kept swallowing the magnets.
+What happens when you swallow two magnets?
+
+### You're dehydrated at a music festival. Your friend says 'dude, you're like mostly water, drink something.'
+What percentage of you is actually water?
+
+### You're at a party and someone dares you to chug a gallon of water in 10 minutes.
+What actually kills you?
+
+### You find a wild mushroom in your backyard. It's red with white spots, like Mario.
+What happens if you eat it?
+
+### Your friend gets bit by a rattlesnake. He wants to suck the venom out like in movies.
+What do you tell him?
+
+### You're Napoleon's military advisor in 1812. 600,000 soldiers invaded Russia, but only 10,000 made it back.
+What killed 590,000 of your men?
+
+### You're at the Canadian border with a suitcase full of Kinder Surprise eggs. US Customs stops you.
+Why are they confiscating your chocolate?
+
+### You're in Singapore chewing gum. A cop stops you and says it's been banned since 1992.
+What incident got gum banned nationwide?
+
+### It's 1920. A salesman offers you 'Radithor' - bottled water with radium in it.
+What's his sales pitch?
+
+### You're lost in the woods with no water. You find a stream.
+What's the safest move?
+
+### You're swimming in the ocean and see a dorsal fin. It's a shark.
+What do you do?
+
+### You're hiking in Alaska and see a sleeping bear. Your friend wants to wake it up for a selfie.
+What's the legal penalty if you let them do it?
+
+### Florida Man arrested for attacking girlfriend with a Subway sandwich.
+What type of sandwich was it?
+
+### Florida Man arrested for threatening his neighbor with a samurai sword... while naked.
+What was the argument about?
+
+### You're in the UK trying to buy an energy drink called 'Cocaine.'
+Why was it banned?
+
+### In 1963, someone invented the 'Isolator' - a soundproof helmet with an oxygen tank.
+What was it for?
+
+# HARD (10 questions)
+
+### You land in Sydney, Australia for vacation. You ask a local where the capital is so you can visit.
+Where do they tell you to go?
+
+### You're trapped in a freezer at -20°F. You have matches. What's the biggest danger?
+What kills you first in extreme cold?
+
+### You're a medieval doctor in 1518 Strasbourg. Hundreds of people are dancing uncontrollably for days, some to death.
+What's your diagnosis?
+
+### In the 1950s, someone invented a baby cage you hang OUTSIDE your apartment window.
+Why did they think this was a good idea?
+
+### You're hiking in the desert. You haven't peed in 8 hours despite drinking water.
+What's happening to you?
+
+### Your car is sinking in a lake. You're trapped inside underwater.
+What's the actual way to escape?
+
+### A wild bear charges you in the woods.
+What's the right response?
+
+### You're in Germany in 1941. Hitler just banned all typewriters.
+Why did he ban them?
+
+### Someone invented a gun that shoots bullets designed to make people stop and laugh.
+What was the bullet filled with?

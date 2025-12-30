@@ -1,0 +1,158 @@
+TACTILE BUTTON LOCATION & ASSEMBLY
+=====================================
+
+WHERE THE BUTTON GOES:
+----------------------
+
+1. BUTTON TOWER (in bottom shell):
+   - Location: EXACT CENTER of bottom shell (0, 0)
+   - Shape: Circular tower, 20mm diameter
+   - Height: 10mm tall from base (starts at 2.5mm base)
+   - Top of tower: 12.5mm from absolute bottom
+
+2. TACTILE BUTTON MOUNT:
+   - Mounts ON TOP of the button tower
+   - Two M2 screw holes in tower top
+   - Button sits at ~12.5mm height
+   - Button stem extends upward ~5-8mm
+
+3. BUTTON CAP (separate piece):
+   - 15mm diameter decorative cap
+   - 3mm pin underneath contacts button stem
+   - Sits at top shell interior
+   - User presses DOWN through 12mm hole in top shell
+
+4. TOP SHELL BUTTON HOLE:
+   - Location: EXACT CENTER of top shell
+   - Diameter: 12mm hole (clearance for button cap)
+   - User's finger/thumb presses through this hole
+
+
+HOW IT ASSEMBLES:
+-----------------
+
+[TOP SHELL]
+    |
+    | 12mm hole in center
+    |
+    v
+[BUTTON CAP] ← decorative Forerunner glyph, user presses this
+    |
+    | 3mm pin
+    |
+    v
+[TACTILE BUTTON] ← 12×12mm tactile switch, makes "click"
+    |
+    | mounted with M2 screws
+    |
+    v
+[BUTTON TOWER] ← 20mm circular post in bottom shell
+    |
+[BOTTOM SHELL BASE]
+
+
+WIRE ROUTING ISSUE:
+-------------------
+
+LED Ring wire needs to go from:
+- LED ring (in top shell, 53mm diameter)
+  DOWN through center
+- To ESP32 (in bottom shell)
+
+But button tower is IN THE WAY at center!
+
+Current wire path:
+LED ring → goes around button tower → to ESP32
+
+Better solution:
+- Hollow button tower (already done ✅)
+- Wire routes THROUGH the hollow tower
+
+
+GAMEPLAY PERSPECTIVE:
+---------------------
+
+When holding the puck:
+- Thumb naturally rests on top center
+- Button is RIGHT where thumb is ✅
+- Press = tactile click feedback
+- Can press while shaking/moving puck
+
+Single button input types:
+1. Single tap
+2. Double tap
+3. Triple tap
+4. Long press (hold)
+5. Press while shaking
+6. Rapid tapping
+
+
+FOR YOUR 37 GAMES:
+------------------
+
+Examples of button usage:
+- "Avoid" game: Hold button to activate shield
+- "Quickdraw" game: First to press button wins
+- "Memory" game: Press to select color sequence
+- "Hot Potato": Pass puck, press to "defuse"
+- "Rhythm" game: Press in time with LED flashes
+
+Question: Do ANY of your 37 games need TWO buttons?
+If yes, we need to add a second button location.
+
+
+BUTTON PLACEMENT OPTIONS:
+--------------------------
+
+Option A (CURRENT): Single center button
+- Pro: Easy thumb access, intuitive
+- Con: Only one input
+
+Option B: Center + Side button
+- Center: Primary action
+- Side: Secondary action (on rim at 45° angle)
+- Pro: Two-button games possible
+- Con: Harder to press side button while holding
+
+Option C: Two side buttons (opposite sides)
+- Pro: Ambidextrous, two-handed games
+- Con: No center button, less intuitive
+
+
+TACTILE BUTTON SPECS:
+---------------------
+
+Typical tactile button:
+- Size: 12×12mm (with through-hole legs)
+- Travel: 0.5mm to actuation
+- Force: 160-260gf (medium tactile)
+- Life: 1 million actuations
+- Mounting: PCB or small carrier board
+
+Button cap adds:
+- 2mm height above button
+- Larger surface area (15mm vs 12mm)
+- Forerunner aesthetic
+
+
+YOUR CURRENT DESIGN:
+--------------------
+
+✅ Button is at CENTER (good for gameplay)
+✅ Accessible through top shell hole
+✅ Tactile feedback preserved
+✅ Decorative cap looks good
+⚠️ Only ONE button (verify this works for all 37 games)
+⚠️ Button tower might interfere with wire routing (but it's hollow, so OK)
+
+
+VERIFICATION NEEDED:
+--------------------
+
+1. Check your 37 games list - do ANY need 2+ buttons?
+2. If yes, where should second button go?
+3. Do you want button to be:
+   - Center only (current)
+   - Center + side
+   - Other configuration?
+

@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TABLE WARS - {{ bar_name }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial Black', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        h1 {
+            font-size: 3.5em;
+            color: #00d9ff;
+            text-shadow: 0 0 30px rgba(0, 217, 255, 0.8);
+            margin-bottom: 15px;
+        }
+
+        .subtitle {
+            font-size: 1.5em;
+            color: #ffd700;
+            margin-bottom: 10px;
+        }
+
+        .table-badge {
+            font-size: 1.2em;
+            color: #aaa;
+        }
+
+        /* Mode Selection Screen */
+        .mode-selection {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-top: 40px;
+        }
+
+        .mode-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 3px solid rgba(0, 217, 255, 0.3);
+            border-radius: 20px;
+            padding: 50px 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .mode-card:hover {
+            transform: scale(1.05);
+            border-color: #00d9ff;
+            box-shadow: 0 0 40px rgba(0, 217, 255, 0.5);
+        }
+
+        .mode-icon {
+            font-size: 5em;
+            margin-bottom: 20px;
+        }
+
+        .mode-title {
+            font-size: 2em;
+            margin-bottom: 15px;
+            color: #00d9ff;
+        }
+
+        .mode-description {
+            font-size: 1.1em;
+            color: #ccc;
+            line-height: 1.4;
+        }
+
+        /* Trivia Game Type Selection */
+        .game-types {
+            display: none;
+        }
+
+        .game-types.active {
+            display: block;
+        }
+
+        .back-btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid #00d9ff;
+            border-radius: 10px;
+            color: white;
+            font-size: 1.1em;
+            cursor: pointer;
+            margin-bottom: 30px;
+            transition: all 0.3s;
+        }
+
+        .back-btn:hover {
+            background: rgba(0, 217, 255, 0.2);
+        }
+
+        .game-types-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .game-type-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(255, 107, 107, 0.3);
+            border-radius: 15px;
+            padding: 30px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .game-type-card:hover {
+            transform: translateY(-5px);
+            border-color: #ff6b6b;
+            box-shadow: 0 10px 30px rgba(255, 107, 107, 0.3);
+        }
+
+        .game-type-name {
+            font-size: 1.5em;
+            color: #ff6b6b;
+            margin-bottom: 10px;
+        }
+
+        .game-type-desc {
+            font-size: 0.95em;
+            color: #aaa;
+            margin-bottom: 15px;
+        }
+
+        .game-type-mechanics {
+            font-size: 0.85em;
+            color: #888;
+            font-style: italic;
+        }
+
+        /* Gameplay Screen */
+        .gameplay {
+            display: none;
+        }
+
+        .gameplay.active {
+            display: block;
+        }
+
+        .question-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 3px solid rgba(0, 217, 255, 0.3);
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 30px;
+        }
+
+        .setup-text {
+            font-size: 1.3em;
+            color: #aaa;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .question-text {
+            font-size: 2em;
+            margin-bottom: 30px;
+            line-height: 1.4;
+        }
+
+        .answers-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .answer {
+            padding: 25px;
+            font-size: 1.3em;
+            border-radius: 12px;
+            border: 3px solid;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .answer-a {
+            background: rgba(255, 59, 48, 0.2);
+            border-color: #ff3b30;
+        }
+
+        .answer-b {
+            background: rgba(0, 122, 255, 0.2);
+            border-color: #007aff;
+        }
+
+        .answer-c {
+            background: rgba(52, 199, 89, 0.2);
+            border-color: #34c759;
+        }
+
+        .answer-d {
+            background: rgba(255, 204, 0, 0.2);
+            border-color: #ffcc00;
+        }
+
+        .answer:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px currentColor;
+        }
+
+        .answer.selected {
+            box-shadow: 0 0 40px currentColor;
+            transform: scale(1.1);
+        }
+
+        .timer {
+            position: fixed;
+            top: 40px;
+            right: 40px;
+            font-size: 80px;
+            color: #ff3b30;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .waiting-screen {
+            text-align: center;
+            padding: 60px 40px;
+        }
+
+        .waiting-text {
+            font-size: 2em;
+            color: #00d9ff;
+            margin-bottom: 30px;
+        }
+
+        .puck-instruction {
+            font-size: 1.3em;
+            color: #aaa;
+            line-height: 1.6;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2.5em;
+            }
+
+            .mode-selection {
+                grid-template-columns: 1fr;
+            }
+
+            .answers-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .timer {
+                font-size: 60px;
+                top: 20px;
+                right: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎮 TABLE WARS</h1>
+            <div class="subtitle">{{ bar_name }}</div>
+            <div class="table-badge">Table {{ table_number }}</div>
+        </header>
+
+        <!-- MODE SELECTION SCREEN -->
+        <div id="modeSelection" class="mode-selection">
+            <div class="mode-card" onclick="selectMode('trivia')">
+                <div class="mode-icon">🎭</div>
+                <div class="mode-title">TRIVIA WARS</div>
+                <div class="mode-description">
+                    Test your knowledge! Answer questions, battle friends, and climb the leaderboard.
+                </div>
+            </div>
+
+            <div class="mode-card" onclick="selectMode('skill')">
+                <div class="mode-icon">🎯</div>
+                <div class="mode-title">FREE PLAY</div>
+                <div class="mode-description">
+                    51 skill-based games! Use your puck to tap, shake, spin, and compete in reaction challenges.
+                </div>
+            </div>
+        </div>
+
+        <!-- TRIVIA GAME TYPE SELECTION -->
+        <div id="gameTypes" class="game-types">
+            <button class="back-btn" onclick="backToModeSelection()">← Back to Modes</button>
+            <h2 style="font-size: 2.5em; margin-bottom: 20px; text-align: center;">Choose Your Trivia Game</h2>
+
+            <div class="game-types-grid" id="gameTypesGrid">
+                <!-- Populated via JavaScript -->
+            </div>
+        </div>
+
+        <!-- GAMEPLAY SCREEN -->
+        <div id="gameplay" class="gameplay">
+            <button class="back-btn" onclick="backToGameTypes()">← Back to Games</button>
+
+            <div class="timer" id="timer">15</div>
+
+            <div class="progress-bar" style="position: fixed; top: 10px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.5); padding: 10px 20px; border-radius: 10px; display: none;" id="progressBar">
+                <span id="progressText">Round 1 • Question 1/5</span>
+            </div>
+
+            <div class="waiting-screen" id="waitingScreen">
+                <div class="waiting-text">Waiting for question...</div>
+                <div class="puck-instruction">
+                    Get ready with your puck!<br>
+                    Use the button to select your answer.
+                </div>
+            </div>
+
+            <div class="question-card hidden" id="questionCard">
+                <div class="setup-text" id="setupText"></div>
+                <div class="question-text" id="questionText"></div>
+
+                <div class="answers-grid">
+                    <div class="answer answer-a" id="answerA" onclick="selectAnswer('A')">
+                        🔴 Answer A
+                    </div>
+                    <div class="answer answer-b" id="answerB" onclick="selectAnswer('B')">
+                        🔵 Answer B
+                    </div>
+                    <div class="answer answer-c" id="answerC" onclick="selectAnswer('C')">
+                        🟢 Answer C
+                    </div>
+                    <div class="answer answer-d" id="answerD" onclick="selectAnswer('D')">
+                        🟡 Answer D
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const barSlug = "{{ bar_slug }}";
+        const tableNumber = {{ table_number }};
+
+        let currentScreen = 'mode-selection';
+        let currentSessionCode = null;
+        let currentQuestion = null;
+        let selectedAnswer = null;
+
+        // ============================================
+        // MODE SELECTION
+        // ============================================
+
+        function selectMode(mode) {
+            if (mode === 'trivia') {
+                showTriviaGameTypes();
+            } else if (mode === 'skill') {
+                // Redirect to existing skill games dashboard
+                window.location.href = `/bar/${barSlug}/table/${tableNumber}/skill`;
+            }
+        }
+
+        function backToModeSelection() {
+            document.getElementById('modeSelection').style.display = 'grid';
+            document.getElementById('gameTypes').classList.remove('active');
+            document.getElementById('gameplay').classList.remove('active');
+        }
+
+        // ============================================
+        // TRIVIA GAME TYPE SELECTION
+        // ============================================
+
+        async function showTriviaGameTypes() {
+            document.getElementById('modeSelection').style.display = 'none';
+            document.getElementById('gameTypes').classList.add('active');
+
+            // Load available game types
+            const response = await fetch('/api/trivia/game-types');
+            const data = await response.json();
+
+            if (data.success) {
+                displayGameTypes(data.game_types);
+            }
+        }
+
+        function displayGameTypes(gameTypes) {
+            const grid = document.getElementById('gameTypesGrid');
+            grid.innerHTML = gameTypes.map(gt => `
+                <div class="game-type-card" onclick="startTriviaGame('${gt.name}')">
+                    <div class="game-type-name">${gt.display_name}</div>
+                    <div class="game-type-desc">${gt.description}</div>
+                    <div class="game-type-mechanics">${gt.mechanics_description}</div>
+                </div>
+            `).join('');
+        }
+
+        function backToGameTypes() {
+            document.getElementById('gameplay').classList.remove('active');
+            document.getElementById('gameTypes').classList.add('active');
+        }
+
+        // ============================================
+        // START TRIVIA GAME
+        // ============================================
+
+        async function startTriviaGame(gameType) {
+            // For now, hardcode 2 players - in real version this would come from puck detection
+            const players = [
+                { puck_id: 1, player_name: "Player 1" },
+                { puck_id: 2, player_name: "Player 2" }
+            ];
+
+            const response = await fetch('/api/trivia/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    bar_slug: barSlug,
+                    table_number: tableNumber,
+                    game_type: gameType,
+                    players: players
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                currentSessionCode = data.session_code;
+                showGameplay();
+                loadQuestion();
+            } else {
+                alert('Failed to start game: ' + data.error);
+            }
+        }
+
+        function showGameplay() {
+            document.getElementById('gameTypes').classList.remove('active');
+            document.getElementById('gameplay').classList.add('active');
+        }
+
+        // ============================================
+        // QUESTION DISPLAY
+        // ============================================
+
+        async function loadQuestion() {
+            // First check session state
+            const stateResponse = await fetch(`/api/trivia/session/${currentSessionCode}`);
+            const stateData = await stateResponse.json();
+
+            if (stateData.success) {
+                // Check which phase we're in
+                if (stateData.phase === 'skill_break') {
+                    showSkillBreak();
+                    return;
+                } else if (stateData.phase === 'final_results') {
+                    showFinalResults();
+                    return;
+                }
+            }
+
+            // Load next question
+            const response = await fetch(`/api/trivia/question/${currentSessionCode}`);
+            const data = await response.json();
+
+            if (data.success) {
+                currentQuestion = data.question;
+                displayQuestion(currentQuestion);
+                startTimer(currentQuestion.time_limit);
+
+                // Show progress
+                updateProgress(data.question_number, data.round);
+            } else {
+                alert('Error loading question: ' + data.error);
+            }
+        }
+
+        function displayQuestion(question) {
+            document.getElementById('waitingScreen').classList.add('hidden');
+            document.getElementById('questionCard').classList.remove('hidden');
+
+            document.getElementById('setupText').textContent = question.setup || '';
+            document.getElementById('setupText').style.display = question.setup ? 'block' : 'none';
+            document.getElementById('questionText').textContent = question.question;
+
+            document.getElementById('answerA').textContent = '🔴 ' + question.answers.A;
+            document.getElementById('answerB').textContent = '🔵 ' + question.answers.B;
+            document.getElementById('answerC').textContent = '🟢 ' + question.answers.C;
+            document.getElementById('answerD').textContent = '🟡 ' + question.answers.D;
+
+            // Reset selections
+            selectedAnswer = null;
+            document.querySelectorAll('.answer').forEach(el => el.classList.remove('selected'));
+        }
+
+        function selectAnswer(answer) {
+            selectedAnswer = answer;
+
+            // Visual feedback
+            document.querySelectorAll('.answer').forEach(el => el.classList.remove('selected'));
+            document.getElementById('answer' + answer).classList.add('selected');
+
+            // Submit answer
+            submitAnswer(answer);
+        }
+
+        async function submitAnswer(answer) {
+            const response = await fetch('/api/trivia/answer', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_code: currentSessionCode,
+                    puck_id: 1, // Hardcoded for demo
+                    question_id: currentQuestion.id,
+                    answer: answer,
+                    response_time_ms: getResponseTime()
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showResult(data);
+            }
+        }
+
+        function showResult(result) {
+            // Show if correct/wrong
+            const message = result.is_correct ?
+                `✅ Correct! +${result.points} points` :
+                `❌ Wrong! Correct answer: ${result.correct_answer}`;
+
+            const fullMessage = message + '\n\n' + result.commentary;
+
+            // Check what happens next
+            if (result.next_phase === 'skill_break_needed') {
+                alert(fullMessage + '\n\n🎮 SKILL BREAK TIME!');
+                setTimeout(() => showSkillBreak(), 2000);
+            } else if (result.next_phase === 'session_complete') {
+                alert(fullMessage + '\n\n🏆 FINAL ROUND COMPLETE!');
+                setTimeout(() => showFinalResults(), 2000);
+            } else {
+                alert(fullMessage);
+                setTimeout(() => loadQuestion(), 3000);
+            }
+        }
+
+        function showSkillBreak() {
+            document.getElementById('questionCard').classList.add('hidden');
+            document.getElementById('waitingScreen').classList.remove('hidden');
+            document.querySelector('.waiting-text').textContent = '🎮 SKILL BREAK!';
+            document.querySelector('.puck-instruction').innerHTML =
+                'Time for a skill game!<br>Winner gets 500 bonus points.<br><br>Loading game...';
+
+            // Auto-start random skill game
+            setTimeout(async () => {
+                const response = await fetch('/api/trivia/skill-break/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_code: currentSessionCode
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    document.querySelector('.puck-instruction').innerHTML =
+                        `<strong>${data.skill_game.name}</strong><br><br>${data.skill_game.description || 'Get ready!'}`;
+
+                    // Simulate skill game completion (in real version, puck would report winner)
+                    setTimeout(() => {
+                        completeSkillBreak();
+                    }, 5000);
+                }
+            }, 2000);
+        }
+
+        async function completeSkillBreak() {
+            // In real version, this would come from puck hardware
+            const winnerPuckId = Math.random() > 0.5 ? 1 : 2;
+
+            const response = await fetch('/api/trivia/skill-break/complete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_code: currentSessionCode,
+                    winner_puck_id: winnerPuckId,
+                    bonus_points: 500
+                })
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                alert(data.message);
+                setTimeout(() => {
+                    document.getElementById('waitingScreen').classList.add('hidden');
+                    loadQuestion();
+                }, 2000);
+            }
+        }
+
+        function showFinalResults() {
+            window.location.href = `/trivia/results/${currentSessionCode}`;
+        }
+
+        function updateProgress(questionNumber, round) {
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            progressBar.style.display = 'block';
+            progressText.textContent = `Round ${round} • Question ${questionNumber}/5`;
+        }
+
+        // ============================================
+        // TIMER
+        // ============================================
+
+        let timerInterval = null;
+        let timeRemaining = 15;
+        let questionStartTime = null;
+
+        function startTimer(seconds) {
+            timeRemaining = seconds;
+            questionStartTime = Date.now();
+            updateTimerDisplay();
+
+            if (timerInterval) clearInterval(timerInterval);
+
+            timerInterval = setInterval(() => {
+                timeRemaining--;
+                updateTimerDisplay();
+
+                if (timeRemaining <= 0) {
+                    clearInterval(timerInterval);
+                    timeUp();
+                }
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            document.getElementById('timer').textContent = timeRemaining;
+        }
+
+        function timeUp() {
+            alert("Time's up! Moving to next question...");
+            setTimeout(() => {
+                loadQuestion();
+            }, 2000);
+        }
+
+        function getResponseTime() {
+            if (!questionStartTime) return 0;
+            return Date.now() - questionStartTime;
+        }
+    </script>
+</body>
+</html>
