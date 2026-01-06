@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trivia Buzzer - Puck Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #4e54c8 0%, #8f94fb 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .game-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 30px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 1000px;
+            width: 90%;
+            position: relative;
+        }
+
+        h1 {
+            text-align: center;
+            color: #4e54c8;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .scoreboard {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin: 30px 0;
+        }
+
+        .score-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .score-card.active {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            transform: scale(1.05);
+            box-shadow: 0 10px 30px rgba(255, 215, 0, 0.5);
+            animation: winner-pulse 0.5s infinite;
+        }
+
+        @keyframes winner-pulse {
+            0%, 100% { transform: scale(1.05); }
+            50% { transform: scale(1.1); }
+        }
+
+        .score-card.correct {
+            animation: correct-flash 0.5s ease;
+        }
+
+        @keyframes correct-flash {
+            0%, 100% { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+            50% { background: linear-gradient(135deg, #38ef7d 0%, #11998e 100%); }
+        }
+
+        .score-card.incorrect {
+            animation: incorrect-flash 0.5s ease;
+        }
+
+        @keyframes incorrect-flash {
+            0%, 100% { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+            50% { background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%); }
+        }
+
+        .player-name {
+            color: white;
+            font-size: 1.3em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .player-key {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+
+        .score {
+            color: white;
+            font-size: 2em;
+            font-weight: bold;
+        }
+
+        .question-container {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            border-radius: 20px;
+            padding: 40px;
+            margin: 30px 0;
+            min-height: 200px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .question-number {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 1.2em;
+            margin-bottom: 15px;
+            font-weight: 500;
+        }
+
+        .question-text {
+            color: white;
+            font-size: 1.8em;
+            text-align: center;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+            line-height: 1.4;
+        }
+
+        .answer-container {
+            text-align: center;
+            margin: 20px 0;
+            min-height: 100px;
+        }
+
+        .answer-display {
+            font-size: 1.5em;
+            color: #4e54c8;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+
+        .answer-input {
+            width: 100%;
+            max-width: 500px;
+            padding: 15px;
+            font-size: 1.2em;
+            border: 3px solid #4e54c8;
+            border-radius: 15px;
+            text-align: center;
+            margin: 10px 0;
+        }
+
+        .answer-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .controls {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #4e54c8 0%, #8f94fb 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2em;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            margin: 5px;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn:active {
+            transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn.correct {
+            background: linear-gradient(135deg, #38ef7d 0%, #11998e 100%);
+        }
+
+        .btn.incorrect {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+        }
+
+        .status {
+            text-align: center;
+            font-size: 1.3em;
+            color: #4e54c8;
+            margin: 20px 0;
+            font-weight: 500;
+            min-height: 30px;
+        }
+
+        .celebration {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .celebration.show {
+            display: flex;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .celebration-content {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            padding: 60px;
+            border-radius: 30px;
+            text-align: center;
+            animation: bounceIn 0.6s ease;
+        }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .celebration-content h2 {
+            font-size: 3em;
+            color: white;
+            margin-bottom: 20px;
+            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .final-scores {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .final-score-entry {
+            color: white;
+            font-size: 1.3em;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>🔔 Trivia Buzzer</h1>
+        <p class="subtitle">Buzz in first and answer correctly!</p>
+
+        <div class="scoreboard">
+            <div class="score-card" data-player="1">
+                <div class="player-name">Player 1</div>
+                <div class="player-key">Press Q</div>
+                <div class="score" id="score1">0</div>
+            </div>
+            <div class="score-card" data-player="2">
+                <div class="player-name">Player 2</div>
+                <div class="player-key">Press W</div>
+                <div class="score" id="score2">0</div>
+            </div>
+            <div class="score-card" data-player="3">
+                <div class="player-name">Player 3</div>
+                <div class="player-key">Press E</div>
+                <div class="score" id="score3">0</div>
+            </div>
+            <div class="score-card" data-player="4">
+                <div class="player-name">Player 4</div>
+                <div class="player-key">Press R</div>
+                <div class="score" id="score4">0</div>
+            </div>
+        </div>
+
+        <div class="question-container">
+            <div class="question-number" id="questionNumber">Question 1/10</div>
+            <div class="question-text" id="questionText">Press Start to begin!</div>
+        </div>
+
+        <div class="status" id="status"></div>
+
+        <div class="answer-container" id="answerContainer" style="display: none;">
+            <input type="text" class="answer-input" id="answerInput" placeholder="Type your answer...">
+            <div class="answer-buttons">
+                <button class="btn correct" onclick="submitAnswer(true)">Correct ✓</button>
+                <button class="btn incorrect" onclick="submitAnswer(false)">Incorrect ✗</button>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn" id="startBtn" onclick="startGame()">Start Game</button>
+            <button class="btn" id="nextBtn" onclick="nextQuestion()" style="display: none;">Next Question</button>
+        </div>
+    </div>
+
+    <div class="celebration" id="celebration">
+        <div class="celebration-content">
+            <h2>🏆 Game Over! 🏆</h2>
+            <div class="final-scores" id="finalScores"></div>
+            <button class="btn" onclick="resetGame()">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        // Web Audio API setup
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playSound(frequency, duration, type = 'sine') {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.frequency.value = frequency;
+            oscillator.type = type;
+
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + duration);
+        }
+
+        function playBuzzSound() {
+            playSound(880, 0.2, 'square');
+        }
+
+        function playCorrectSound() {
+            playSound(523, 0.15, 'sine');
+            setTimeout(() => playSound(659, 0.15, 'sine'), 100);
+            setTimeout(() => playSound(784, 0.2, 'sine'), 200);
+        }
+
+        function playIncorrectSound() {
+            playSound(200, 0.3, 'sawtooth');
+        }
+
+        function playVictorySound() {
+            playSound(523, 0.2, 'sine');
+            setTimeout(() => playSound(659, 0.2, 'sine'), 200);
+            setTimeout(() => playSound(784, 0.4, 'sine'), 400);
+        }
+
+        // Trivia questions
+        const questions = [
+            { q: "What is the capital of France?", a: "Paris" },
+            { q: "How many continents are there?", a: "7" },
+            { q: "What planet is known as the Red Planet?", a: "Mars" },
+            { q: "Who painted the Mona Lisa?", a: "Leonardo da Vinci" },
+            { q: "What is the largest ocean on Earth?", a: "Pacific" },
+            { q: "How many sides does a hexagon have?", a: "6" },
+            { q: "What is the chemical symbol for gold?", a: "Au" },
+            { q: "Who wrote Romeo and Juliet?", a: "Shakespeare" },
+            { q: "What year did World War II end?", a: "1945" },
+            { q: "What is the smallest prime number?", a: "2" }
+        ];
+
+        // Game state
+        let gameActive = false;
+        let currentQuestion = 0;
+        let scores = { 1: 0, 2: 0, 3: 0, 4: 0 };
+        let buzzedPlayer = null;
+        let waitingForBuzz = false;
+
+        const keyMap = {
+            'KeyQ': 1,
+            'KeyW': 2,
+            'KeyE': 3,
+            'KeyR': 4
+        };
+
+        function initGame() {
+            // Keyboard controls
+            document.addEventListener('keydown', (e) => {
+                if (!waitingForBuzz) return;
+
+                const player = keyMap[e.code];
+                if (player && !buzzedPlayer) {
+                    handleBuzz(player);
+                }
+            });
+
+            // Click on score cards to buzz
+            document.querySelectorAll('.score-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    if (waitingForBuzz && !buzzedPlayer) {
+                        const player = parseInt(card.dataset.player);
+                        handleBuzz(player);
+                    }
+                });
+            });
+        }
+
+        function startGame() {
+            gameActive = true;
+            currentQuestion = 0;
+            scores = { 1: 0, 2: 0, 3: 0, 4: 0 };
+            updateScores();
+
+            document.getElementById('startBtn').style.display = 'none';
+            document.getElementById('answerContainer').style.display = 'none';
+
+            showQuestion();
+        }
+
+        function showQuestion() {
+            if (currentQuestion >= questions.length) {
+                endGame();
+                return;
+            }
+
+            buzzedPlayer = null;
+            waitingForBuzz = true;
+
+            const question = questions[currentQuestion];
+
+            document.getElementById('questionNumber').textContent = `Question ${currentQuestion + 1}/${questions.length}`;
+            document.getElementById('questionText').textContent = question.q;
+            document.getElementById('status').textContent = 'Buzz in to answer!';
+            document.getElementById('answerContainer').style.display = 'none';
+            document.getElementById('nextBtn').style.display = 'none';
+
+            // Remove active class from all cards
+            document.querySelectorAll('.score-card').forEach(card => {
+                card.classList.remove('active');
+            });
+        }
+
+        function handleBuzz(player) {
+            // WebSocket integration point: This would receive puck tap data
+            // When puck is tapped, call handleBuzz(playerNumber)
+
+            if (!waitingForBuzz || buzzedPlayer) return;
+
+            buzzedPlayer = player;
+            waitingForBuzz = false;
+
+            playBuzzSound();
+
+            // Highlight buzzed player
+            document.querySelectorAll('.score-card').forEach(card => {
+                card.classList.remove('active');
+            });
+            document.querySelector(`[data-player="${player}"]`).classList.add('active');
+
+            document.getElementById('status').textContent = `Player ${player} buzzed in!`;
+            document.getElementById('answerContainer').style.display = 'block';
+            document.getElementById('answerInput').value = '';
+            document.getElementById('answerInput').focus();
+        }
+
+        function submitAnswer(isCorrect) {
+            if (!buzzedPlayer) return;
+
+            const card = document.querySelector(`[data-player="${buzzedPlayer}"]`);
+
+            if (isCorrect) {
+                scores[buzzedPlayer]++;
+                playCorrectSound();
+                card.classList.add('correct');
+                document.getElementById('status').textContent = `Correct! Player ${buzzedPlayer} gets a point!`;
+            } else {
+                playIncorrectSound();
+                card.classList.add('incorrect');
+                document.getElementById('status').textContent = `Incorrect! The answer was: ${questions[currentQuestion].a}`;
+            }
+
+            updateScores();
+
+            setTimeout(() => {
+                card.classList.remove('correct', 'incorrect', 'active');
+            }, 1000);
+
+            document.getElementById('answerContainer').style.display = 'none';
+            document.getElementById('nextBtn').style.display = 'inline-block';
+        }
+
+        function nextQuestion() {
+            currentQuestion++;
+            showQuestion();
+        }
+
+        function updateScores() {
+            for (let player = 1; player <= 4; player++) {
+                document.getElementById(`score${player}`).textContent = scores[player];
+            }
+        }
+
+        function endGame() {
+            gameActive = false;
+            waitingForBuzz = false;
+
+            // Find winner(s)
+            const maxScore = Math.max(...Object.values(scores));
+            const winners = Object.keys(scores).filter(p => scores[p] === maxScore);
+
+            let html = '';
+            const sortedPlayers = Object.keys(scores).sort((a, b) => scores[b] - scores[a]);
+
+            sortedPlayers.forEach((player, index) => {
+                const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
+                html += `<div class="final-score-entry">${medal} Player ${player}: ${scores[player]} points</div>`;
+            });
+
+            document.getElementById('finalScores').innerHTML = html;
+
+            playVictorySound();
+            createConfetti();
+
+            document.getElementById('celebration').classList.add('show');
+        }
+
+        function resetGame() {
+            currentQuestion = 0;
+            scores = { 1: 0, 2: 0, 3: 0, 4: 0 };
+            buzzedPlayer = null;
+            waitingForBuzz = false;
+
+            updateScores();
+
+            document.getElementById('celebration').classList.remove('show');
+            document.getElementById('startBtn').style.display = 'inline-block';
+            document.getElementById('nextBtn').style.display = 'none';
+            document.getElementById('answerContainer').style.display = 'none';
+
+            document.getElementById('questionText').textContent = 'Press Start to begin!';
+            document.getElementById('questionNumber').textContent = 'Question 1/10';
+            document.getElementById('status').textContent = '';
+
+            document.querySelectorAll('.score-card').forEach(card => {
+                card.classList.remove('active', 'correct', 'incorrect');
+            });
+        }
+
+        function createConfetti() {
+            const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff'];
+
+            for (let i = 0; i < 50; i++) {
+                setTimeout(() => {
+                    const confetti = document.createElement('div');
+                    confetti.style.position = 'fixed';
+                    confetti.style.width = '10px';
+                    confetti.style.height = '10px';
+                    confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
+                    confetti.style.left = Math.random() * 100 + '%';
+                    confetti.style.top = '-10px';
+                    confetti.style.animation = 'confetti-fall 3s linear';
+                    confetti.style.zIndex = '999';
+                    document.body.appendChild(confetti);
+
+                    setTimeout(() => confetti.remove(), 3000);
+                }, i * 50);
+            }
+
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes confetti-fall {
+                    to { transform: translateY(100vh) rotate(360deg); }
+                }
+            `;
+            if (!document.getElementById('confetti-style')) {
+                style.id = 'confetti-style';
+                document.head.appendChild(style);
+            }
+        }
+
+        // Initialize on load
+        initGame();
+    </script>
+</body>
+</html>
