@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tilt Maze Navigator - Table Wars</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #2C3E50 0%, #4CA1AF 100%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      color: white;
+    }
+
+    #game-container {
+      text-align: center;
+      width: 100%;
+      max-width: 1200px;
+      padding: 40px;
+    }
+
+    h1 {
+      font-size: 4rem;
+      font-weight: 900;
+      margin-bottom: 20px;
+      text-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      letter-spacing: -2px;
+    }
+
+    #instructions {
+      font-size: 1.5rem;
+      margin-bottom: 40px;
+      opacity: 0.9;
+    }
+
+    #game-canvas {
+      display: block;
+      margin: 40px auto;
+      background: #1a1a2e;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+    }
+
+    #timer {
+      font-size: 3rem;
+      font-weight: 700;
+      margin-bottom: 20px;
+      color: #4ECDC4;
+    }
+
+    #level-display {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 20px;
+      color: #FFD93D;
+    }
+
+    #start-btn {
+      background: linear-gradient(135deg, #4ECDC4, #44A08D);
+      color: white;
+      border: none;
+      padding: 30px 60px;
+      font-size: 2rem;
+      font-weight: 900;
+      border-radius: 100px;
+      cursor: pointer;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+      transition: all 0.3s ease;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    #start-btn:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 15px 50px rgba(0,0,0,0.4);
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    #results {
+      display: none;
+      animation: slideIn 0.5s ease;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    #final-time {
+      font-size: 6rem;
+      font-weight: 900;
+      color: #4ECDC4;
+      text-shadow: 0 8px 40px rgba(78, 205, 196, 0.5);
+      margin: 40px 0;
+    }
+
+    #keyboard-hint {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 1.2rem;
+      opacity: 0.5;
+      background: rgba(0,0,0,0.3);
+      padding: 15px 30px;
+      border-radius: 50px;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <div id="lobby">
+      <h1>🎯 TILT MAZE 🎯</h1>
+      <p id="instructions">Navigate through 3 mazes as fast as you can!</p>
+      <button id="start-btn" onclick="startGame()">START CHALLENGE</button>
+    </div>
+
+    <div id="gameplay" class="hidden">
+      <h1>🎯 TILT MAZE 🎯</h1>
+      <div id="level-display">Level 1/3</div>
+      <div id="timer">0.0s</div>
+      <canvas id="game-canvas" width="600" height="600"></canvas>
+    </div>
+
+    <div id="results">
+      <h1>🏁 MAZE COMPLETE! 🏁</h1>
+      <div id="final-time">0.0s</div>
+      <p style="font-size: 1.5rem; margin-bottom: 40px;">All 3 levels completed!</p>
+      <button id="start-btn" onclick="resetGame()">PLAY AGAIN</button>
+    </div>
+  </div>
+
+  <div id="keyboard-hint">Arrow Keys to tilt maze (simulates puck tilt)</div>
+
+  <script>
+    // Game State
+    let gameState = 'LOBBY';
+    let currentLevel = 1;
+    let totalTime = 0;
+    let levelStartTime = 0;
+
+    // Ball Physics
+    let ballX = 50;
+    let ballY = 50;
+    let ballVelX = 0;
+    let ballVelY = 0;
+    let ballRadius = 15;
+
+    // Tilt
+    let tiltX = 0;
+    let tiltY = 0;
+
+    // Canvas
+    const canvas = document.getElementById('game-canvas');
+    const ctx = canvas.getContext('2d');
+
+    // Audio
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // DOM Elements
+    const lobby = document.getElementById('lobby');
+    const gameplay = document.getElementById('gameplay');
+    const results = document.getElementById('results');
+    const timerDisplay = document.getElementById('timer');
+    const levelDisplay = document.getElementById('level-display');
+    const finalTime = document.getElementById('final-time');
+
+    // Mazes (walls as rectangles)
+    const mazes = [
+      // Level 1 - Simple
+      {
+        start: { x: 50, y: 50 },
+        goal: { x: 550, y: 550, size: 40 },
+        walls: [
+          { x: 0, y: 200, width: 400, height: 20 },
+          { x: 200, y: 380, width: 400, height: 20 },
+        ]
+      },
+      // Level 2 - Medium
+      {
+        start: { x: 50, y: 550 },
+        goal: { x: 550, y: 50, size: 40 },
+        walls: [
+          { x: 150, y: 0, width: 20, height: 450 },
+          { x: 350, y: 150, width: 20, height: 450 },
+          { x: 0, y: 300, width: 300, height: 20 },
+        ]
+      },
+      // Level 3 - Hard
+      {
+        start: { x: 300, y: 550 },
+        goal: { x: 300, y: 50, size: 40 },
+        walls: [
+          { x: 0, y: 150, width: 250, height: 20 },
+          { x: 350, y: 150, width: 250, height: 20 },
+          { x: 0, y: 350, width: 250, height: 20 },
+          { x: 350, y: 350, width: 250, height: 20 },
+          { x: 200, y: 250, width: 200, height: 20 },
+        ]
+      }
+    ];
+
+    let currentMaze = mazes[0];
+
+    // Keyboard Input
+    const keys = {};
+
+    document.addEventListener('keydown', (e) => {
+      keys[e.key] = true;
+    });
+
+    document.addEventListener('keyup', (e) => {
+      keys[e.key] = false;
+    });
+
+    function startGame() {
+      gameState = 'PLAYING';
+      lobby.classList.add('hidden');
+      gameplay.classList.remove('hidden');
+      results.style.display = 'none';
+
+      // Reset
+      currentLevel = 1;
+      totalTime = 0;
+      loadLevel(currentLevel);
+
+      levelStartTime = Date.now();
+
+      // Start game loop
+      requestAnimationFrame(gameLoop);
+    }
+
+    function loadLevel(level) {
+      currentMaze = mazes[level - 1];
+      ballX = currentMaze.start.x;
+      ballY = currentMaze.start.y;
+      ballVelX = 0;
+      ballVelY = 0;
+
+      levelDisplay.textContent = `Level ${level}/3`;
+      levelStartTime = Date.now();
+    }
+
+    function gameLoop() {
+      if (gameState === 'PLAYING') {
+        update();
+        render();
+        requestAnimationFrame(gameLoop);
+      }
+    }
+
+    function update() {
+      // Update timer
+      const elapsed = (Date.now() - levelStartTime) / 1000;
+      timerDisplay.textContent = (totalTime + elapsed).toFixed(1) + 's';
+
+      // Get tilt from keyboard
+      tiltX = 0;
+      tiltY = 0;
+      if (keys['ArrowLeft']) tiltX = -1;
+      if (keys['ArrowRight']) tiltX = 1;
+      if (keys['ArrowUp']) tiltY = -1;
+      if (keys['ArrowDown']) tiltY = 1;
+
+      // Apply tilt to ball velocity
+      const gravity = 0.4;
+      ballVelX += tiltX * gravity;
+      ballVelY += tiltY * gravity;
+
+      // Friction
+      ballVelX *= 0.98;
+      ballVelY *= 0.98;
+
+      // Max speed
+      const maxSpeed = 10;
+      const speed = Math.sqrt(ballVelX ** 2 + ballVelY ** 2);
+      if (speed > maxSpeed) {
+        ballVelX = (ballVelX / speed) * maxSpeed;
+        ballVelY = (ballVelY / speed) * maxSpeed;
+      }
+
+      // Predict next position
+      let nextX = ballX + ballVelX;
+      let nextY = ballY + ballVelY;
+
+      // Check wall collisions
+      let collided = false;
+
+      // Maze walls
+      for (const wall of currentMaze.walls) {
+        if (checkCircleRectCollision(nextX, nextY, ballRadius, wall)) {
+          collided = true;
+
+          // Simple bounce back
+          if (checkCircleRectCollision(nextX, ballY, ballRadius, wall)) {
+            ballVelX = -ballVelX * 0.5;
+            nextX = ballX;
+          }
+          if (checkCircleRectCollision(ballX, nextY, ballRadius, wall)) {
+            ballVelY = -ballVelY * 0.5;
+            nextY = ballY;
+          }
+
+          playBounce();
+          break;
+        }
+      }
+
+      // Canvas boundaries
+      if (nextX - ballRadius < 0) {
+        nextX = ballRadius;
+        ballVelX = Math.abs(ballVelX) * 0.5;
+        playBounce();
+      }
+      if (nextX + ballRadius > canvas.width) {
+        nextX = canvas.width - ballRadius;
+        ballVelX = -Math.abs(ballVelX) * 0.5;
+        playBounce();
+      }
+      if (nextY - ballRadius < 0) {
+        nextY = ballRadius;
+        ballVelY = Math.abs(ballVelY) * 0.5;
+        playBounce();
+      }
+      if (nextY + ballRadius > canvas.height) {
+        nextY = canvas.height - ballRadius;
+        ballVelY = -Math.abs(ballVelY) * 0.5;
+        playBounce();
+      }
+
+      // Update position
+      ballX = nextX;
+      ballY = nextY;
+
+      // Check goal
+      const goal = currentMaze.goal;
+      const distToGoal = Math.sqrt((ballX - goal.x) ** 2 + (ballY - goal.y) ** 2);
+      if (distToGoal < goal.size / 2) {
+        onGoalReached();
+      }
+    }
+
+    function checkCircleRectCollision(cx, cy, radius, rect) {
+      // Find closest point on rectangle to circle
+      const closestX = Math.max(rect.x, Math.min(cx, rect.x + rect.width));
+      const closestY = Math.max(rect.y, Math.min(cy, rect.y + rect.height));
+
+      // Distance from circle center to closest point
+      const distX = cx - closestX;
+      const distY = cy - closestY;
+      const distance = Math.sqrt(distX ** 2 + distY ** 2);
+
+      return distance < radius;
+    }
+
+    function onGoalReached() {
+      // Add level time to total
+      const elapsed = (Date.now() - levelStartTime) / 1000;
+      totalTime += elapsed;
+
+      playGoalSound();
+
+      if (currentLevel < 3) {
+        // Next level
+        currentLevel++;
+        loadLevel(currentLevel);
+      } else {
+        // All levels complete!
+        endGame();
+      }
+    }
+
+    function render() {
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw walls
+      ctx.fillStyle = '#2C3E50';
+      for (const wall of currentMaze.walls) {
+        ctx.fillRect(wall.x, wall.y, wall.width, wall.height);
+
+        // Wall border
+        ctx.strokeStyle = '#1a1a2e';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(wall.x, wall.y, wall.width, wall.height);
+      }
+
+      // Draw goal
+      const goal = currentMaze.goal;
+      const gradient = ctx.createRadialGradient(goal.x, goal.y, 0, goal.x, goal.y, goal.size / 2);
+      gradient.addColorStop(0, '#FFD93D');
+      gradient.addColorStop(1, '#FFA500');
+
+      ctx.beginPath();
+      ctx.arc(goal.x, goal.y, goal.size / 2, 0, 2 * Math.PI);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+
+      // Goal sparkle
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 20px Inter';
+      ctx.textAlign = 'center';
+      ctx.fillText('GOAL', goal.x, goal.y + 6);
+
+      // Draw ball
+      const ballGradient = ctx.createRadialGradient(ballX - 5, ballY - 5, 0, ballX, ballY, ballRadius);
+      ballGradient.addColorStop(0, '#4ECDC4');
+      ballGradient.addColorStop(1, '#44A08D');
+
+      // Ball shadow
+      ctx.beginPath();
+      ctx.arc(ballX + 3, ballY + 3, ballRadius, 0, 2 * Math.PI);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      ctx.fill();
+
+      // Ball
+      ctx.beginPath();
+      ctx.arc(ballX, ballY, ballRadius, 0, 2 * Math.PI);
+      ctx.fillStyle = ballGradient;
+      ctx.fill();
+
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      // Ball highlight
+      ctx.beginPath();
+      ctx.arc(ballX - 5, ballY - 5, 5, 0, 2 * Math.PI);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.fill();
+    }
+
+    function endGame() {
+      gameState = 'RESULTS';
+      gameplay.classList.add('hidden');
+      results.style.display = 'block';
+
+      finalTime.textContent = totalTime.toFixed(2) + 's';
+
+      playSuccessSound();
+    }
+
+    function resetGame() {
+      gameState = 'LOBBY';
+      results.style.display = 'none';
+      lobby.classList.remove('hidden');
+    }
+
+    // Sound Effects
+    function playBounce() {
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      oscillator.frequency.value = 150;
+      oscillator.type = 'sine';
+
+      gainNode.gain.value = 0.1;
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.1);
+    }
+
+    function playGoalSound() {
+      [261.63, 329.63, 392.00].forEach((freq, i) => {
+        setTimeout(() => {
+          const oscillator = audioCtx.createOscillator();
+          const gainNode = audioCtx.createGain();
+
+          oscillator.connect(gainNode);
+          gainNode.connect(audioCtx.destination);
+
+          oscillator.frequency.value = freq;
+          oscillator.type = 'sine';
+          gainNode.gain.value = 0.3;
+
+          oscillator.start();
+          oscillator.stop(audioCtx.currentTime + 0.2);
+        }, i * 100);
+      });
+    }
+
+    function playSuccessSound() {
+      const notes = [261.63, 329.63, 392.00, 523.25, 659.25];
+      notes.forEach((freq, i) => {
+        setTimeout(() => {
+          const oscillator = audioCtx.createOscillator();
+          const gainNode = audioCtx.createGain();
+
+          oscillator.connect(gainNode);
+          gainNode.connect(audioCtx.destination);
+
+          oscillator.frequency.value = freq;
+          oscillator.type = 'sine';
+          gainNode.gain.value = 0.2;
+
+          oscillator.start();
+          oscillator.stop(audioCtx.currentTime + 0.3);
+        }, i * 150);
+      });
+    }
+  </script>
+</body>
+</html>
