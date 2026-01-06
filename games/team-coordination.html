@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Team Coordination - Puck Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .game-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 30px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 900px;
+            width: 90%;
+            position: relative;
+        }
+
+        h1 {
+            text-align: center;
+            color: #fa709a;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .metronome-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .metronome {
+            width: 200px;
+            height: 200px;
+            margin: 0 auto 20px;
+            position: relative;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .metronome-beat {
+            width: 180px;
+            height: 180px;
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            border-radius: 50%;
+            transition: all 0.1s ease;
+        }
+
+        .metronome-beat.active {
+            background: linear-gradient(135deg, #38ef7d 0%, #11998e 100%);
+            transform: scale(0.9);
+        }
+
+        .bpm-display {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+            margin-top: 10px;
+        }
+
+        .sync-meter-container {
+            margin: 30px 0;
+            padding: 30px;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            border-radius: 20px;
+        }
+
+        .sync-meter-label {
+            text-align: center;
+            color: white;
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+
+        .sync-meter {
+            width: 100%;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 25px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .sync-meter-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff6b6b 0%, #feca57 50%, #38ef7d 100%);
+            border-radius: 25px;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 15px;
+            color: white;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+
+        .sync-target {
+            position: absolute;
+            right: 10%;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: white;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        .sync-target::before {
+            content: '90%';
+            position: absolute;
+            top: -25px;
+            right: -15px;
+            color: white;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .timer-display {
+            text-align: center;
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #667eea;
+            margin: 20px 0;
+        }
+
+        .timer-display.success {
+            color: #38ef7d;
+            animation: pulse 0.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .players-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin: 30px 0;
+        }
+
+        .player-indicator {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.2s ease;
+        }
+
+        .player-indicator.shaking {
+            background: linear-gradient(135deg, #38ef7d 0%, #11998e 100%);
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(56, 239, 125, 0.4);
+        }
+
+        .player-name {
+            color: white;
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .player-key {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.9em;
+        }
+
+        .controls {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2em;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            margin: 5px;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn:active {
+            transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status {
+            text-align: center;
+            font-size: 1.3em;
+            color: #fa709a;
+            margin: 20px 0;
+            font-weight: 500;
+            min-height: 30px;
+        }
+
+        .celebration {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .celebration.show {
+            display: flex;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .celebration-content {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            padding: 60px;
+            border-radius: 30px;
+            text-align: center;
+            animation: bounceIn 0.6s ease;
+        }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .celebration-content h2 {
+            font-size: 3em;
+            color: white;
+            margin-bottom: 20px;
+            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>🎵 Team Coordination</h1>
+        <p class="subtitle">Shake together in perfect harmony!</p>
+
+        <div class="metronome-container">
+            <div class="metronome">
+                <div class="metronome-beat" id="metronomeBeat"></div>
+            </div>
+            <div class="bpm-display">120 BPM</div>
+        </div>
+
+        <div class="sync-meter-container">
+            <div class="sync-meter-label">Synchronization</div>
+            <div class="sync-meter">
+                <div class="sync-meter-fill" id="syncMeterFill" style="width: 0%">0%</div>
+                <div class="sync-target"></div>
+            </div>
+        </div>
+
+        <div class="timer-display" id="timerDisplay">--</div>
+
+        <div class="status" id="status">Press Start to begin!</div>
+
+        <div class="players-grid">
+            <div class="player-indicator" data-player="1">
+                <div class="player-name">Player 1</div>
+                <div class="player-key">Press Q</div>
+            </div>
+            <div class="player-indicator" data-player="2">
+                <div class="player-name">Player 2</div>
+                <div class="player-key">Press W</div>
+            </div>
+            <div class="player-indicator" data-player="3">
+                <div class="player-name">Player 3</div>
+                <div class="player-key">Press E</div>
+            </div>
+            <div class="player-indicator" data-player="4">
+                <div class="player-name">Player 4</div>
+                <div class="player-key">Press R</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn" id="startBtn" onclick="startGame()">Start Challenge</button>
+        </div>
+    </div>
+
+    <div class="celebration" id="celebration">
+        <div class="celebration-content">
+            <h2>🏆 Perfect Sync! 🏆</h2>
+            <div style="font-size: 1.5em; color: white; margin: 20px 0;">
+                Your team is in perfect harmony!
+            </div>
+            <button class="btn" onclick="resetGame()">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        // Web Audio API setup
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playSound(frequency, duration, type = 'sine') {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.frequency.value = frequency;
+            oscillator.type = type;
+
+            gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + duration);
+        }
+
+        function playBeat() {
+            playSound(800, 0.1, 'sine');
+        }
+
+        function playSuccessSound() {
+            playSound(523, 0.15, 'sine');
+            setTimeout(() => playSound(659, 0.15, 'sine'), 100);
+        }
+
+        function playVictorySound() {
+            playSound(523, 0.2, 'sine');
+            setTimeout(() => playSound(659, 0.2, 'sine'), 200);
+            setTimeout(() => playSound(784, 0.4, 'sine'), 400);
+        }
+
+        // Game state
+        let gameActive = false;
+        let bpm = 120;
+        let beatInterval = null;
+        let currentBeat = 0;
+        let playerShakes = {};
+        let syncPercentage = 0;
+        let targetSyncTime = 5; // seconds
+        let syncTimer = 0;
+        let syncCheckInterval = null;
+
+        const beatEl = document.getElementById('metronomeBeat');
+        const syncFillEl = document.getElementById('syncMeterFill');
+        const timerEl = document.getElementById('timerDisplay');
+        const statusEl = document.getElementById('status');
+
+        // Initialize player shake tracking
+        function initGame() {
+            // Keyboard controls - Q, W, E, R for players 1-4
+            const keyMap = {
+                'KeyQ': 1,
+                'KeyW': 2,
+                'KeyE': 3,
+                'KeyR': 4
+            };
+
+            document.addEventListener('keydown', (e) => {
+                if (!gameActive) return;
+
+                const player = keyMap[e.code];
+                if (player) {
+                    handleShake(player);
+                }
+            });
+
+            document.addEventListener('keyup', (e) => {
+                const player = keyMap[e.code];
+                if (player) {
+                    stopShake(player);
+                }
+            });
+        }
+
+        function startGame() {
+            gameActive = true;
+            syncTimer = 0;
+            syncPercentage = 0;
+            playerShakes = {};
+
+            document.getElementById('startBtn').disabled = true;
+            statusEl.textContent = 'Match the rhythm! Shake on each beat!';
+
+            startMetronome();
+            startSyncCheck();
+        }
+
+        function startMetronome() {
+            const interval = (60 / bpm) * 1000;
+
+            beatInterval = setInterval(() => {
+                currentBeat++;
+                showBeat();
+                checkShakeSync();
+            }, interval);
+        }
+
+        function showBeat() {
+            beatEl.classList.add('active');
+            playBeat();
+
+            setTimeout(() => {
+                beatEl.classList.remove('active');
+            }, 100);
+        }
+
+        function handleShake(player) {
+            // WebSocket integration point: This would receive puck shake data
+            // When puck is shaken, call handleShake(playerNumber)
+
+            playerShakes[player] = Date.now();
+
+            const indicator = document.querySelector(`[data-player="${player}"]`);
+            indicator.classList.add('shaking');
+        }
+
+        function stopShake(player) {
+            const indicator = document.querySelector(`[data-player="${player}"]`);
+            indicator.classList.remove('shaking');
+        }
+
+        function checkShakeSync() {
+            const now = Date.now();
+            const tolerance = 300; // ms tolerance for being "on beat"
+
+            // Count how many players shook within tolerance of the beat
+            let inSyncCount = 0;
+            const totalPlayers = 4;
+
+            for (let player = 1; player <= totalPlayers; player++) {
+                if (playerShakes[player] && (now - playerShakes[player]) < tolerance) {
+                    inSyncCount++;
+                }
+            }
+
+            // Update sync percentage
+            const newSync = (inSyncCount / totalPlayers) * 100;
+
+            // Smooth transition
+            syncPercentage = syncPercentage * 0.7 + newSync * 0.3;
+            updateSyncMeter();
+        }
+
+        function startSyncCheck() {
+            syncCheckInterval = setInterval(() => {
+                if (syncPercentage >= 90) {
+                    syncTimer += 0.1;
+                    timerEl.textContent = `${syncTimer.toFixed(1)}s`;
+                    timerEl.classList.add('success');
+
+                    if (syncTimer >= targetSyncTime) {
+                        winGame();
+                    }
+                } else {
+                    if (syncTimer > 0) {
+                        syncTimer = Math.max(0, syncTimer - 0.05);
+                        timerEl.textContent = `${syncTimer.toFixed(1)}s`;
+                    } else {
+                        timerEl.textContent = '--';
+                    }
+                    timerEl.classList.remove('success');
+                }
+            }, 100);
+        }
+
+        function updateSyncMeter() {
+            const percentage = Math.round(syncPercentage);
+            syncFillEl.style.width = `${percentage}%`;
+            syncFillEl.textContent = `${percentage}%`;
+
+            if (percentage >= 90) {
+                playSuccessSound();
+            }
+        }
+
+        function winGame() {
+            gameActive = false;
+            clearInterval(beatInterval);
+            clearInterval(syncCheckInterval);
+
+            playVictorySound();
+            createConfetti();
+
+            document.getElementById('celebration').classList.add('show');
+        }
+
+        function resetGame() {
+            gameActive = false;
+            syncTimer = 0;
+            syncPercentage = 0;
+            playerShakes = {};
+
+            clearInterval(beatInterval);
+            clearInterval(syncCheckInterval);
+
+            document.getElementById('celebration').classList.remove('show');
+            document.getElementById('startBtn').disabled = false;
+
+            statusEl.textContent = 'Press Start to begin!';
+            timerEl.textContent = '--';
+            timerEl.classList.remove('success');
+            syncFillEl.style.width = '0%';
+            syncFillEl.textContent = '0%';
+
+            document.querySelectorAll('.player-indicator').forEach(el => {
+                el.classList.remove('shaking');
+            });
+        }
+
+        function createConfetti() {
+            const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff'];
+
+            for (let i = 0; i < 50; i++) {
+                setTimeout(() => {
+                    const confetti = document.createElement('div');
+                    confetti.style.position = 'fixed';
+                    confetti.style.width = '10px';
+                    confetti.style.height = '10px';
+                    confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
+                    confetti.style.left = Math.random() * 100 + '%';
+                    confetti.style.top = '-10px';
+                    confetti.style.animation = 'confetti-fall 3s linear';
+                    confetti.style.zIndex = '999';
+                    document.body.appendChild(confetti);
+
+                    setTimeout(() => confetti.remove(), 3000);
+                }, i * 50);
+            }
+
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes confetti-fall {
+                    to { transform: translateY(100vh) rotate(360deg); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        // Initialize on load
+        initGame();
+    </script>
+</body>
+</html>
