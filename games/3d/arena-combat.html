@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arena Combat 3D - Table Wars</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #000;
+      overflow: hidden;
+      color: white;
+    }
+
+    #canvas-container {
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #hud {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      padding: 30px;
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    #health-bar {
+      width: 300px;
+      height: 30px;
+      background: rgba(0,0,0,0.5);
+      border-radius: 15px;
+      overflow: hidden;
+      border: 3px solid rgba(255,255,255,0.3);
+    }
+
+    #health-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #ff4757, #ff6348);
+      transition: width 0.3s ease;
+      box-shadow: 0 0 20px rgba(255, 71, 87, 0.8);
+    }
+
+    #score {
+      position: fixed;
+      top: 30px;
+      right: 30px;
+      font-size: 3rem;
+      font-weight: 900;
+      text-shadow: 0 4px 20px rgba(0,0,0,0.8);
+    }
+
+    #controls {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.7);
+      padding: 20px 40px;
+      border-radius: 20px;
+      text-align: center;
+      backdrop-filter: blur(10px);
+    }
+
+    .control-row {
+      margin: 10px 0;
+      font-size: 1.2rem;
+    }
+
+    .key {
+      display: inline-block;
+      background: rgba(255,255,255,0.1);
+      padding: 5px 15px;
+      border-radius: 8px;
+      margin: 0 5px;
+      font-weight: 700;
+    }
+
+    #game-over {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.9);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      z-index: 200;
+    }
+
+    #game-over h1 {
+      font-size: 6rem;
+      margin-bottom: 30px;
+      text-shadow: 0 0 40px rgba(255,71,87,0.8);
+    }
+
+    #final-score {
+      font-size: 4rem;
+      margin-bottom: 40px;
+      color: #FFD93D;
+    }
+
+    #restart-btn {
+      background: linear-gradient(135deg, #ff4757, #ff6348);
+      border: none;
+      padding: 20px 50px;
+      font-size: 1.5rem;
+      font-weight: 900;
+      border-radius: 50px;
+      color: white;
+      cursor: pointer;
+      box-shadow: 0 10px 30px rgba(255,71,87,0.5);
+      transition: all 0.3s ease;
+    }
+
+    #restart-btn:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 15px 40px rgba(255,71,87,0.7);
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <div id="hud">
+    <div id="health-bar">
+      <div id="health-fill" style="width: 100%;"></div>
+    </div>
+  </div>
+
+  <div id="score">0</div>
+
+  <div id="controls">
+    <div class="control-row">
+      <span class="key">↑←↓→</span> Move
+    </div>
+    <div class="control-row">
+      <span class="key">SPACE</span> Attack
+      <span class="key">SHIFT</span> Dodge
+    </div>
+  </div>
+
+  <div id="game-over">
+    <h1>GAME OVER</h1>
+    <div id="final-score">Score: 0</div>
+    <button id="restart-btn">RESTART</button>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+    // Game State
+    let gameState = 'PLAYING'; // PLAYING, GAME_OVER
+    let score = 0;
+    let health = 100;
+    let enemies = [];
+    let particles = [];
+
+    // Scene Setup
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x000428, 0.015);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 15, 25);
+    camera.lookAt(0, 0, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+    // Post-processing
+    const composer = new EffectComposer(renderer);
+    const renderPass = new RenderPass(scene, camera);
+    composer.addPass(renderPass);
+
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      1.5, // strength
+      0.4, // radius
+      0.85 // threshold
+    );
+    composer.addPass(bloomPass);
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0x404080, 0.3);
+    scene.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(10, 20, 10);
+    directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.width = 2048;
+    directionalLight.shadow.mapSize.height = 2048;
+    directionalLight.shadow.camera.near = 0.5;
+    directionalLight.shadow.camera.far = 500;
+    scene.add(directionalLight);
+
+    // Point lights for drama
+    const redLight = new THREE.PointLight(0xff0040, 2, 50);
+    redLight.position.set(-15, 5, 0);
+    scene.add(redLight);
+
+    const blueLight = new THREE.PointLight(0x0080ff, 2, 50);
+    blueLight.position.set(15, 5, 0);
+    scene.add(blueLight);
+
+    // Arena Floor
+    const floorGeometry = new THREE.CircleGeometry(30, 64);
+    const floorMaterial = new THREE.MeshStandardMaterial({
+      color: 0x1a1a2e,
+      metalness: 0.8,
+      roughness: 0.2,
+    });
+    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    // Arena boundary glow
+    const boundaryGeometry = new THREE.TorusGeometry(30, 0.5, 16, 100);
+    const boundaryMaterial = new THREE.MeshStandardMaterial({
+      color: 0x00ffff,
+      emissive: 0x00ffff,
+      emissiveIntensity: 2,
+    });
+    const boundary = new THREE.Mesh(boundaryGeometry, boundaryMaterial);
+    boundary.rotation.x = Math.PI / 2;
+    boundary.position.y = 0.1;
+    scene.add(boundary);
+
+    // Player (blue cube warrior)
+    const playerGeometry = new THREE.BoxGeometry(1, 2, 1);
+    const playerMaterial = new THREE.MeshStandardMaterial({
+      color: 0x00ffff,
+      emissive: 0x0080ff,
+      emissiveIntensity: 0.5,
+      metalness: 0.7,
+      roughness: 0.3,
+    });
+    const player = new THREE.Mesh(playerGeometry, playerMaterial);
+    player.position.set(0, 1, 0);
+    player.castShadow = true;
+    scene.add(player);
+
+    // Player state
+    let playerVelocity = new THREE.Vector3();
+    let isAttacking = false;
+    let isDodging = false;
+
+    // Keyboard input
+    const keys = {};
+    document.addEventListener('keydown', (e) => {
+      keys[e.key] = true;
+
+      if (e.key === ' ' && !isAttacking) {
+        attack();
+      }
+      if (e.key === 'Shift' && !isDodging) {
+        dodge();
+      }
+    });
+
+    document.addEventListener('keyup', (e) => {
+      keys[e.key] = false;
+    });
+
+    // Attack system
+    function attack() {
+      isAttacking = true;
+
+      // Attack hitbox
+      const attackGeometry = new THREE.SphereGeometry(3, 16, 16);
+      const attackMaterial = new THREE.MeshBasicMaterial({
+        color: 0xff0040,
+        transparent: true,
+        opacity: 0.5,
+      });
+      const attackSphere = new THREE.Mesh(attackGeometry, attackMaterial);
+      attackSphere.position.copy(player.position);
+      scene.add(attackSphere);
+
+      // Check enemy hits
+      enemies.forEach((enemy, index) => {
+        const distance = player.position.distanceTo(enemy.position);
+        if (distance < 4) {
+          // Hit!
+          scene.remove(enemy);
+          enemies.splice(index, 1);
+          score += 10;
+          updateScore();
+          createExplosion(enemy.position);
+        }
+      });
+
+      // Remove attack visual
+      setTimeout(() => {
+        scene.remove(attackSphere);
+        isAttacking = false;
+      }, 200);
+    }
+
+    function dodge() {
+      isDodging = true;
+      playerMaterial.opacity = 0.3;
+
+      setTimeout(() => {
+        isDodging = false;
+        playerMaterial.opacity = 1;
+      }, 500);
+    }
+
+    // Enemy spawning
+    function spawnEnemy() {
+      const angle = Math.random() * Math.PI * 2;
+      const distance = 25;
+
+      const enemyGeometry = new THREE.BoxGeometry(1, 2, 1);
+      const enemyMaterial = new THREE.MeshStandardMaterial({
+        color: 0xff0040,
+        emissive: 0xff0040,
+        emissiveIntensity: 0.5,
+      });
+      const enemy = new THREE.Mesh(enemyGeometry, enemyMaterial);
+      enemy.position.set(
+        Math.cos(angle) * distance,
+        1,
+        Math.sin(angle) * distance
+      );
+      enemy.castShadow = true;
+      scene.add(enemy);
+
+      enemies.push(enemy);
+    }
+
+    // Particle explosion
+    function createExplosion(position) {
+      for (let i = 0; i < 20; i++) {
+        const particleGeometry = new THREE.SphereGeometry(0.2, 8, 8);
+        const particleMaterial = new THREE.MeshBasicMaterial({
+          color: Math.random() > 0.5 ? 0xff0040 : 0xffff00,
+        });
+        const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+        particle.position.copy(position);
+
+        particle.velocity = new THREE.Vector3(
+          (Math.random() - 0.5) * 10,
+          Math.random() * 10,
+          (Math.random() - 0.5) * 10
+        );
+
+        scene.add(particle);
+        particles.push(particle);
+      }
+    }
+
+    // Update HUD
+    function updateScore() {
+      document.getElementById('score').textContent = score;
+    }
+
+    function updateHealth(damage) {
+      health = Math.max(0, health - damage);
+      document.getElementById('health-fill').style.width = health + '%';
+
+      if (health <= 0) {
+        gameOver();
+      }
+    }
+
+    function gameOver() {
+      gameState = 'GAME_OVER';
+      document.getElementById('final-score').textContent = 'Score: ' + score;
+      document.getElementById('game-over').style.display = 'flex';
+    }
+
+    document.getElementById('restart-btn').addEventListener('click', () => {
+      location.reload();
+    });
+
+    // Game Loop
+    function animate() {
+      requestAnimationFrame(animate);
+
+      if (gameState !== 'PLAYING') return;
+
+      // Player movement (tilt simulation with arrow keys)
+      const moveSpeed = 0.3;
+      if (keys['ArrowUp']) playerVelocity.z -= moveSpeed;
+      if (keys['ArrowDown']) playerVelocity.z += moveSpeed;
+      if (keys['ArrowLeft']) playerVelocity.x -= moveSpeed;
+      if (keys['ArrowRight']) playerVelocity.x += moveSpeed;
+
+      // Apply velocity
+      player.position.add(playerVelocity);
+
+      // Friction
+      playerVelocity.multiplyScalar(0.85);
+
+      // Keep player in arena
+      const distanceFromCenter = Math.sqrt(
+        player.position.x ** 2 + player.position.z ** 2
+      );
+      if (distanceFromCenter > 28) {
+        const angle = Math.atan2(player.position.z, player.position.x);
+        player.position.x = Math.cos(angle) * 28;
+        player.position.z = Math.sin(angle) * 28;
+        playerVelocity.set(0, 0, 0);
+      }
+
+      // Enemy AI - chase player
+      enemies.forEach((enemy) => {
+        const direction = new THREE.Vector3()
+          .subVectors(player.position, enemy.position)
+          .normalize();
+
+        enemy.position.add(direction.multiplyScalar(0.08));
+
+        // Check collision with player
+        if (!isDodging && player.position.distanceTo(enemy.position) < 2) {
+          updateHealth(5);
+          // Knockback
+          const knockback = new THREE.Vector3()
+            .subVectors(player.position, enemy.position)
+            .normalize()
+            .multiplyScalar(2);
+          player.position.add(knockback);
+        }
+      });
+
+      // Update particles
+      particles.forEach((particle, index) => {
+        particle.position.add(particle.velocity);
+        particle.velocity.y -= 0.2; // gravity
+
+        if (particle.position.y < 0) {
+          scene.remove(particle);
+          particles.splice(index, 1);
+        }
+      });
+
+      // Spawn enemies periodically
+      if (Math.random() < 0.02) {
+        spawnEnemy();
+      }
+
+      // Camera follows player
+      camera.position.x = player.position.x;
+      camera.position.z = player.position.z + 25;
+      camera.lookAt(player.position);
+
+      // Render
+      composer.render();
+    }
+
+    // Window resize
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      composer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Start
+    animate();
+  </script>
+</body>
+</html>
