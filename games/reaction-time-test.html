@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reaction Time Test - Puck Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .game-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 30px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 800px;
+            width: 90%;
+            position: relative;
+        }
+
+        h1 {
+            text-align: center;
+            color: #11998e;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .main-display {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            padding: 60px;
+            text-align: center;
+            margin: 30px 0;
+            min-height: 200px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .main-display.waiting {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+        }
+
+        .main-display.ready {
+            background: linear-gradient(135deg, #38ef7d 0%, #11998e 100%);
+            animation: pulse-ready 0.5s infinite;
+        }
+
+        @keyframes pulse-ready {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .display-text {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .display-subtext {
+            font-size: 1.2em;
+            color: rgba(255, 255, 255, 0.9);
+            margin-top: 10px;
+        }
+
+        .round-info {
+            text-align: center;
+            font-size: 1.3em;
+            color: #667eea;
+            margin: 20px 0;
+            font-weight: 500;
+        }
+
+        .leaderboard {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            border-radius: 20px;
+            padding: 25px;
+            margin: 30px 0;
+        }
+
+        .leaderboard h3 {
+            color: white;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+
+        .leaderboard-entry {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            padding: 15px 20px;
+            margin: 10px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: white;
+            font-size: 1.2em;
+            transition: all 0.3s ease;
+        }
+
+        .leaderboard-entry:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateX(5px);
+        }
+
+        .leaderboard-entry.best {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            box-shadow: 0 5px 15px rgba(255, 215, 0, 0.4);
+        }
+
+        .rank {
+            font-weight: bold;
+            font-size: 1.3em;
+            min-width: 50px;
+        }
+
+        .time {
+            font-weight: bold;
+            font-size: 1.3em;
+        }
+
+        .controls {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2em;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            margin: 5px;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn:active {
+            transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .keyboard-hint {
+            text-align: center;
+            color: #666;
+            margin-top: 20px;
+            font-size: 1.1em;
+        }
+
+        .keyboard-hint span {
+            background: #667eea;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 10px;
+            font-weight: bold;
+            display: inline-block;
+            margin: 0 5px;
+        }
+
+        .celebration {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .celebration.show {
+            display: flex;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .celebration-content {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            padding: 60px;
+            border-radius: 30px;
+            text-align: center;
+            animation: bounceIn 0.6s ease;
+        }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .celebration-content h2 {
+            font-size: 3em;
+            color: white;
+            margin-bottom: 20px;
+            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .celebration-content .stats {
+            font-size: 1.5em;
+            color: white;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>⚡ Reaction Time Test</h1>
+        <p class="subtitle">Test your lightning-fast reflexes!</p>
+
+        <div class="round-info" id="roundInfo">Round 0/5</div>
+
+        <div class="main-display" id="mainDisplay">
+            <div class="display-text" id="displayText">Ready?</div>
+            <div class="display-subtext" id="displaySubtext">Click Start to begin</div>
+        </div>
+
+        <div class="keyboard-hint">
+            Tap <span>SPACEBAR</span> as fast as you can!
+        </div>
+
+        <div class="controls">
+            <button class="btn" id="startBtn" onclick="startTest()">Start Test</button>
+            <button class="btn" id="resetBtn" onclick="resetTest()" style="display: none;">Reset</button>
+        </div>
+
+        <div class="leaderboard">
+            <h3>Your Reactions</h3>
+            <div id="leaderboardList">
+                <div style="text-align: center; color: rgba(255,255,255,0.7); padding: 20px;">
+                    Complete rounds to see your times!
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="celebration" id="celebration">
+        <div class="celebration-content">
+            <h2>🏆 Test Complete! 🏆</h2>
+            <div class="stats" id="finalStats"></div>
+            <button class="btn" onclick="resetTest()">Try Again</button>
+        </div>
+    </div>
+
+    <script>
+        // Web Audio API setup
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playSound(frequency, duration, type = 'sine') {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.frequency.value = frequency;
+            oscillator.type = type;
+
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + duration);
+        }
+
+        function playGoSound() {
+            playSound(880, 0.2, 'sine');
+        }
+
+        function playSuccessSound() {
+            playSound(523, 0.15, 'sine');
+            setTimeout(() => playSound(659, 0.15, 'sine'), 100);
+        }
+
+        function playErrorSound() {
+            playSound(200, 0.3, 'sawtooth');
+        }
+
+        function playVictorySound() {
+            playSound(523, 0.2, 'sine');
+            setTimeout(() => playSound(659, 0.2, 'sine'), 200);
+            setTimeout(() => playSound(784, 0.4, 'sine'), 400);
+        }
+
+        // Game state
+        let currentRound = 0;
+        let maxRounds = 5;
+        let reactionTimes = [];
+        let waitingForSignal = false;
+        let signalShown = false;
+        let signalTime = 0;
+        let testActive = false;
+
+        const displayEl = document.getElementById('mainDisplay');
+        const textEl = document.getElementById('displayText');
+        const subtextEl = document.getElementById('displaySubtext');
+        const roundInfoEl = document.getElementById('roundInfo');
+
+        function startTest() {
+            testActive = true;
+            currentRound = 0;
+            reactionTimes = [];
+
+            document.getElementById('startBtn').style.display = 'none';
+            document.getElementById('resetBtn').style.display = 'none';
+
+            startRound();
+        }
+
+        function startRound() {
+            if (currentRound >= maxRounds) {
+                endTest();
+                return;
+            }
+
+            currentRound++;
+            roundInfoEl.textContent = `Round ${currentRound}/${maxRounds}`;
+
+            waitingForSignal = true;
+            signalShown = false;
+
+            displayEl.className = 'main-display waiting';
+            textEl.textContent = 'Wait...';
+            subtextEl.textContent = 'Get ready for the signal';
+
+            // Random delay between 2-5 seconds
+            const delay = Math.random() * 3000 + 2000;
+
+            setTimeout(() => {
+                if (waitingForSignal) {
+                    showSignal();
+                }
+            }, delay);
+        }
+
+        function showSignal() {
+            signalShown = true;
+            signalTime = Date.now();
+
+            displayEl.className = 'main-display ready';
+            textEl.textContent = 'TAP NOW!';
+            subtextEl.textContent = 'Hit SPACEBAR as fast as you can!';
+
+            playGoSound();
+        }
+
+        function handleTap() {
+            // WebSocket integration point: This would receive puck tap data
+            // When puck is tapped, call handleTap()
+
+            if (!testActive) return;
+
+            if (waitingForSignal && !signalShown) {
+                // False start
+                falseStart();
+            } else if (signalShown) {
+                // Valid reaction
+                recordReaction();
+            }
+        }
+
+        function falseStart() {
+            waitingForSignal = false;
+            testActive = false;
+
+            displayEl.className = 'main-display';
+            textEl.textContent = 'FALSE START!';
+            subtextEl.textContent = 'You tapped too early!';
+
+            playErrorSound();
+
+            setTimeout(() => {
+                displayEl.className = 'main-display';
+                textEl.textContent = 'Try Again';
+                subtextEl.textContent = 'Wait for the GREEN signal';
+                document.getElementById('startBtn').style.display = 'inline-block';
+                document.getElementById('resetBtn').style.display = 'inline-block';
+            }, 2000);
+        }
+
+        function recordReaction() {
+            const reactionTime = Date.now() - signalTime;
+            reactionTimes.push(reactionTime);
+
+            playSuccessSound();
+
+            displayEl.className = 'main-display';
+            textEl.textContent = `${reactionTime} ms`;
+            subtextEl.textContent = 'Great reflexes!';
+
+            updateLeaderboard();
+
+            setTimeout(() => {
+                startRound();
+            }, 1500);
+        }
+
+        function updateLeaderboard() {
+            const sorted = [...reactionTimes].sort((a, b) => a - b);
+            const best = sorted[0];
+
+            const html = reactionTimes.map((time, index) => {
+                const isBest = time === best && reactionTimes.filter(t => t === best).length === 1;
+                return `
+                    <div class="leaderboard-entry ${isBest ? 'best' : ''}">
+                        <span class="rank">Round ${index + 1}</span>
+                        <span class="time">${time} ms</span>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('leaderboardList').innerHTML = html;
+        }
+
+        function endTest() {
+            testActive = false;
+
+            const average = Math.round(reactionTimes.reduce((a, b) => a + b, 0) / reactionTimes.length);
+            const best = Math.min(...reactionTimes);
+            const worst = Math.max(...reactionTimes);
+
+            document.getElementById('finalStats').innerHTML = `
+                <div>Average: <strong>${average} ms</strong></div>
+                <div>Best: <strong>${best} ms</strong></div>
+                <div>Worst: <strong>${worst} ms</strong></div>
+            `;
+
+            playVictorySound();
+            document.getElementById('celebration').classList.add('show');
+        }
+
+        function resetTest() {
+            currentRound = 0;
+            reactionTimes = [];
+            testActive = false;
+            waitingForSignal = false;
+            signalShown = false;
+
+            displayEl.className = 'main-display';
+            textEl.textContent = 'Ready?';
+            subtextEl.textContent = 'Click Start to begin';
+            roundInfoEl.textContent = 'Round 0/5';
+
+            document.getElementById('startBtn').style.display = 'inline-block';
+            document.getElementById('resetBtn').style.display = 'none';
+            document.getElementById('celebration').classList.remove('show');
+
+            document.getElementById('leaderboardList').innerHTML = `
+                <div style="text-align: center; color: rgba(255,255,255,0.7); padding: 20px;">
+                    Complete rounds to see your times!
+                </div>
+            `;
+        }
+
+        // Keyboard controls
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                handleTap();
+            }
+        });
+
+        // Click on display also triggers tap
+        displayEl.addEventListener('click', handleTap);
+    </script>
+</body>
+</html>
