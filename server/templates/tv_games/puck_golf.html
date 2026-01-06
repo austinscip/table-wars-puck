@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>⛳ PUCK GOLF - Game 54</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; }
+        body { background: linear-gradient(to bottom, #87CEEB, #228B22); font-family: Arial, sans-serif; color: #fff; overflow: hidden; }
+        #gameCanvas { display: block; margin: 0 auto; }
+        #hud { position: absolute; top: 20px; left: 0; right: 0; display: flex; justify-content: space-around; font-size: 28px; text-shadow: 2px 2px #000; z-index: 10; }
+        #power { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 300px; height: 40px; background: #333; border: 3px solid #fff; }
+        #powerBar { height: 100%; background: linear-gradient(to right, #0f0, #ff0, #f00); width: 0%; transition: width 0.1s; }
+    </style>
+</head>
+<body>
+    <div id="hud">
+        <div>HOLE: <span id="hole">1</span>/9</div>
+        <div>STROKES: <span id="strokes">0</span></div>
+        <div>SCORE: <span id="score">1000</span></div>
+    </div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="power"><div id="powerBar"></div></div>
+
+    <script>
+        const PUCK_ID = {{ puck_id }};
+        const socket = io();
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let gameState = null;
+
+        socket.on('connect', () => {
+            socket.emit('join_game_room', { puck_id: PUCK_ID });
+            socket.emit('request_game_state', { puck_id: PUCK_ID });
+        });
+
+        socket.on('game_state_update', (state) => {
+            gameState = state;
+            document.getElementById('hole').textContent = state.hole_number;
+            document.getElementById('strokes').textContent = state.strokes;
+            document.getElementById('score').textContent = state.score;
+            document.getElementById('powerBar').style.width = state.power + '%';
+        });
+
+        function render() {
+            if (!gameState) return;
+
+            // Background
+            ctx.fillStyle = '#228B22';
+            ctx.fillRect(0, 0, 800, 600);
+
+            // Hole
+            const holeX = (gameState.hole_x / 100) * 800;
+            const holeY = (gameState.hole_y / 100) * 600;
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.arc(holeX, holeY, 20, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(holeX - 2, holeY - 40, 4, 40);
+
+            // Ball
+            const ballX = (gameState.ball_x / 100) * 800;
+            const ballY = (gameState.ball_y / 100) * 600;
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(ballX, ballY, 12, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Aim line (if charging)
+            if (gameState.charging) {
+                const angle = (gameState.aim_angle - 90) * Math.PI / 180;
+                const endX = ballX + Math.cos(angle) * 100;
+                const endY = ballY + Math.sin(angle) * 100;
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([10, 5]);
+                ctx.beginPath();
+                ctx.moveTo(ballX, ballY);
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            requestAnimationFrame(render);
+        }
+
+        render();
+    </script>
+</body>
+</html>

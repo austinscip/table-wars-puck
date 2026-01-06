@@ -1,0 +1,227 @@
+╔═══════════════════════════════════════════════════════════════════════════╗
+║              TABLE WARS PUCK - WIRING SCHEMATIC (Text Format)             ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ POWER DISTRIBUTION (WITH MT3608 BOOST CONVERTER - RECOMMENDED!)         │
+└─────────────────────────────────────────────────────────────────────────┘
+
+    3.7V LiPo Battery (2000mAh)
+         │  PH2.0
+         │  connector
+         ▼
+    ┌─────────────┐
+    │   TP4057    │ ◄─── USB-C (for charging)
+    │  Charger    │
+    └─────────────┘
+         │ OUT+/OUT- (3.7-4.2V)
+         │
+         ├────────────────┬──────────────────────┐
+         │                │                      │
+         ▼                ▼                      ▼
+    ┌─────────┐     ┌───────────┐         ┌─────────┐
+    │ ESP32   │     │  MT3608   │         │ Motor+  │
+    │ 5V pin  │     │  Boost    │         │ (3.7-4.2V│
+    └─────────┘     │ Converter │         │  OK)    │
+                    └─────┬─────┘         └─────────┘
+                          │ OUT+ (regulated 5V)
+                          │
+                          ▼
+                    ┌──────────┐
+                    │ WS2812B  │
+                    │ LED Ring │
+                    │   5V     │
+                    └──────────┘
+                         │
+                    [1000µF Cap]  ◄── CRITICAL! Polarity matters!
+                         │
+                        GND ◄────────── All GNDs tied together
+
+   ⚡ MT3608 Setup: Adjust to 5.0V BEFORE connecting LEDs!
+   ⚡ Cost: ~$1.50/puck for professional LED brightness
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ ESP32-DevKitC-32 PINOUT (Relevant Pins Only)                            │
+└─────────────────────────────────────────────────────────────────────────┘
+
+         ┌─────────────────────────┐
+         │      ESP32 Dev Kit      │
+         │      (38-pin USB-C)     │
+         ├─────────────────────────┤
+   5V  ──┤ 5V               3V3  ├──  3.3V out
+  GND  ──┤ GND              GND  ├──  GND
+         │                        │
+         │  ╔═══════════════════╗ │
+         │  ║   ESP32 CHIP      ║ │
+         │  ╚═══════════════════╝ │
+         │                        │
+GPIO12 ──┤ GPIO12        GPIO13 ├──  LED Ring DIN (via 330Ω)
+         │                GPIO15 ├──  Buzzer +
+         │                        │
+GPIO21 ──┤ GPIO21 (SDA)  GPIO22 ├──  GPIO22 (SCL)
+         │                        │
+GPIO27 ──┤ GPIO27               │
+         └─────────────────────────┘
+             │
+           Button
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ WS2812B LED RING (16 LEDs)                                               │
+└─────────────────────────────────────────────────────────────────────────┘
+
+   ESP32 GPIO13 ──[330Ω resistor]──► DIN
+
+   MT3608 OUT+ ──┬──► 5V pad (regulated 5.0V from boost converter)
+                 │
+            [1000µF Cap]  ◄── CRITICAL! Polarity matters!
+                 │           (- leg to GND)
+   Common GND ───┴──► GND pad
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ MPU6050 MOTION SENSOR (GY-521 Breakout)                                 │
+└─────────────────────────────────────────────────────────────────────────┘
+
+   ESP32 3.3V ────► VCC  ⚠️ NOT 5V!
+   ESP32 GND  ────► GND
+   ESP32 GPIO22 ──► SCL (I2C clock)
+   ESP32 GPIO21 ──► SDA (I2C data)
+
+   Leave unconnected: XDA, XCL, AD0, INT
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ BUTTON (Tactile Switch)                                                  │
+└─────────────────────────────────────────────────────────────────────────┘
+
+   ESP32 GPIO27 ────┬────┐
+                    │    │
+                   BUTTON  ◄── Any 2 legs of 4-leg tactile switch
+                    │    │
+   Common GND ──────┴────┘
+
+   (Internal pullup enabled in code - no external resistor needed)
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ ACTIVE BUZZER (2-wire)                                                   │
+└─────────────────────────────────────────────────────────────────────────┘
+
+   ESP32 GPIO15 ────► Buzzer + (red wire)
+   Common GND   ────► Buzzer - (black wire)
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ VIBRATION MOTOR + TRANSISTOR DRIVER ⚠️ MOST COMPLEX!                    │
+└─────────────────────────────────────────────────────────────────────────┘
+
+                                    TP4057 OUT+ (5V)
+                                         │
+                                         ├──► Motor +
+                                         │
+                                    ┌────┴─────┐
+                                    │  MOTOR   │
+                                    │   3V     │
+                                    └────┬─────┘
+                                         │
+                        Flyback Diode    │
+                      (stripe to Motor+) │
+                         │───────────────┤
+                         │               │
+                    Anode│          Cathode
+                         │               │
+                         └───────┬───────┘
+                                 │
+                                 │ Motor -
+                                 │
+                            ┌────┴────┐
+                            │    C    │  ◄── COLLECTOR
+                            │         │
+    S8050 or 2N2222 NPN ───►│  B   E  │
+    Transistor (TO-92)      │         │
+                            └─┬───┬───┘
+                              │   │
+                              │   └────► GND (EMITTER)
+                              │
+                         [2.2kΩ]  ◄── BASE resistor
+                              │
+                              │
+                         ESP32 GPIO12
+
+
+   ┌──────────────────────────────────────────────────┐
+   │ TRANSISTOR PINOUT (Flat side facing you)         │
+   │                                                   │
+   │    S8050 / 2N2222 (TO-92 package)                │
+   │                                                   │
+   │         ___                                       │
+   │        /   \                                      │
+   │       |     |  ◄── Flat side                     │
+   │        \___/                                      │
+   │         │││                                       │
+   │         │││                                       │
+   │         EBC                                       │
+   │         │││                                       │
+   │         │└┴──── COLLECTOR → Motor -               │
+   │         │  └─── BASE → 2.2kΩ → GPIO 12           │
+   │         └────── EMITTER → GND                     │
+   └──────────────────────────────────────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ PARTS CHECKLIST (Per Puck)                                               │
+└─────────────────────────────────────────────────────────────────────────┘
+
+   ☐ 1× ESP32-DevKitC-32 (38-pin)
+   ☐ 1× WS2812B LED Ring (16 LEDs)
+   ☐ 1× GY-521 MPU6050 breakout
+   ☐ 1× Tactile button (6×6mm)
+   ☐ 1× Active buzzer (2-wire, 3-24V)
+   ☐ 1× Mini vibration motor (3V)
+   ☐ 1× NPN transistor (S8050 or 2N2222)
+   ☐ 1× 1N4148 diode
+   ☐ 1× 3.7V 2000mAh LiPo battery (PH2.0 connector)
+   ☐ 1× TP4057 USB-C charging board
+   ☐ 1× MT3608 DC-DC boost converter ⭐ RECOMMENDED! (~$1.50/puck)
+   ☐ 1× 330Ω resistor (LED data line)
+   ☐ 1× 2.2kΩ resistor (transistor base)
+   ☐ 1× 1000µF electrolytic capacitor (10V or higher)
+   ☐ Wire (30 AWG for signals, 22 AWG for power)
+   ☐ Heat shrink tubing
+   ☐ Multimeter (for adjusting MT3608 voltage)
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ COMMON MISTAKES - DOUBLE CHECK THESE!                                    │
+└─────────────────────────────────────────────────────────────────────────┘
+
+   ⚠️  MT3608 voltage adjusted to 5.0V BEFORE connecting LEDs!
+   ⚠️  1000µF capacitor polarity (- leg to GND, + leg to 5V)
+   ⚠️  Diode polarity (stripe goes to Motor +)
+   ⚠️  Transistor pinout (E-B-C, not C-B-E!)
+   ⚠️  MPU6050 VCC to 3.3V (NOT 5V!)
+   ⚠️  330Ω resistor on LED data line (not power!)
+   ⚠️  Motor wired to battery voltage (NOT GPIO12 directly!)
+   ⚠️  LED ring 5V from MT3608 OUT+ (NOT battery voltage!)
+   ⚠️  All GNDs connected together
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ TESTING ORDER                                                             │
+└─────────────────────────────────────────────────────────────────────────┘
+
+   1. Power test (no code) - verify ESP32 powers on
+   2. LED test (TEST_MODE_LEDS)
+   3. Button test (TEST_MODE_BUTTON)
+   4. Buzzer test (TEST_MODE_BUZZER)
+   5. Motor test (TEST_MODE_MOTOR)
+   6. MPU test (TEST_MODE_MPU)
+   7. Normal mode (NORMAL_MODE)
+
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║  For detailed wiring instructions, see WIRING_GUIDE.md                    ║
+║  For build/upload instructions, see README.md                             ║
+╚═══════════════════════════════════════════════════════════════════════════╝

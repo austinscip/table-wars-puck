@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>👾 SPACE INVADERS PUCK - Game 55</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; }
+        body { background: #000; font-family: 'Courier New', monospace; color: #0f0; overflow: hidden; }
+        #gameCanvas { display: block; margin: 0 auto; background: #000; }
+        #hud { position: absolute; top: 20px; left: 0; right: 0; display: flex; justify-content: space-around; font-size: 32px; z-index: 10; }
+        #gameOver { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.95); padding: 50px; border: 5px solid #0f0; text-align: center; font-size: 48px; }
+    </style>
+</head>
+<body>
+    <div id="hud">
+        <div>SCORE: <span id="score">0</span></div>
+        <div>WAVE: <span id="wave">1</span></div>
+        <div>LIVES: <span id="lives">3</span></div>
+    </div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="gameOver"><h1>GAME OVER</h1><div id="finalScore" style="margin-top: 20px;"></div></div>
+
+    <script>
+        const PUCK_ID = {{ puck_id }};
+        const socket = io();
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let gameState = null;
+
+        socket.on('connect', () => {
+            socket.emit('join_game_room', { puck_id: PUCK_ID });
+            socket.emit('request_game_state', { puck_id: PUCK_ID });
+        });
+
+        socket.on('game_state_update', (state) => {
+            gameState = state;
+            document.getElementById('score').textContent = state.score;
+            document.getElementById('wave').textContent = state.wave;
+            document.getElementById('lives').textContent = state.lives;
+        });
+
+        socket.on('game_over', (data) => {
+            document.getElementById('finalScore').textContent = 'FINAL SCORE: ' + data.state.score;
+            document.getElementById('gameOver').style.display = 'block';
+        });
+
+        function render() {
+            if (!gameState) return;
+
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, 800, 600);
+
+            // Draw ship
+            const shipX = (gameState.ship_x / 100) * 800;
+            ctx.fillStyle = '#0f0';
+            ctx.fillRect(shipX - 25, 550, 50, 30);
+            ctx.fillRect(shipX - 10, 530, 20, 20);
+
+            // Draw aliens
+            gameState.aliens.forEach(alien => {
+                const x = (alien.x / 100) * 800;
+                const y = (alien.y / 100) * 600;
+                ctx.fillStyle = '#f00';
+                ctx.fillRect(x - 15, y - 10, 30, 20);
+            });
+
+            // Draw bullets
+            gameState.bullets.forEach(bullet => {
+                const x = (bullet.x / 100) * 800;
+                const y = (bullet.y / 100) * 600;
+                ctx.fillStyle = bullet.player ? '#0f0' : '#f00';
+                ctx.fillRect(x - 2, y - 5, 4, 10);
+            });
+
+            requestAnimationFrame(render);
+        }
+
+        render();
+    </script>
+</body>
+</html>

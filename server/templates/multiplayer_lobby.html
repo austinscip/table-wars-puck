@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>🎮 MULTIPLAYER LOBBY - Table Wars</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: linear-gradient(135deg, #0F2027 0%, #203A43 50%, #2C5364 100%);
+            font-family: 'Arial Black', sans-serif;
+            color: white;
+            padding: 40px;
+        }
+        h1 {
+            text-align: center;
+            font-size: 64px;
+            margin-bottom: 50px;
+            text-shadow: 4px 4px 8px rgba(0,0,0,0.5);
+        }
+        .games-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 40px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .game-card {
+            background: rgba(255,255,255,0.1);
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 25px;
+            padding: 40px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .game-card:hover {
+            transform: translateY(-15px);
+            border-color: #FFD700;
+            background: rgba(255,255,255,0.2);
+            box-shadow: 0 20px 60px rgba(255,215,0,0.4);
+        }
+        .game-icon {
+            font-size: 96px;
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        .game-title {
+            font-size: 42px;
+            text-align: center;
+            margin-bottom: 20px;
+            color: #FFD700;
+        }
+        .game-info {
+            font-size: 20px;
+            line-height: 1.8;
+            opacity: 0.9;
+            text-align: center;
+        }
+        .player-count {
+            background: rgba(255,215,0,0.2);
+            padding: 15px;
+            border-radius: 15px;
+            margin-top: 20px;
+            text-align: center;
+            font-size: 24px;
+            color: #FFD700;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎮 SELECT MULTIPLAYER GAME</h1>
+
+    <div class="games-grid">
+        <div class="game-card" onclick="launchGame(70)">
+            <div class="game-icon">🏃</div>
+            <div class="game-title">KEEP AWAY CHAOS</div>
+            <div class="game-info">
+                One player is IT, everyone runs! Last to be tagged wins.
+            </div>
+            <div class="player-count">4-8 Players | FFA</div>
+        </div>
+
+        <div class="game-card" onclick="launchGame(71)">
+            <div class="game-icon">🤝</div>
+            <div class="game-title">TUG OF WAR TEAMS</div>
+            <div class="game-info">
+                Shake to pull rope, button for power boost! First to 2 rounds wins.
+            </div>
+            <div class="player-count">4-8 Players | Teams</div>
+        </div>
+
+        <div class="game-card" onclick="launchGame(72)">
+            <div class="game-icon">💣</div>
+            <div class="game-title">BOMB LOBBER</div>
+            <div class="game-info">
+                Hot potato with aiming! Tilt to aim, button to throw. Don't hold when it explodes!
+            </div>
+            <div class="player-count">4-8 Players | FFA</div>
+        </div>
+
+        <div class="game-card" onclick="launchGame(73)">
+            <div class="game-icon">👆</div>
+            <div class="game-title">SIMON SAYS SURVIVAL</div>
+            <div class="game-info">
+                Follow commands fast! Shake, tilt, button. Miss = eliminated. Last player wins!
+            </div>
+            <div class="player-count">4-8 Players | Elimination</div>
+        </div>
+    </div>
+
+    <script>
+        function launchGame(gameId) {
+            // For demo: generate fake session ID
+            const sessionId = Date.now();
+
+            // Redirect to game TV display with session
+            const urls = {
+                70: '/tv/keep-away-chaos',
+                71: '/tv/tug-of-war',
+                72: '/tv/bomb-lobber',
+                73: '/tv/simon-says'
+            };
+
+            window.location.href = urls[gameId] + '?session=' + sessionId;
+        }
+    </script>
+</body>
+</html>

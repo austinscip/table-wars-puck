@@ -1,0 +1,1970 @@
+Werkzeug appears to be used in a production deployment. Consider switching to a production web server instead.
+✅ Using SQLite (local dev)
+╔═══════════════════════════════════════════╗
+║   TABLE WARS - DEBUG MODE                ║
+╚═══════════════════════════════════════════╝
+
+✅ Database initialized
+🐛 Debug mode enabled - detailed error logging
+🚀 Starting server on http://localhost:5001
+
+⏸️  Press Ctrl+C to stop
+
+ * Serving Flask app 'app'
+ * Debug mode: on
+[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5001
+ * Running on http://192.168.1.67:5001
+[33mPress CTRL+C to quit[0m
+ * Restarting with stat
+Werkzeug appears to be used in a production deployment. Consider switching to a production web server instead.
+ * Debugger is active!
+ * Debugger PIN: 358-720-094
+Traceback (most recent call last):
+  File "/Users/austinscipione/table-wars-puck/server/debug_app.py", line 25, in debug_save_score
+    result = original_save_score(puck_id, game_type, score, session_id)
+  File "/Users/austinscipione/table-wars-puck/server/app.py", line 61, in save_score
+    register_puck(puck_id, f"Puck_{puck_id}")
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/austinscipione/table-wars-puck/server/app.py", line 52, in register_puck
+    execute_query(query, (puck_id, name, table_number, battery_level, datetime.now(), True))
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/austinscipione/table-wars-puck/server/database.py", line 246, in execute_query
+    c.execute(query, params)
+    ~~~~~~~~~^^^^^^^^^^^^^^^
+sqlite3.ProgrammingError: Incorrect number of bindings supplied. The current statement uses 5, and there are 6 supplied.
+192.168.1.73 - - [13/Dec/2025 23:43:55] "[35m[1mPOST /api/score HTTP/1.1[0m" 500 -
+Traceback (most recent call last):
+  File "/Users/austinscipione/table-wars-puck/server/debug_app.py", line 25, in debug_save_score
+    result = original_save_score(puck_id, game_type, score, session_id)
+  File "/Users/austinscipione/table-wars-puck/server/app.py", line 61, in save_score
+    register_puck(puck_id, f"Puck_{puck_id}")
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/austinscipione/table-wars-puck/server/app.py", line 52, in register_puck
+    execute_query(query, (puck_id, name, table_number, battery_level, datetime.now(), True))
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/austinscipione/table-wars-puck/server/database.py", line 246, in execute_query
+    c.execute(query, params)
+    ~~~~~~~~~^^^^^^^^^^^^^^^
+sqlite3.ProgrammingError: Incorrect number of bindings supplied. The current statement uses 5, and there are 6 supplied.
+192.168.1.73 - - [13/Dec/2025 23:44:05] "[35m[1mPOST /api/score HTTP/1.1[0m" 500 -
+127.0.0.1 - - [13/Dec/2025 23:44:11] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [13/Dec/2025 23:44:11] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [13/Dec/2025 23:44:11] "GET /api/stats HTTP/1.1" 200 -
+ * Detected change in '/Users/austinscipione/table-wars-puck/server/app.py', reloading
+✅ Using SQLite (local dev)
+╔═══════════════════════════════════════════╗
+║   TABLE WARS - DEBUG MODE                ║
+╚═══════════════════════════════════════════╝
+
+✅ Database initialized
+🐛 Debug mode enabled - detailed error logging
+🚀 Starting server on http://localhost:5001
+
+⏸️  Press Ctrl+C to stop
+
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 1879 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+❌ save_score error: Incorrect number of bindings supplied. The current statement uses 5, and there are 6 supplied.
+   Full traceback:
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 4760 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+❌ save_score error: Incorrect number of bindings supplied. The current statement uses 5, and there are 6 supplied.
+   Full traceback:
+ * Restarting with stat
+Werkzeug appears to be used in a production deployment. Consider switching to a production web server instead.
+ * Debugger is active!
+ * Debugger PIN: 358-720-094
+192.168.1.73 - - [13/Dec/2025 23:44:15] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [13/Dec/2025 23:44:23] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [13/Dec/2025 23:44:25] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [13/Dec/2025 23:44:31] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [13/Dec/2025 23:44:35] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [13/Dec/2025 23:44:45] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [13/Dec/2025 23:44:45] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [13/Dec/2025 23:44:45] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [13/Dec/2025 23:44:45] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 00:00:20] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 00:00:30] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 00:00:40] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 00:00:50] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 00:01:00] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 00:01:11] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 00:16:19] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 00:16:21] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 00:16:21] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 00:16:21] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 00:33:54] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 01:06:42] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 01:06:52] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 01:07:02] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 01:07:12] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 01:07:22] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 01:07:32] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 01:07:42] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 01:07:52] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 01:08:09] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 01:08:12] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 01:26:02] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 01:43:47] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 01:43:47] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 01:43:47] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 01:43:47] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 01:45:44] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 02:19:35] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 02:19:45] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 02:19:55] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 02:36:31] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 02:46:44] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 03:02:02] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 03:18:14] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 03:34:07] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 03:34:09] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 03:34:19] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 03:34:29] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 04:02:57] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 04:02:57] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 04:02:57] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 04:02:59] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 04:18:04] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 04:35:43] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 04:35:49] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 04:35:59] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 04:36:09] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 04:51:38] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 05:08:14] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 05:22:37] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 05:22:44] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 05:39:43] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 05:39:50] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 05:40:00] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 05:40:10] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 05:40:20] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 05:40:30] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 05:40:40] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 05:57:39] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 06:15:11] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 06:31:49] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 06:39:09] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 06:56:25] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 06:56:35] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 06:56:45] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:07:59] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:08:09] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:08:19] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:08:29] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:08:40] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:08:49] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:08:59] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:09:09] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:09:19] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:09:32] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:09:39] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:09:42] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:09:42] "GET / HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:09:49] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:09:59] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:10:15] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:10:19] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:10:32] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:10:39] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:10:52] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:10:52] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:10:59] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:11:09] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:11:19] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:11:29] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:11:39] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:11:50] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:12:00] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:12:01] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:12:01] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:12:01] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:12:03] "GET /admin HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:12:03] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:12:03] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:12:03] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:12:03] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:12:10] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:12:20] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:12:22] "GET /admin HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:12:22] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:12:22] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:12:22] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:12:22] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:12:29] "GET /admin HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:12:29] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:12:29] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:12:29] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:12:29] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:12:30] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:12:43] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:12:50] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:21:23] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:21:24] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:21:24] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:21:24] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:21:33] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:21:43] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:21:53] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:21:54] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:21:54] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:21:54] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:22:03] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:22:13] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:22:23] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:22:24] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:22:24] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:22:24] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:22:33] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:22:43] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:22:53] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:22:54] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:22:54] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:22:54] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:23:03] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:23:13] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:23:23] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:23:24] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:23:24] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:23:24] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:23:33] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:23:43] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:23:53] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:23:54] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:23:54] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:23:54] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:24:03] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:24:23] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:24:33] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:24:35] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:24:35] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:24:35] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:24:43] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:24:53] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:25:03] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:09] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:09] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:09] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:25:13] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:25:23] "POST /api/score HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:25:34] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:34] "[33mGET /api/leaderboard/Demo%20Bar?limit=5 HTTP/1.1[0m" 404 -
+192.168.1.73 - - [14/Dec/2025 07:25:44] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:45] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:45] "GET /socket.io/?EIO=4&transport=polling&t=PiSqlJA HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:45] "POST /socket.io/?EIO=4&transport=polling&t=PiSqlJh&sid=NKyXIHYSa5PnZNbtAAAA HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:45] "GET /socket.io/?EIO=4&transport=polling&t=PiSqlJi&sid=NKyXIHYSa5PnZNbtAAAA HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:45] "GET /socket.io/?EIO=4&transport=polling&t=PiSqlJs&sid=NKyXIHYSa5PnZNbtAAAA HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:45] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:45] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:45] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:25:53] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:53] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:53] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:53] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:58] "GET /socket.io/?EIO=4&transport=websocket&sid=NKyXIHYSa5PnZNbtAAAA HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:58] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:58] "GET /socket.io/?EIO=4&transport=polling&t=PiSqoH8 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:58] "POST /socket.io/?EIO=4&transport=polling&t=PiSqoHB&sid=xL0vln7m8eHl3lUVAAAC HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:58] "GET /socket.io/?EIO=4&transport=polling&t=PiSqoHB.0&sid=xL0vln7m8eHl3lUVAAAC HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:58] "GET /socket.io/?EIO=4&transport=polling&t=PiSqoHF&sid=xL0vln7m8eHl3lUVAAAC HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:58] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:58] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:25:58] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:26:04] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:04] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:04] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:04] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:05] "[33mGET /api/leaderboard/Demo%20Bar?limit=5 HTTP/1.1[0m" 404 -
+127.0.0.1 - - [14/Dec/2025 07:26:08] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:08] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:08] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:26:14] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:14] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:14] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:14] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:26:24] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:24] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:24] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:24] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:28] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:28] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:28] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:26:34] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:34] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:34] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:34] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:35] "[33mGET /api/leaderboard/Demo%20Bar?limit=5 HTTP/1.1[0m" 404 -
+127.0.0.1 - - [14/Dec/2025 07:26:38] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:38] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:38] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:26:44] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:44] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:44] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:44] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:26:54] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:54] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:54] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:54] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:56] "GET /bar/demo-bar/table/1 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:56] "[33mGET /api/leaderboard/Demo%20Bar?limit=5 HTTP/1.1[0m" 404 -
+127.0.0.1 - - [14/Dec/2025 07:26:58] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:58] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:58] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:59] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:59] "GET /socket.io/?EIO=4&transport=polling&t=PiSr1DD HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:59] "POST /socket.io/?EIO=4&transport=polling&t=PiSr1DP&sid=vJqYvWwdxGg3Z9ygAAAE HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:59] "GET /socket.io/?EIO=4&transport=polling&t=PiSr1DQ&sid=vJqYvWwdxGg3Z9ygAAAE HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:59] "GET /socket.io/?EIO=4&transport=polling&t=PiSr1DV&sid=vJqYvWwdxGg3Z9ygAAAE HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:59] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:59] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:59] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:26:59] "GET /socket.io/?EIO=4&transport=websocket&sid=vJqYvWwdxGg3Z9ygAAAE HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:00] "[33mGET /customer HTTP/1.1[0m" 404 -
+192.168.1.73 - - [14/Dec/2025 07:27:04] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:04] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:04] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:04] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:08] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:08] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:08] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:27:14] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:14] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:14] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:14] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:27:24] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:24] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:24] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:24] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:28] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:28] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:28] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:27:34] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:34] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:34] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:34] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:42] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:42] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:42] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:27:44] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:44] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:44] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:44] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:27:54] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:54] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:54] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:54] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:58] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:58] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:27:58] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:28:04] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:04] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:04] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:04] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:28:14] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:14] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:14] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:14] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:18] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:18] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:18] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:28:24] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:24] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:24] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:24] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:28] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:28] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:28] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:28:34] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:34] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:34] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:34] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:28:52] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:52] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:52] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:52] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:28:54] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:54] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:54] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:54] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:58] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:58] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:28:58] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:29:04] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:04] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:04] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:04] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:05] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:05] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:05] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:29:14] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:14] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:14] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:14] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:29:24] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:24] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:24] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:24] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:29:34] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:34] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:34] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:34] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:29:44] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:44] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:44] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:44] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:29:55] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:55] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:55] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:55] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:56] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:29:56] "GET /bar/demo-bar/tv HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:30:05] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:05] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:05] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:05] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:30:15] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:15] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:15] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:15] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:30:25] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:25] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:25] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:25] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:26] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:26] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:26] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:29] "GET /socket.io/?EIO=4&transport=websocket&sid=xL0vln7m8eHl3lUVAAAC HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:29] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:29] "GET /socket.io/?EIO=4&transport=polling&t=PiSrqSK HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:29] "POST /socket.io/?EIO=4&transport=polling&t=PiSrqSO&sid=GnEHOOH4jHvuFe08AAAG HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:29] "GET /socket.io/?EIO=4&transport=polling&t=PiSrqSP&sid=GnEHOOH4jHvuFe08AAAG HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:29] "GET /socket.io/?EIO=4&transport=polling&t=PiSrqST&sid=GnEHOOH4jHvuFe08AAAG HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:29] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:29] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:29] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:35] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:35] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:35] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:30:35] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:35] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:35] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:35] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:41] "GET /admin HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:41] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:41] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:41] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:41] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:30:45] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:45] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:45] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:45] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:30:55] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:55] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:55] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:55] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:59] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:59] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:30:59] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:00] "GET /bar/demo-bar/tv HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:01] "GET /socket.io/?EIO=4&transport=polling&t=PiSryFJ HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:01] "POST /socket.io/?EIO=4&transport=polling&t=PiSryG3&sid=NPmnCIUFIPCiiBJwAAAI HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:01] "GET /socket.io/?EIO=4&transport=polling&t=PiSryG4&sid=NPmnCIUFIPCiiBJwAAAI HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:01] "GET /socket.io/?EIO=4&transport=polling&t=PiSryGH&sid=NPmnCIUFIPCiiBJwAAAI HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:01] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:01] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:01] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:31:05] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:05] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:05] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:05] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:05] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:05] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:05] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:05] "GET /socket.io/?EIO=4&transport=websocket&sid=NPmnCIUFIPCiiBJwAAAI HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:08] "GET /bar/demo-bar/tv HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:08] "GET /socket.io/?EIO=4&transport=polling&t=PiSr-A3 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:08] "POST /socket.io/?EIO=4&transport=polling&t=PiSr-A8&sid=aA8w2t096TBiamnEAAAK HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:08] "GET /socket.io/?EIO=4&transport=polling&t=PiSr-A8.0&sid=aA8w2t096TBiamnEAAAK HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:08] "GET /socket.io/?EIO=4&transport=polling&t=PiSr-AD&sid=aA8w2t096TBiamnEAAAK HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:08] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:08] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:08] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:11] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:11] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:11] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:31:15] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:15] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:15] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:15] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:15] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:15] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:15] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:31:25] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:25] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:25] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:25] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:25] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:25] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:25] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:29] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:29] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:29] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:31:35] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:35] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:35] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:35] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:35] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:35] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:35] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:37] "[33mGET /apple-touch-icon-precomposed.png HTTP/1.1[0m" 404 -
+127.0.0.1 - - [14/Dec/2025 07:31:37] "[33mGET /apple-touch-icon.png HTTP/1.1[0m" 404 -
+127.0.0.1 - - [14/Dec/2025 07:31:37] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+127.0.0.1 - - [14/Dec/2025 07:31:38] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:38] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:38] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:42] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:42] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:42] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:31:45] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:45] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:45] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:45] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:45] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:45] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:45] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:31:55] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:55] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:55] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:55] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:55] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:55] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:55] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:59] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:59] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:31:59] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:32:05] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:05] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:05] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:05] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:05] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:05] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:05] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:09] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:09] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:09] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:12] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:12] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:12] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:32:15] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:15] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:15] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:15] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:15] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:15] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:15] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:32:25] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:25] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:25] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:25] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:25] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:25] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:25] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:29] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:29] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:29] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:32:35] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:35] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:35] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:35] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:35] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:35] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:35] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:39] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:39] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:39] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:42] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:42] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:42] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:32:45] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:45] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:45] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:45] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:45] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:45] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:45] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:32:55] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:55] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:55] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:55] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:55] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:55] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:55] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:59] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:59] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:32:59] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:33:05] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:05] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:05] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:05] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:05] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:05] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:05] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:09] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:09] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:09] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:12] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:12] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:12] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:33:23] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:23] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:23] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:23] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:23] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:23] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:23] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:33:25] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:25] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:25] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:25] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:25] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:25] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:25] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:29] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:29] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:29] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:33:35] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:35] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:35] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:35] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:35] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:35] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:35] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:39] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:39] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:39] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:42] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:42] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:42] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:33:45] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:45] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:45] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:45] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:45] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:45] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:45] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:54] "GET /bar/demo-bar/table/1 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:54] "GET /admin HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:33:55] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:55] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:55] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:55] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:55] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:55] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:33:55] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:34:05] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:05] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:05] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:05] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:05] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:05] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:05] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:09] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:09] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:09] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:34:15] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:16] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:16] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:16] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:16] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:16] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:16] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:34:26] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:26] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:26] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:26] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:26] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:26] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:26] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:34:36] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:36] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:36] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:36] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:36] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:36] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:36] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:36] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:36] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:36] "GET /api/stats HTTP/1.1" 200 -
+ * Detected change in '/Users/austinscipione/table-wars-puck/server/app.py', reloading
+✅ Using SQLite (local dev)
+╔═══════════════════════════════════════════╗
+║   TABLE WARS - DEBUG MODE                ║
+╚═══════════════════════════════════════════╝
+
+✅ Database initialized
+🐛 Debug mode enabled - detailed error logging
+🚀 Starting server on http://localhost:5001
+
+⏸️  Press Ctrl+C to stop
+
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 3901 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: foosball (type: <class 'str'>)
+   score: 42 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 1293 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 3056 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 8970 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 1480 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 2020 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 9743 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 7154 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 9191 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 8686 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 8167 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 4338 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 2370 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 4497 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 7827 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 4029 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 800 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 8173 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 2024 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 4841 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 7558 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 9020 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 4040 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 2680 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 4493 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 4802 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 1212 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 8151 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 9180 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 8363 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 5838 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 8363 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 5819 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 3346 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 7040 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 5671 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 3586 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 5714 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 4545 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 7630 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 8928 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 9507 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 2544 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 5014 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 9148 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 5304 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 851 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 623 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 5108 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 7736 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 2337 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 5556 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 3356 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 5434 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 3135 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 589 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 3566 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 4218 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 564 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 9301 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 9545 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 1138 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 6415 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 6902 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 935 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 1766 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 3577 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 984 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 6316 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 4089 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 7018 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 8343 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 4108 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 8105 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 3116 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 7595 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 585 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 8657 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 1070 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 3746 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 2445 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 5311 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 2461 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 6999 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 3127 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 6959 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 3847 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 8699 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 902 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 7220 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 3662 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 8059 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 2349 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 2632 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 9129 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 7010 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 5976 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 9112 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 5061 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 7077 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 6538 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 4520 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 9477 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 4089 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 2962 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 1141 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 8702 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 5388 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 324 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 1708 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 9120 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 3482 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 6106 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 491 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 1138 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 8674 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+🔌 Client connected
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 2240 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+🔌 Client disconnected
+🔌 Client connected
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 8136 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 4374 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 5825 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 6607 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 8049 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 7741 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+🔌 Client connected
+🔌 Client disconnected
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 5719 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 2007 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 2621 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 7948 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 1935 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 6054 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 355 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 488 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 2873 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 9716 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 1836 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 2173 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 7598 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 6550 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 9987 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 9125 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 8161 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 9766 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 9760 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 5730 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 8712 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+🔌 Client disconnected
+🔌 Client connected
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 6621 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 5578 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 7917 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+🔌 Client connected
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 5972 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+🔌 Client disconnected
+🔌 Client connected
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 7272 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 1026 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 5613 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 1792 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 4300 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 1457 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 6685 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 2436 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 3141 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 3754 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 8113 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 4730 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 1677 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 3463 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 9195 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 592 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 5222 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Connection Test (type: <class 'str'>)
+   score: 135 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: Server Ping (type: <class 'str'>)
+   score: 9724 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 1 (type: <class 'str'>)
+   score: 1709 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 2 (type: <class 'str'>)
+   score: 9941 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+ * Restarting with stat
+Werkzeug appears to be used in a production deployment. Consider switching to a production web server instead.
+ * Debugger is active!
+ * Debugger PIN: 358-720-094
+127.0.0.1 - - [14/Dec/2025 07:34:39] "GET /socket.io/?EIO=4&transport=polling&t=PiSsncQ HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:39] "POST /socket.io/?EIO=4&transport=polling&t=PiSsncc&sid=nXK7XChE-UgwVPawAAAA HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:39] "GET /socket.io/?EIO=4&transport=polling&t=PiSsnce&sid=nXK7XChE-UgwVPawAAAA HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:39] "GET /socket.io/?EIO=4&transport=polling&t=PiSsncp&sid=nXK7XChE-UgwVPawAAAA HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:39] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:39] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:39] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:39] "GET /socket.io/?EIO=4&transport=polling&t=PiSsngJ HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:39] "POST /socket.io/?EIO=4&transport=polling&t=PiSsngQ&sid=I0Tv1UKDKsn4Nu0LAAAC HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:39] "GET /socket.io/?EIO=4&transport=polling&t=PiSsngS&sid=I0Tv1UKDKsn4Nu0LAAAC HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:39] "GET /socket.io/?EIO=4&transport=polling&t=PiSsnga&sid=I0Tv1UKDKsn4Nu0LAAAC HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:39] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:39] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:39] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:42] "GET /api/bars HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:42] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:42] "GET /api/stats HTTP/1.1" 200 -
+192.168.1.73 - - [14/Dec/2025 07:34:45] "POST /api/score HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:46] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:46] "GET /api/leaderboard HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:46] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:46] "GET /api/recent?limit=10 HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:46] "GET /api/stats HTTP/1.1" 200 -
+127.0.0.1 - - [14/Dec/2025 07:34:46] "GET /api/stats HTTP/1.1" 200 -
+✅ Using SQLite (local dev)
+╔═══════════════════════════════════════════╗
+║   TABLE WARS - DEBUG MODE                ║
+╚═══════════════════════════════════════════╝
+
+✅ Database initialized
+🐛 Debug mode enabled - detailed error logging
+🚀 Starting server on http://localhost:5001
+
+⏸️  Press Ctrl+C to stop
+
+🔌 Client connected
+🔌 Client connected
+
+🐛 DEBUG save_score called:
+   puck_id: 1 (type: <class 'int'>)
+   game_type: WiFi Test Game 3 (type: <class 'str'>)
+   score: 7223 (type: <class 'int'>)
+   session_id: None (type: <class 'NoneType'>)
+✅ save_score succeeded
+/opt/homebrew/Cellar/python@3.14/3.14.0_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/multiprocessing/resource_tracker.py:297: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown: {'/mp-amj1z9ph'}
+  warnings.warn(

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>☄️ OBSTACLE DODGER - Game 53</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; }
+        body { background: linear-gradient(to bottom, #000428, #004e92); font-family: Arial, sans-serif; color: #fff; overflow: hidden; }
+        #gameCanvas { display: block; margin: 0 auto; background: transparent; }
+        #hud { position: absolute; top: 20px; left: 0; right: 0; display: flex; justify-content: space-around; font-size: 28px; z-index: 10; }
+    </style>
+</head>
+<body>
+    <div id="hud">
+        <div>SCORE: <span id="score">0</span></div>
+        <div>HITS: <span id="hits">0/5</span></div>
+        <div>TIME: <span id="time">60</span>s</div>
+    </div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <script>
+        const PUCK_ID = {{ puck_id }};
+        const socket = io();
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let gameState = null;
+
+        socket.on('connect', () => {
+            socket.emit('join_game_room', { puck_id: PUCK_ID });
+            socket.emit('request_game_state', { puck_id: PUCK_ID });
+        });
+
+        socket.on('game_state_update', (state) => {
+            gameState = state;
+            document.getElementById('score').textContent = state.score;
+            document.getElementById('hits').textContent = state.hits + '/5';
+            document.getElementById('time').textContent = state.time_remaining;
+        });
+
+        function render() {
+            if (!gameState) return;
+
+            ctx.clearRect(0, 0, 800, 600);
+
+            // Draw player
+            const px = (gameState.player_x / 100) * 800;
+            const py = (gameState.player_y / 100) * 600;
+            ctx.fillStyle = '#0f0';
+            ctx.beginPath();
+            ctx.arc(px, py, 25, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw falling objects
+            gameState.objects.forEach(obj => {
+                const x = (obj.x / 100) * 800;
+                const y = (obj.y / 100) * 600;
+
+                if (obj.type === 'meteor') {
+                    ctx.fillStyle = '#f00';
+                    ctx.beginPath();
+                    ctx.arc(x, y, 20, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (obj.type === 'bomb') {
+                    ctx.fillStyle = '#ff8800';
+                    ctx.fillRect(x - 18, y - 18, 36, 36);
+                } else if (obj.type === 'star') {
+                    ctx.fillStyle = '#ffff00';
+                    ctx.beginPath();
+                    for (let i = 0; i < 5; i++) {
+                        const angle = (i * 2 * Math.PI) / 5 - Math.PI / 2;
+                        const x2 = x + Math.cos(angle) * 20;
+                        const y2 = y + Math.sin(angle) * 20;
+                        ctx.lineTo(x2, y2);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            });
+
+            requestAnimationFrame(render);
+        }
+
+        render();
+    </script>
+</body>
+</html>

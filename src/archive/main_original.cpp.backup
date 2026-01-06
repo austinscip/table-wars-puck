@@ -1,0 +1,615 @@
+/*
+ * TABLE WARS - Puck Firmware v0.1
+ *
+ * Hardware Test & Interactive Firmware for ESP32-DevKitC-32
+ *
+ * MODES (uncomment ONE):
+ * - TEST_MODE_LEDS      : Test LED ring with colors and animations
+ * - TEST_MODE_BUTTON    : Test button with LED feedback
+ * - TEST_MODE_BUZZER    : Test buzzer with beep patterns
+ * - TEST_MODE_MOTOR     : Test vibration motor pulsing
+ * - TEST_MODE_MPU       : Test motion sensor and shake detection
+ * - TEST_MODE_WIFI      : 📡 WiFi connectivity test (NO HARDWARE REQUIRED)
+ * - TEST_MODE_BLE_WIFI  : 📱 BLE + WiFi - Mobile app remote control! 🎮
+ * - NORMAL_MODE         : Full interactive "puck feels alive" firmware
+ * - TABLE_WARS_MODE     : 🎮 FULL GAME SYSTEM - All mini-games! 🎮
+ */
+
+#include <Arduino.h>
+#include <Adafruit_NeoPixel.h>
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
+#include <Wire.h>
+#include <WiFi.h>
+
+// ============================================================================
+// MODE SELECTION - UNCOMMENT ONE MODE
+// ============================================================================
+// #define TEST_MODE_LEDS        // 🧪 LED RING TEST MODE
+// #define TEST_MODE_BUTTON
+// #define TEST_MODE_BUZZER
+// #define TEST_MODE_MOTOR
+// #define TEST_MODE_MPU         // 🧪 MPU6050 SENSOR TEST MODE
+// #define TEST_MODE_WIFI        // 📡 WiFi connectivity test
+#define TEST_MODE_BLE_WIFI   // 📱 BLE + WiFi dual mode (Mobile app control!)
+// #define NORMAL_MODE
+// #define TABLE_WARS_MODE      // 🎮 USE THIS FOR FULL GAME SYSTEM!
+
+// ============================================================================
+// PIN CONFIGURATION
+// ============================================================================
+#define PIN_LED_RING       13    // WS2812B data (through 330Ω resistor)
+#define PIN_MPU_SDA        21    // MPU6050 I2C data
+#define PIN_MPU_SCL        22    // MPU6050 I2C clock
+#define PIN_BUTTON         27    // Button (with internal pullup)
+#define PIN_BUZZER         15    // Active buzzer +
+#define PIN_MOTOR          12    // Vibration motor (via transistor base)
+
+// ============================================================================
+// LED CONFIGURATION
+// ============================================================================
+#define NUM_LEDS           16    // 16 LEDs in the ring
+#define LED_BRIGHTNESS     80    // 0-255 (keep low for battery life, max ~80)
+
+// ============================================================================
+// MOTION DETECTION CONFIGURATION
+// ============================================================================
+#define SHAKE_THRESHOLD    15.0  // Acceleration magnitude for "shake" (m/s²)
+#define SHAKE_COOLDOWN_MS  1000  // Minimum time between shake detections
+
+// ============================================================================
+// TIMING CONFIGURATION
+// ============================================================================
+#define PULSE_PERIOD_MS    2000  // Idle LED pulse period
+#define DEBOUNCE_MS        50    // Button debounce time
+
+// ============================================================================
+// HARDWARE OBJECTS
+// ============================================================================
+Adafruit_NeoPixel strip(NUM_LEDS, PIN_LED_RING, NEO_GRB + NEO_KHZ800);
+Adafruit_MPU6050 mpu;
+
+// ============================================================================
+// STATE VARIABLES
+// ============================================================================
+unsigned long lastShakeTime = 0;
+bool buttonState = false;
+bool lastButtonState = false;
+unsigned long lastDebounceTime = 0;
+
+// ============================================================================
+// COLOR UTILITIES
+// ============================================================================
+
+// Pack RGB into 32-bit color
+uint32_t Color(uint8_t r, uint8_t g, uint8_t b) {
+  return strip.Color(r, g, b);
+}
+
+// Popular colors
+#define COLOR_RED      Color(255, 0, 0)
+#define COLOR_GREEN    Color(0, 255, 0)
+#define COLOR_BLUE     Color(0, 0, 255)
+#define COLOR_CYAN     Color(0, 255, 255)
+#define COLOR_MAGENTA  Color(255, 0, 255)
+#define COLOR_YELLOW   Color(255, 255, 0)
+#define COLOR_WHITE    Color(255, 255, 255)
+#define COLOR_ORANGE   Color(255, 165, 0)
+#define COLOR_PURPLE   Color(128, 0, 128)
+#define COLOR_OFF      Color(0, 0, 0)
+
+// ============================================================================
+// LED ANIMATION HELPERS
+// ============================================================================
+
+void fillSolid(uint32_t color) {
+  for (int i = 0; i < NUM_LEDS; i++) {
+    strip.setPixelColor(i, color);
+  }
+  strip.show();
+}
+
+void clearLEDs() {
+  fillSolid(COLOR_OFF);
+}
+
+// Smooth breathing pulse (sine wave approximation)
+void breathePulse(uint32_t color, unsigned long periodMs) {
+  float phase = (millis() % periodMs) / (float)periodMs; // 0.0 to 1.0
+  float brightness = (sin(phase * 2 * PI - PI/2) + 1.0) / 2.0; // 0.0 to 1.0
+
+  uint8_t r = ((color >> 16) & 0xFF) * brightness;
+  uint8_t g = ((color >> 8) & 0xFF) * brightness;
+  uint8_t b = (color & 0xFF) * brightness;
+
+  fillSolid(Color(r, g, b));
+}
+
+// Chasing rainbow effect
+void rainbowChase(uint8_t wait) {
+  static unsigned long lastUpdate = 0;
+  static uint16_t hue = 0;
+
+  if (millis() - lastUpdate >= wait) {
+    for (int i = 0; i < NUM_LEDS; i++) {
+      int pixelHue = hue + (i * 65536L / NUM_LEDS);
+      strip.setPixelColor(i, strip.gamma32(strip.ColorHSV(pixelHue)));
+    }
+    strip.show();
+    hue += 256;
+    lastUpdate = millis();
+  }
+}
+
+// Spinner effect (one lit LED rotating)
+void spinnerEffect(uint32_t color, uint8_t wait) {
+  static unsigned long lastUpdate = 0;
+  static uint8_t pos = 0;
+
+  if (millis() - lastUpdate >= wait) {
+    clearLEDs();
+    strip.setPixelColor(pos, color);
+    strip.show();
+    pos = (pos + 1) % NUM_LEDS;
+    lastUpdate = millis();
+  }
+}
+
+// Flash all LEDs
+void flashLEDs(uint32_t color, int count, int delayMs) {
+  for (int i = 0; i < count; i++) {
+    fillSolid(color);
+    delay(delayMs);
+    clearLEDs();
+    delay(delayMs);
+  }
+}
+
+// Rainbow burst (expanding from center)
+void rainbowBurst(int speedMs) {
+  for (int j = 0; j < 256; j += 8) {
+    for (int i = 0; i < NUM_LEDS; i++) {
+      int pixelHue = (j + (i * 65536L / NUM_LEDS)) & 0xFFFF;
+      strip.setPixelColor(i, strip.gamma32(strip.ColorHSV(pixelHue)));
+    }
+    strip.show();
+    delay(speedMs);
+  }
+}
+
+// ============================================================================
+// BUZZER HELPERS
+// ============================================================================
+
+void beep(int durationMs) {
+  digitalWrite(PIN_BUZZER, HIGH);
+  delay(durationMs);
+  digitalWrite(PIN_BUZZER, LOW);
+}
+
+void beepPattern(int count, int onMs, int offMs) {
+  for (int i = 0; i < count; i++) {
+    digitalWrite(PIN_BUZZER, HIGH);
+    delay(onMs);
+    digitalWrite(PIN_BUZZER, LOW);
+    if (i < count - 1) delay(offMs);
+  }
+}
+
+// ============================================================================
+// MOTOR HELPERS
+// ============================================================================
+
+void vibrateMotor(int durationMs) {
+  digitalWrite(PIN_MOTOR, HIGH);
+  delay(durationMs);
+  digitalWrite(PIN_MOTOR, LOW);
+}
+
+void vibratePattern(int count, int onMs, int offMs) {
+  for (int i = 0; i < count; i++) {
+    digitalWrite(PIN_MOTOR, HIGH);
+    delay(onMs);
+    digitalWrite(PIN_MOTOR, LOW);
+    if (i < count - 1) delay(offMs);
+  }
+}
+
+// ============================================================================
+// BUTTON HELPERS
+// ============================================================================
+
+bool readButtonDebounced() {
+  bool reading = !digitalRead(PIN_BUTTON); // Active LOW (pull-up)
+
+  if (reading != lastButtonState) {
+    lastDebounceTime = millis();
+  }
+
+  if ((millis() - lastDebounceTime) > DEBOUNCE_MS) {
+    if (reading != buttonState) {
+      buttonState = reading;
+      lastButtonState = reading;
+      return buttonState; // Return true on press
+    }
+  }
+
+  lastButtonState = reading;
+  return false;
+}
+
+// ============================================================================
+// MPU6050 HELPERS
+// ============================================================================
+
+bool initMPU() {
+  // Try default address 0x68 first
+  Serial.print("Trying MPU6050 at 0x68... ");
+  if (mpu.begin(0x68)) {
+    Serial.println("✅ Found!");
+  } else {
+    Serial.println("not found");
+    // Try alternate address 0x69
+    Serial.print("Trying MPU6050 at 0x69... ");
+    if (mpu.begin(0x69)) {
+      Serial.println("✅ Found!");
+    } else {
+      Serial.println("not found");
+      Serial.println("❌ Failed to find MPU6050 at either address!");
+      Serial.println("   Check wiring: SDA=21, SCL=22, VCC=3.3V, GND=GND");
+      return false;
+    }
+  }
+
+  Serial.println("✅ MPU6050 initialized successfully");
+
+  // Set ranges (lower = more sensitive)
+  mpu.setAccelerometerRange(MPU6050_RANGE_2_G);
+  mpu.setGyroRange(MPU6050_RANGE_250_DEG);
+  mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
+
+  return true;
+}
+
+float getAccelerationMagnitude() {
+  sensors_event_t accel, gyro, temp;
+  mpu.getEvent(&accel, &gyro, &temp);
+
+  // Calculate total acceleration magnitude
+  float ax = accel.acceleration.x;
+  float ay = accel.acceleration.y;
+  float az = accel.acceleration.z;
+
+  return sqrt(ax*ax + ay*ay + az*az);
+}
+
+bool detectShake() {
+  static float baseline = 9.81; // Gravity baseline
+
+  float magnitude = getAccelerationMagnitude();
+  float delta = abs(magnitude - baseline);
+
+  // Check if shake detected and cooldown expired
+  if (delta > SHAKE_THRESHOLD && (millis() - lastShakeTime > SHAKE_COOLDOWN_MS)) {
+    lastShakeTime = millis();
+    Serial.printf("🔥 SHAKE! Magnitude: %.2f m/s²\n", magnitude);
+    return true;
+  }
+
+  return false;
+}
+
+// ============================================================================
+// HARDWARE INITIALIZATION
+// ============================================================================
+
+void initHardware() {
+  Serial.begin(115200);
+  delay(500);
+  Serial.println("\n\n========================================");
+  Serial.println("  TABLE WARS - Puck Firmware v0.1");
+  Serial.println("========================================\n");
+
+  // Initialize LED ring
+  strip.begin();
+  strip.setBrightness(LED_BRIGHTNESS);
+  strip.show(); // Initialize all pixels to 'off'
+  Serial.println("✅ LED ring initialized");
+
+  // Initialize button
+  pinMode(PIN_BUTTON, INPUT_PULLUP);
+  Serial.println("✅ Button initialized (GPIO 27)");
+
+  // Initialize buzzer
+  pinMode(PIN_BUZZER, OUTPUT);
+  digitalWrite(PIN_BUZZER, LOW);
+  Serial.println("✅ Buzzer initialized (GPIO 15)");
+
+  // Initialize motor driver
+  pinMode(PIN_MOTOR, OUTPUT);
+  digitalWrite(PIN_MOTOR, LOW);
+  Serial.println("✅ Motor driver initialized (GPIO 12)");
+
+  // Initialize I2C and MPU6050
+  Wire.begin(PIN_MPU_SDA, PIN_MPU_SCL);
+  if (initMPU()) {
+    // Success message already printed
+  } else {
+    Serial.println("⚠️  MPU6050 not detected - shake detection disabled");
+  }
+
+  Serial.println("\n✅ Hardware initialization complete!\n");
+}
+
+// ============================================================================
+// TEST MODES
+// ============================================================================
+
+#ifdef TEST_MODE_LEDS
+void setup() {
+  initHardware();
+  Serial.println("🧪 LED TEST MODE");
+  Serial.println("Cycling through: RED → GREEN → BLUE → WHITE → Chase → Rainbow\n");
+}
+
+void loop() {
+  Serial.println("LED: RED");
+  fillSolid(COLOR_RED);
+  delay(2000);
+
+  Serial.println("LED: GREEN");
+  fillSolid(COLOR_GREEN);
+  delay(2000);
+
+  Serial.println("LED: BLUE");
+  fillSolid(COLOR_BLUE);
+  delay(2000);
+
+  Serial.println("LED: WHITE");
+  fillSolid(COLOR_WHITE);
+  delay(2000);
+
+  Serial.println("LED: Spinner (Cyan)");
+  for (int i = 0; i < NUM_LEDS * 3; i++) {
+    spinnerEffect(COLOR_CYAN, 50);
+    delay(50);
+  }
+
+  Serial.println("LED: Rainbow Chase");
+  for (int i = 0; i < 100; i++) {
+    rainbowChase(20);
+    delay(20);
+  }
+
+  clearLEDs();
+  delay(1000);
+}
+#endif
+
+// ----------------------------------------------------------------------------
+
+#ifdef TEST_MODE_BUTTON
+void setup() {
+  initHardware();
+  Serial.println("🧪 BUTTON TEST MODE");
+  Serial.println("Press the button to see LED + Serial feedback\n");
+}
+
+void loop() {
+  bool pressed = readButtonDebounced();
+
+  if (pressed) {
+    Serial.println("🔘 BUTTON PRESSED!");
+    fillSolid(COLOR_GREEN);
+    beep(100);
+    delay(200);
+    clearLEDs();
+  }
+
+  delay(10);
+}
+#endif
+
+// ----------------------------------------------------------------------------
+
+#ifdef TEST_MODE_BUZZER
+void setup() {
+  initHardware();
+  Serial.println("🧪 BUZZER TEST MODE");
+  Serial.println("Beeping in patterns...\n");
+}
+
+void loop() {
+  Serial.println("🔊 Single beep");
+  beep(200);
+  delay(1000);
+
+  Serial.println("🔊 Three short beeps");
+  beepPattern(3, 100, 100);
+  delay(1000);
+
+  Serial.println("🔊 SOS pattern");
+  beepPattern(3, 100, 100); // S
+  delay(200);
+  beepPattern(3, 300, 100); // O
+  delay(200);
+  beepPattern(3, 100, 100); // S
+  delay(2000);
+}
+#endif
+
+// ----------------------------------------------------------------------------
+
+#ifdef TEST_MODE_MOTOR
+void setup() {
+  initHardware();
+  Serial.println("🧪 MOTOR TEST MODE");
+  Serial.println("Pulsing vibration motor...\n");
+}
+
+void loop() {
+  Serial.println("📳 Motor ON");
+  fillSolid(COLOR_MAGENTA);
+  digitalWrite(PIN_MOTOR, HIGH);
+  delay(500);
+
+  Serial.println("📳 Motor OFF");
+  clearLEDs();
+  digitalWrite(PIN_MOTOR, LOW);
+  delay(1000);
+}
+#endif
+
+// ----------------------------------------------------------------------------
+
+#ifdef TEST_MODE_MPU
+void setup() {
+  initHardware();
+  Serial.println("🧪 MPU6050 TEST MODE");
+  Serial.println("Shake the puck to trigger detection!\n");
+}
+
+void loop() {
+  float magnitude = getAccelerationMagnitude();
+
+  // Print magnitude every 200ms
+  static unsigned long lastPrint = 0;
+  if (millis() - lastPrint > 200) {
+    Serial.printf("📊 Acceleration: %.2f m/s²", magnitude);
+
+    if (magnitude > SHAKE_THRESHOLD) {
+      Serial.print(" ← SHAKE DETECTED!");
+    }
+
+    Serial.println();
+    lastPrint = millis();
+  }
+
+  // Trigger on shake
+  if (detectShake()) {
+    flashLEDs(COLOR_ORANGE, 3, 100);
+    beep(200);
+  }
+
+  delay(10);
+}
+#endif
+
+// ----------------------------------------------------------------------------
+
+#ifdef TEST_MODE_WIFI
+#include "main_wifi_test.h"
+#endif
+
+// ============================================================================
+// NORMAL MODE - "PUCK FEELS ALIVE" FIRMWARE
+// ============================================================================
+
+#ifdef NORMAL_MODE
+
+void powerOnAnimation() {
+  Serial.println("🚀 Power-on sequence...\n");
+
+  // Spinner warmup
+  for (int i = 0; i < NUM_LEDS * 2; i++) {
+    spinnerEffect(COLOR_CYAN, 30);
+    delay(30);
+  }
+
+  // Flash
+  flashLEDs(COLOR_WHITE, 2, 100);
+
+  // Short beep
+  beep(150);
+
+  Serial.println("✅ Puck ready!\n");
+}
+
+void setup() {
+  initHardware();
+  powerOnAnimation();
+
+  Serial.println("========================================");
+  Serial.println("  NORMAL MODE - Interactive Puck");
+  Serial.println("========================================");
+  Serial.println("🟢 Idle: Breathing cyan LEDs");
+  Serial.println("🔘 Button: Flash green + vibrate + beep");
+  Serial.println("🔥 Shake: Rainbow burst + long vibrate");
+  Serial.println("========================================\n");
+}
+
+void loop() {
+  // -------------------------
+  // IDLE STATE: Breathing LEDs
+  // -------------------------
+  breathePulse(COLOR_CYAN, PULSE_PERIOD_MS);
+
+  // -------------------------
+  // BUTTON PRESS HANDLER
+  // -------------------------
+  if (readButtonDebounced()) {
+    Serial.println("🔘 Button pressed!");
+
+    // Flash green
+    fillSolid(COLOR_GREEN);
+
+    // Vibrate + beep simultaneously
+    digitalWrite(PIN_MOTOR, HIGH);
+    beep(150);
+
+    delay(200);
+
+    digitalWrite(PIN_MOTOR, LOW);
+    clearLEDs();
+
+    // Small delay to prevent re-trigger
+    delay(100);
+  }
+
+  // -------------------------
+  // SHAKE DETECTION HANDLER
+  // -------------------------
+  if (detectShake()) {
+    Serial.println("🔥 Shake detected! RAINBOW BURST!\n");
+
+    // Start vibration
+    digitalWrite(PIN_MOTOR, HIGH);
+
+    // Rainbow burst animation
+    rainbowBurst(10);
+
+    // Stop vibration
+    digitalWrite(PIN_MOTOR, LOW);
+
+    // Victory beep
+    beepPattern(2, 100, 50);
+
+    // Clear LEDs
+    clearLEDs();
+  }
+
+  // Small delay for stability
+  delay(10);
+}
+
+#endif
+
+// ============================================================================
+// TABLE WARS GAME MODE - FULL GAME SYSTEM
+// ============================================================================
+
+#ifdef TABLE_WARS_MODE
+#include "main_tablewars.h"
+#endif
+
+// ============================================================================
+// BLE + WIFI DUAL MODE TEST
+// ============================================================================
+
+#ifdef TEST_MODE_BLE_WIFI
+#include "main_ble_wifi_test.h"
+#endif
+
+// ============================================================================
+// END OF FIRMWARE
+// ============================================================================

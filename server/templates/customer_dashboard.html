@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TABLE WARS - {{ bar_name }} - Table {{ table_number }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            animation: fadeIn 1s;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            margin-bottom: 10px;
+        }
+
+        .bar-info {
+            font-size: 1.2em;
+            opacity: 0.9;
+            margin-bottom: 5px;
+        }
+
+        .table-badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .connection-status {
+            text-align: center;
+            padding: 15px;
+            margin-bottom: 20px;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            animation: fadeIn 1s 0.2s backwards;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .status-connected { background: #4ade80; }
+        .status-disconnected { background: #ef4444; }
+        .status-connecting { background: #fbbf24; }
+
+        .connect-btn {
+            margin-top: 10px;
+            padding: 12px 30px;
+            background: #4ade80;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .connect-btn:hover {
+            background: #22c55e;
+            transform: scale(1.05);
+        }
+
+        .connect-btn:disabled {
+            background: #6b7280;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .game-selector {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            animation: slideUp 1s 0.3s backwards;
+        }
+
+        h2 {
+            margin-bottom: 20px;
+            font-size: 1.8em;
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+            padding-bottom: 10px;
+        }
+
+        .game-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .game-card {
+            background: rgba(255,255,255,0.1);
+            border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .game-card:hover {
+            background: rgba(255,255,255,0.2);
+            border-color: #4ade80;
+            transform: translateY(-5px);
+        }
+
+        .game-card.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .game-card.disabled:hover {
+            transform: none;
+            border-color: rgba(255,255,255,0.2);
+        }
+
+        .game-emoji {
+            font-size: 3em;
+            margin-bottom: 10px;
+        }
+
+        .game-name {
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .game-category {
+            font-size: 0.75em;
+            opacity: 0.7;
+            margin-top: 5px;
+        }
+
+        .gameplay-screen {
+            display: none;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            animation: fadeIn 0.5s;
+        }
+
+        .gameplay-screen.active {
+            display: block;
+        }
+
+        .game-instructions {
+            background: rgba(0,0,0,0.2);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        .instruction-item {
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .instruction-item:last-child {
+            border-bottom: none;
+        }
+
+        .score-display {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .score-value {
+            font-size: 4em;
+            font-weight: bold;
+            color: #4ade80;
+            text-shadow: 0 0 20px rgba(74, 222, 128, 0.5);
+        }
+
+        .score-label {
+            font-size: 1.2em;
+            opacity: 0.8;
+            margin-top: 10px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            margin-top: 30px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #4ade80;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #22c55e;
+        }
+
+        .btn-secondary {
+            background: rgba(255,255,255,0.2);
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .category-filter {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .category-btn {
+            padding: 8px 16px;
+            background: rgba(255,255,255,0.1);
+            border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 20px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9em;
+        }
+
+        .category-btn:hover, .category-btn.active {
+            background: rgba(255,255,255,0.2);
+            border-color: #4ade80;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .leaderboard-preview {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .leaderboard-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            margin-bottom: 8px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+        }
+
+        .rank-badge {
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .rank-1 { color: #FFD700; }
+        .rank-2 { color: #C0C0C0; }
+        .rank-3 { color: #CD7F32; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎮 TABLE WARS</h1>
+            <div class="bar-info">{{ bar_name }}</div>
+            <div class="table-badge">Table {{ table_number }}</div>
+        </header>
+
+        <div class="connection-status">
+            <div>
+                <span class="status-indicator status-disconnected" id="status-indicator"></span>
+                <span id="status-text">Not Connected</span>
+            </div>
+            <button class="connect-btn" id="connect-btn" onclick="connectToPuck()">
+                Connect to Puck
+            </button>
+        </div>
+
+        <!-- Game Selection Screen -->
+        <div class="game-selector" id="game-selector">
+            <h2>🎯 Choose Your Game</h2>
+
+            <div class="category-filter">
+                <button class="category-btn active" onclick="filterGames('all')">All Games</button>
+                <button class="category-btn" onclick="filterGames('speed')">⚡ Speed</button>
+                <button class="category-btn" onclick="filterGames('gambling')">💰 Gambling</button>
+                <button class="category-btn" onclick="filterGames('social')">🎉 Social</button>
+                <button class="category-btn" onclick="filterGames('skill')">🎯 Skill</button>
+                <button class="category-btn" onclick="filterGames('physical')">💪 Physical</button>
+            </div>
+
+            <div class="game-grid" id="game-grid">
+                <!-- Populated via JavaScript -->
+            </div>
+        </div>
+
+        <!-- Gameplay Screen -->
+        <div class="gameplay-screen" id="gameplay-screen">
+            <h2 id="current-game-title">Game Loading...</h2>
+
+            <div class="game-instructions" id="game-instructions">
+                <!-- Populated dynamically -->
+            </div>
+
+            <div class="score-display">
+                <div class="score-value" id="current-score">0</div>
+                <div class="score-label">Current Score</div>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-secondary" onclick="exitGame()">Exit Game</button>
+                <button class="btn btn-primary" onclick="playAgain()">Play Again</button>
+            </div>
+        </div>
+
+        <!-- Leaderboard Preview -->
+        <div class="leaderboard-preview">
+            <h2>🏆 Today's Leaders</h2>
+            <div id="leaderboard-list">
+                <div class="leaderboard-item">
+                    <div><span class="rank-badge rank-1">#1</span> Loading...</div>
+                    <div>-</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const BAR_NAME = "{{ bar_name }}";
+        const TABLE_NUMBER = {{ table_number }};
+        const PUCK_ID = {{ table_number }}; // Assume puck ID matches table number
+
+        // State
+        let connected = false;
+        let currentGame = null;
+        let currentScore = 0;
+        let puckDevice = null;
+        let gameCharacteristic = null;
+
+        // Game Database (51 games)
+        const GAMES = [
+            { id: 1, name: "Speed Tap Battle", emoji: "⚡", category: "speed", desc: "Tap as fast as you can!" },
+            { id: 2, name: "Shake Duel", emoji: "🔥", category: "physical", desc: "Shake harder than your opponent!" },
+            { id: 3, name: "Red Light Green Light", emoji: "🔴", category: "skill", desc: "Freeze when red, move when green!" },
+            { id: 4, name: "LED Chase Race", emoji: "🎯", category: "skill", desc: "Track the LED and tap!" },
+            { id: 5, name: "Color Wars", emoji: "⚔️", category: "skill", desc: "Defend your territory!" },
+            { id: 6, name: "Rainbow Roulette", emoji: "🌈", category: "gambling", desc: "Bet on colors!" },
+            { id: 7, name: "Visual Bomb", emoji: "💣", category: "social", desc: "Pass before it explodes!" },
+            { id: 8, name: "Simon Says LED", emoji: "🧠", category: "skill", desc: "Remember the pattern!" },
+            { id: 9, name: "Hot Potato", emoji: "💣", category: "social", desc: "Don't be holding it!" },
+            { id: 10, name: "Drunk Duel", emoji: "🍺", category: "social", desc: "1v1 reaction battle!" },
+            { id: 11, name: "Last Tap Standing", emoji: "💀", category: "skill", desc: "Tap before red!" },
+            { id: 12, name: "Hammer Time", emoji: "💪", category: "physical", desc: "Hit with peak strength!" },
+            { id: 13, name: "Bar Roulette", emoji: "🎰", category: "social", desc: "Spin for dares!" },
+            { id: 14, name: "Hold Your Nerve", emoji: "🧘", category: "skill", desc: "Stay perfectly still!" },
+            { id: 15, name: "Slap Battle", emoji: "👊", category: "physical", desc: "Slap the puck faster!" },
+            { id: 16, name: "Chug Timer", emoji: "🍺", category: "social", desc: "Timed drinking challenge!" },
+            { id: 17, name: "Pressure Cooker", emoji: "🔥", category: "skill", desc: "Resist the button!" },
+            { id: 18, name: "Power Hour", emoji: "🍻", category: "social", desc: "Shot every minute!" },
+            { id: 19, name: "Dare Roulette", emoji: "🎲", category: "social", desc: "Random dare intensity!" },
+            { id: 20, name: "Bullseye", emoji: "🎯", category: "skill", desc: "Stop on target!" },
+            { id: 21, name: "Karaoke Judge", emoji: "🎤", category: "social", desc: "Rate performances!" },
+            { id: 22, name: "Wild Card", emoji: "🎴", category: "social", desc: "Random command!" },
+            { id: 23, name: "Lucky Seven", emoji: "🎰", category: "gambling", desc: "Roll for jackpot!" },
+            { id: 24, name: "Volume Wars", emoji: "🔊", category: "physical", desc: "Scream contest!" },
+            { id: 25, name: "Shot Roulette", emoji: "🥃", category: "social", desc: "Who drinks next?" },
+            { id: 26, name: "Balance Master", emoji: "⚖️", category: "skill", desc: "Perfect balance!" },
+            { id: 27, name: "Spin Master", emoji: "🌀", category: "physical", desc: "Spin speed challenge!" },
+            { id: 28, name: "Lightning Round", emoji: "⚡", category: "speed", desc: "Follow commands fast!" },
+            { id: 29, name: "Beat Master", emoji: "🎵", category: "skill", desc: "Match the rhythm!" },
+            { id: 30, name: "Double or Nothing", emoji: "💰", category: "gambling", desc: "Risk it all!" },
+            { id: 31, name: "Combo Breaker", emoji: "🥊", category: "skill", desc: "Execute combos!" },
+            { id: 32, name: "Lockout", emoji: "🚫", category: "speed", desc: "Avoid penalties!" },
+            { id: 33, name: "Precision Strike", emoji: "🎯", category: "skill", desc: "Perfect timing!" },
+            { id: 34, name: "Gauntlet Mode", emoji: "🏃", category: "skill", desc: "5 challenges!" },
+            { id: 35, name: "Russian Roulette", emoji: "💀", category: "gambling", desc: "How far can you go?" },
+            { id: 36, name: "Marathon Mode", emoji: "🏃", category: "skill", desc: "Consistency test!" },
+            { id: 37, name: "Mirror Match", emoji: "🔄", category: "skill", desc: "Pattern recognition!" },
+            { id: 38, name: "Perfect Hold", emoji: "⏱️", category: "skill", desc: "Hold exact time!" },
+            { id: 39, name: "Countdown Sniper", emoji: "🎯", category: "skill", desc: "Hit at zero!" },
+            { id: 40, name: "Judas Mode", emoji: "🗡️", category: "social", desc: "One player is a traitor!" },
+            { id: 41, name: "Duck Hunt", emoji: "🦆", category: "physical", desc: "Slap when you hear QUACK!" },
+            { id: 42, name: "Sucker Punch", emoji: "🥊", category: "speed", desc: "Fastest grab wins!" },
+            { id: 43, name: "Death Roll", emoji: "💀", category: "gambling", desc: "Roll until you die!" },
+            { id: 44, name: "Shame Wheel", emoji: "🎪", category: "social", desc: "Spin for punishment!" },
+            { id: 45, name: "All In", emoji: "💎", category: "gambling", desc: "Double or zero!" },
+            { id: 46, name: "Copycat Chaos", emoji: "🤸", category: "physical", desc: "Copy the moves!" },
+            { id: 47, name: "Beer Roulette", emoji: "🍻", category: "social", desc: "Russian roulette!" },
+            { id: 48, name: "Never Have I Ever", emoji: "🔥", category: "social", desc: "Truth game!" },
+            { id: 49, name: "Accent Roulette", emoji: "🎭", category: "social", desc: "Random accent!" },
+            { id: 50, name: "Trivia Spinner", emoji: "🎓", category: "skill", desc: "LED answer selector!" },
+            { id: 51, name: "Reaction Chain", emoji: "🔗", category: "speed", desc: "Chain reactions!" }
+        ];
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            renderGames();
+            loadLeaderboard();
+            setInterval(loadLeaderboard, 30000); // Update every 30s
+        });
+
+        // Render game grid
+        function renderGames(filter = 'all') {
+            const grid = document.getElementById('game-grid');
+            const filteredGames = filter === 'all'
+                ? GAMES
+                : GAMES.filter(g => g.category === filter);
+
+            grid.innerHTML = filteredGames.map(game => `
+                <div class="game-card ${!connected ? 'disabled' : ''}"
+                     onclick="startGame(${game.id})"
+                     data-category="${game.category}">
+                    <div class="game-emoji">${game.emoji}</div>
+                    <div class="game-name">${game.name}</div>
+                    <div class="game-category">${game.category}</div>
+                </div>
+            `).join('');
+        }
+
+        // Filter games by category
+        function filterGames(category) {
+            // Update active button
+            document.querySelectorAll('.category-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            renderGames(category);
+        }
+
+        // Connect to puck via Web Bluetooth
+        async function connectToPuck() {
+            const btn = document.getElementById('connect-btn');
+            const statusText = document.getElementById('status-text');
+            const statusIndicator = document.getElementById('status-indicator');
+
+            try {
+                btn.disabled = true;
+                btn.textContent = 'Connecting...';
+                statusText.textContent = 'Connecting...';
+                statusIndicator.className = 'status-indicator status-connecting';
+
+                // Request Bluetooth device
+                puckDevice = await navigator.bluetooth.requestDevice({
+                    filters: [{ namePrefix: 'Puck' }],
+                    optionalServices: ['00001800-0000-1000-8000-00805f9b34fb']
+                });
+
+                // Connect to GATT server
+                const server = await puckDevice.gatt.connect();
+
+                // Get game control service
+                const service = await server.getPrimaryService('00001800-0000-1000-8000-00805f9b34fb');
+                gameCharacteristic = await service.getCharacteristic('00002a00-0000-1000-8000-00805f9b34fb');
+
+                // Subscribe to notifications (for scores)
+                await gameCharacteristic.startNotifications();
+                gameCharacteristic.addEventListener('characteristicvaluechanged', handleScoreUpdate);
+
+                // Success!
+                connected = true;
+                btn.textContent = 'Connected ✓';
+                statusText.textContent = 'Connected to Puck';
+                statusIndicator.className = 'status-indicator status-connected';
+                renderGames(); // Re-render to enable games
+
+            } catch (error) {
+                console.error('Connection failed:', error);
+                btn.disabled = false;
+                btn.textContent = 'Connect to Puck';
+                statusText.textContent = 'Connection Failed';
+                statusIndicator.className = 'status-indicator status-disconnected';
+                alert('Failed to connect to puck. Make sure Bluetooth is enabled and the puck is nearby.');
+            }
+        }
+
+        // Start a game
+        async function startGame(gameId) {
+            if (!connected) {
+                alert('Please connect to a puck first!');
+                return;
+            }
+
+            const game = GAMES.find(g => g.id === gameId);
+            if (!game) return;
+
+            currentGame = game;
+            currentScore = 0;
+
+            // Show gameplay screen
+            document.getElementById('game-selector').style.display = 'none';
+            document.getElementById('gameplay-screen').classList.add('active');
+            document.getElementById('current-game-title').textContent = game.emoji + ' ' + game.name;
+            document.getElementById('current-score').textContent = '0';
+
+            // Load game instructions
+            loadGameInstructions(gameId);
+
+            // Send game start command to puck via Bluetooth
+            try {
+                const command = new Uint8Array([gameId]);
+                await gameCharacteristic.writeValue(command);
+                console.log('Game started:', gameId);
+            } catch (error) {
+                console.error('Failed to start game:', error);
+            }
+
+            // Also notify server
+            fetch('/api/game-start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    bar: BAR_NAME,
+                    table: TABLE_NUMBER,
+                    puck_id: PUCK_ID,
+                    game_id: gameId,
+                    game_name: game.name
+                })
+            });
+        }
+
+        // Load game-specific instructions
+        function loadGameInstructions(gameId) {
+            const instructionsDiv = document.getElementById('game-instructions');
+
+            const instructions = {
+                1: ['Tap the button as fast as you can', '10 seconds on the clock', 'Each tap = 1 point'],
+                41: ['SLAP when you hear QUACK', 'DON\'T hit the GOOSE (honk)', '12 rounds', 'Hit goose = -200 penalty'],
+                45: ['TAP to bet it all (50/50 flip)', 'HOLD 3s to walk away with winnings', 'Up to 5 flips', 'Lose once = game over'],
+                50: ['Watch the LED spinner', 'TAP to stop on your answer', 'A=Red, B=Green, C=Blue, D=Yellow', '5 questions']
+            };
+
+            const gameInstructions = instructions[gameId] || ['Follow the LED colors', 'Check the puck for feedback'];
+
+            instructionsDiv.innerHTML = gameInstructions.map(inst =>
+                `<div class="instruction-item">• ${inst}</div>`
+            ).join('');
+        }
+
+        // Handle score updates from puck
+        function handleScoreUpdate(event) {
+            const value = event.target.value;
+            const score = value.getUint32(0, true); // Little endian
+
+            currentScore = score;
+            document.getElementById('current-score').textContent = score.toLocaleString();
+
+            // Animate score change
+            const scoreEl = document.getElementById('current-score');
+            scoreEl.style.transform = 'scale(1.2)';
+            setTimeout(() => {
+                scoreEl.style.transform = 'scale(1)';
+            }, 200);
+        }
+
+        // Exit game
+        function exitGame() {
+            // Submit final score
+            if (currentGame && currentScore > 0) {
+                submitScore();
+            }
+
+            // Return to game selection
+            document.getElementById('gameplay-screen').classList.remove('active');
+            document.getElementById('game-selector').style.display = 'block';
+            currentGame = null;
+            currentScore = 0;
+        }
+
+        // Play again
+        function playAgain() {
+            if (currentGame) {
+                submitScore();
+                startGame(currentGame.id);
+            }
+        }
+
+        // Submit score to server
+        async function submitScore() {
+            try {
+                const response = await fetch('/api/score', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        bar: BAR_NAME,
+                        table: TABLE_NUMBER,
+                        puck_id: PUCK_ID,
+                        game_type: currentGame.name,
+                        score: currentScore
+                    })
+                });
+
+                if (response.ok) {
+                    console.log('Score submitted:', currentScore);
+                    loadLeaderboard(); // Refresh leaderboard
+                }
+            } catch (error) {
+                console.error('Failed to submit score:', error);
+            }
+        }
+
+        // Load leaderboard
+        async function loadLeaderboard() {
+            try {
+                const response = await fetch(`/api/leaderboard/${BAR_NAME}?limit=5`);
+                const data = await response.json();
+
+                const list = document.getElementById('leaderboard-list');
+                list.innerHTML = data.map((player, index) => `
+                    <div class="leaderboard-item">
+                        <div>
+                            <span class="rank-badge rank-${index + 1}">#${index + 1}</span>
+                            ${player.name || 'Anonymous'}
+                        </div>
+                        <div>${player.total_score || 0}</div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load leaderboard:', error);
+            }
+        }
+    </script>
+</body>
+</html>
