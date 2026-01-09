@@ -58,12 +58,72 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
 
 ### Next Steps for US-002:
 1. ✅ Create puck simulator for testing without hardware
-2. ⏳ Update multiplayer_engines.py to support game 62 (Shot Roulette)
-3. ⏳ Update multiplayer_routes.py to register game 62
-4. ⏳ Update shot_roulette_royale.html to use session-based WebSocket
-5. ⏳ Implement turn management and zone outcome logic
-6. ⏳ Create phone lobby UI for player registration
-7. ⏳ Update firmware to send gyro_z (separate task after backend complete)
-8. ⏳ Test complete end-to-end flow with simulator
+2. ✅ Update multiplayer_engines.py to support game 62 (Shot Roulette)
+3. ✅ Update multiplayer_routes.py to register game 62
+4. ✅ Update shot_roulette_royale.html to use session-based WebSocket
+5. ✅ Implement turn management and zone outcome logic
+6. ⏳ Create phone lobby UI for player registration (future story)
+7. ⏳ Update firmware to send gyro_z (separate story - firmware update)
+8. ✅ Backend implementation complete and tested with simulator
+
+---
+
+## 2026-01-09 - US-002 COMPLETE
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- **MAJOR REFACTOR**: Moved from single-player to multiplayer architecture
+- **Files changed:**
+  - server/multiplayer_engines.py (added ShotRouletteRoyale class)
+  - server/multiplayer_routes.py (registered game 62)
+  - server/tv_game_engines.py (removed incorrect implementation)
+  - server/tv_game_routes.py (removed game 62 from single-player)
+  - server/templates/tv_games/shot_roulette_royale.html (updated for sessions)
+  - server/templates/test_puck_simulator.html (new testing tool)
+  - server/app.py (added /test/puck-simulator route)
+- **Implementation details:**
+  - Spin detection: gyro_z > 50 deg/s
+  - Spin intensity: <100=light, 100-300=medium, >300=hard
+  - Turn management with 30sec timeout
+  - Zone outcomes: all 8 zones implemented with proper logic
+  - Player tracking: drinks, immunities, challenges
+  - Session-based multiplayer (not puck-based)
+- **Learnings for future iterations:**
+  - ALWAYS verify architecture pattern before implementing (single vs multi)
+  - Multiplayer games use session_id, single-player uses puck_id
+  - Different WebSocket events: multiplayer_input vs puck_input
+  - Simulator is CRITICAL for testing without hardware
+  - Firmware DOES NOT send gyro_z - needs separate update story
+  - Complete system documentation prevents architectural mistakes
+
+---
+
+## 2026-01-09 - CRITICAL FIX: User-Facing Lobby UI
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- **User Complaint**: "WHY THE FUCK CAN'T I USE IT WHEN I GO THERE"
+- **Root Cause**: Backend API was fully functional, but NO UI existed to start the game
+- **Impact**: Users had to manually call APIs via browser console - completely unusable
+- **Files changed:**
+  - server/templates/multiplayer_lobby.html (added Shot Roulette card)
+- **Implementation:**
+  - Added Shot Roulette Royale card to multiplayer lobby
+  - Player count prompt (2-8 players)
+  - Player name collection via prompts
+  - Calls POST /multiplayer/start/62 with player data
+  - Auto-redirects to /tv/shot-roulette-royale?session={session_id}
+- **Learnings for future iterations:**
+  - **CRITICAL**: "Complete" means USER can use it, not just "API works"
+  - Always verify COMPLETE user journey from entry point to goal
+  - Backend + Testing ≠ Done. Need user-facing UI that calls the backend
+  - User frustration = missing the last mile of implementation
+  - Test from user's perspective: "Can they actually DO this from the browser?"
+
+### Complete Working Flow (Verified):
+1. User visits http://localhost:5001/lobby
+2. Clicks "SHOT ROULETTE ROYALE" card
+3. Enters player count (2-8)
+4. Enters player names via prompts
+5. TV display loads with 3D wheel and player info
+6. Puck simulator at /test/puck-simulator can send spins
+7. Wheel responds to gyro_z input
+8. Turn advances after spin resolution
 
 ---
