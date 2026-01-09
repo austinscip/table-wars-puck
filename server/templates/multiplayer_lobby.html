@@ -70,6 +70,15 @@
     <h1>🎮 SELECT MULTIPLAYER GAME</h1>
 
     <div class="games-grid">
+        <div class="game-card" onclick="launchGame(62)">
+            <div class="game-icon">🎰</div>
+            <div class="game-title">SHOT ROULETTE ROYALE</div>
+            <div class="game-info">
+                Spin your puck, land on zones! Drink, immunity, or everyone drinks!
+            </div>
+            <div class="player-count">2-8 Players | Drinking Game</div>
+        </div>
+
         <div class="game-card" onclick="launchGame(70)">
             <div class="game-icon">🏃</div>
             <div class="game-title">KEEP AWAY CHAOS</div>
@@ -108,19 +117,47 @@
     </div>
 
     <script>
-        function launchGame(gameId) {
-            // For demo: generate fake session ID
-            const sessionId = Date.now();
+        async function launchGame(gameId) {
+            if (gameId === 62) {
+                // Shot Roulette: Prompt for player names
+                const playerCount = parseInt(prompt("How many players? (2-8)", "4"));
+                if (!playerCount || playerCount < 2 || playerCount > 8) return;
 
-            // Redirect to game TV display with session
-            const urls = {
-                70: '/tv/keep-away-chaos',
-                71: '/tv/tug-of-war',
-                72: '/tv/bomb-lobber',
-                73: '/tv/simon-says'
-            };
+                const playerNames = [];
+                for (let i = 1; i <= playerCount; i++) {
+                    const name = prompt(`Player ${i} name:`, `Player ${i}`);
+                    if (!name) return;
+                    playerNames.push(name);
+                }
 
-            window.location.href = urls[gameId] + '?session=' + sessionId;
+                // Create game session
+                const response = await fetch('/multiplayer/start/62', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        player_ids: Array.from({length: playerCount}, (_, i) => i + 1),
+                        player_names: playerNames,
+                        rounds: 5
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    window.location.href = '/tv/shot-roulette-royale?session=' + data.session_id;
+                } else {
+                    alert('Failed to start game: ' + data.error);
+                }
+            } else {
+                // Other games: use fake session ID
+                const sessionId = Date.now();
+                const urls = {
+                    70: '/tv/keep-away-chaos',
+                    71: '/tv/tug-of-war',
+                    72: '/tv/bomb-lobber',
+                    73: '/tv/simon-says'
+                };
+                window.location.href = urls[gameId] + '?session=' + sessionId;
+            }
         }
     </script>
 </body>
