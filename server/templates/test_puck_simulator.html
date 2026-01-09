@@ -312,6 +312,9 @@
             document.getElementById('shakeValue').textContent = this.value;
         };
 
+        // Track which session we've joined
+        let joinedSessionId = null;
+
         // Send input
         function sendInput() {
             if (!connected) {
@@ -319,8 +322,17 @@
                 return;
             }
 
+            const sessionId = parseInt(document.getElementById('sessionId').value);
+
+            // Auto-join session if not already joined
+            if (joinedSessionId !== sessionId) {
+                socket.emit('join_multiplayer_session', { session_id: sessionId });
+                joinedSessionId = sessionId;
+                addLog('Auto-joined session: ' + sessionId, 'sent');
+            }
+
             const data = {
-                session_id: parseInt(document.getElementById('sessionId').value),
+                session_id: sessionId,
                 puck_id: parseInt(document.getElementById('puckId').value),
                 gyro_z: parseFloat(document.getElementById('gyroZ').value),
                 tilt_x: parseFloat(document.getElementById('tiltX').value),
@@ -356,6 +368,7 @@
             if (result.session_id) {
                 document.getElementById('sessionId').value = result.session_id;
                 socket.emit('join_multiplayer_session', { session_id: result.session_id });
+                joinedSessionId = result.session_id;
             }
         }
 
