@@ -652,6 +652,12 @@ def game_gallery():
     """Browse all available TV games"""
     return render_template('game_gallery.html')
 
+
+@app.route('/test/puck-simulator')
+def puck_simulator():
+    """Test tool for simulating puck input without physical hardware"""
+    return render_template('test_puck_simulator.html')
+
 # ============================================================================
 # MAIN
 # ============================================================================

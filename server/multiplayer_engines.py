@@ -15,11 +15,16 @@ from typing import List, Dict, Optional
 
 active_multiplayer_games: Dict[int, any] = {}
 
-def start_multiplayer_game(game_id: int, player_ids: List[int], team_assignments: Dict[int, int] = None):
+def start_multiplayer_game(game_id: int, player_ids: List[int], team_assignments: Dict[int, int] = None, **kwargs):
     """Start a multiplayer game session"""
     session_id = int(time.time() * 1000)  # Unique session ID
 
-    if game_id == 70:
+    player_names = kwargs.get('player_names', None)
+    rounds = kwargs.get('rounds', 5)
+
+    if game_id == 62:
+        active_multiplayer_games[session_id] = ShotRouletteRoyale(player_ids, player_names, rounds)
+    elif game_id == 70:
         active_multiplayer_games[session_id] = KeepAwayChaos(player_ids)
     elif game_id == 71:
         active_multiplayer_games[session_id] = TugOfWarTeams(team_assignments or {})
@@ -39,7 +44,12 @@ def update_multiplayer_game(session_id: int, puck_id: int, input_data: Dict) -> 
 
     game = active_multiplayer_games[session_id]
 
-    if isinstance(game, KeepAwayChaos):
+    if isinstance(game, ShotRouletteRoyale):
+        return game.update(
+            puck_id=puck_id,
+            gyro_z=input_data.get('gyro_z', 0)
+        )
+    elif isinstance(game, KeepAwayChaos):
         return game.update(
             puck_id=puck_id,
             tilt_x=input_data.get('tilt_x', 0),
@@ -507,4 +517,265 @@ class SimonSaysSurvival:
             ],
             "game_over": self.game_over,
             "winner": next((data["name"] for pid, data in self.players.items() if data["active"]), None) if self.game_over else None
+        }
+
+
+# ============================================================================
+# GAME 62: SHOT ROULETTE ROYALE (Multiplayer Drinking Game)
+# ============================================================================
+
+@dataclass
+class RoulettePlayer:
+    puck_id: int
+    name: str
+    drinks_taken: int = 0
+    immunities: int = 0
+    challenges_won: int = 0
+    is_active: bool = True
+    color: str = "#FFFFFF"
+
+class ShotRouletteRoyale:
+    """
+    Multiplayer roulette wheel drinking game
+    Players take turns spinning the wheel with their puck
+    Physical spin intensity determines risk/reward
+    """
+
+    # Zone definitions: name, angle size (degrees), type
+    ZONES = [
+        {"name": "CHAMPION", "angle": 25, "type": "reward", "icon": "👑"},
+        {"name": "DRINK ONE", "angle": 60, "type": "penalty", "icon": "🍺"},
+        {"name": "SPIN AGAIN", "angle": 45, "type": "neutral", "icon": "🔄"},
+        {"name": "DRINK TWO", "angle": 50, "type": "penalty", "icon": "🍻"},
+        {"name": "IMMUNITY", "angle": 30, "type": "reward", "icon": "🛡️"},
+        {"name": "CHUG", "angle": 35, "type": "penalty", "icon": "💀"},
+        {"name": "CHALLENGE", "angle": 40, "type": "neutral", "icon": "⚔️"},
+        {"name": "BOMB", "angle": 75, "type": "penalty", "icon": "💣"}
+    ]
+
+    def __init__(self, player_ids: List[int], player_names: List[str] = None, total_rounds: int = 5):
+        self.players: List[RoulettePlayer] = []
+        self.current_player_index = 0
+        self.round = 1
+        self.total_rounds = total_rounds
+        self.game_over = False
+
+        # Wheel state
+        self.wheel_rotation = 0.0  # Current angle (degrees)
+        self.target_rotation = 0.0  # Target after spin
+        self.spinning = False
+        self.spin_velocity = 0.0  # deg/s
+        self.spin_start_time = 0
+        self.spin_duration = 0
+        self.last_zone = None
+        self.pending_outcome = None  # For CHAMPION/CHALLENGE resolution
+
+        # Tracking
+        self.last_update = time.time()
+        self.turn_start_time = time.time()
+        self.turn_timeout = 30  # 30 seconds to spin
+
+        # Create players
+        colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A", "#98D8C8", "#F7DC6F", "#BB8FCE", "#F8B739"]
+        for i, pid in enumerate(player_ids):
+            name = player_names[i] if player_names and i < len(player_names) else f"Player {i+1}"
+            self.players.append(RoulettePlayer(
+                puck_id=pid,
+                name=name,
+                color=colors[i % len(colors)]
+            ))
+
+    def get_current_player(self) -> RoulettePlayer:
+        """Get the player whose turn it is"""
+        return self.players[self.current_player_index]
+
+    def advance_turn(self):
+        """Move to next player, advance round if needed"""
+        self.current_player_index = (self.current_player_index + 1) % len(self.players)
+
+        # New round when we loop back to first player
+        if self.current_player_index == 0:
+            self.round += 1
+            if self.round > self.total_rounds:
+                self.game_over = True
+
+        self.turn_start_time = time.time()
+
+    def detect_spin(self, gyro_z: float) -> bool:
+        """Detect if spin gesture was performed"""
+        return abs(gyro_z) > 50  # 50 deg/s minimum
+
+    def calculate_wheel_travel(self, spin_intensity: float) -> Tuple[float, int]:
+        """Calculate wheel rotation based on spin intensity"""
+        abs_intensity = abs(spin_intensity)
+
+        # Map intensity to zone travel
+        if abs_intensity < 100:
+            # Light spin: 1-2 zones (safe)
+            zones = random.uniform(1.2, 2.0)
+        elif abs_intensity < 300:
+            # Medium spin: 3-5 zones
+            zones = random.uniform(3.0, 5.0)
+        else:
+            # Hard spin: 6-8 zones (risky!)
+            zones = random.uniform(6.0, 8.0)
+
+        # Calculate degrees
+        avg_zone_angle = 360 / len(self.ZONES)
+        rotation = zones * avg_zone_angle + random.uniform(-10, 10)
+
+        # Add base rotations for drama (2-5 full spins)
+        base_rotations = random.uniform(2, 5) * 360
+        total_rotation = base_rotations + rotation
+
+        return total_rotation, int(zones)
+
+    def get_landed_zone(self) -> Dict:
+        """Determine which zone the pointer landed on"""
+        normalized = self.wheel_rotation % 360
+
+        current_angle = 0
+        for zone in self.ZONES:
+            if current_angle <= normalized < current_angle + zone["angle"]:
+                return zone
+            current_angle += zone["angle"]
+
+        return self.ZONES[-1]  # Fallback
+
+    def apply_zone_outcome(self, zone: Dict, player: RoulettePlayer):
+        """Apply the outcome of landing on a zone"""
+        zone_name = zone["name"]
+
+        if zone_name == "DRINK ONE":
+            if player.immunities > 0:
+                player.immunities -= 1
+            else:
+                player.drinks_taken += 1
+
+        elif zone_name == "DRINK TWO":
+            if player.immunities > 0:
+                player.immunities -= 1
+            else:
+                player.drinks_taken += 2
+
+        elif zone_name == "CHUG":
+            if player.immunities > 0:
+                player.immunities -= 1
+            else:
+                player.drinks_taken += 3
+
+        elif zone_name == "BOMB":
+            # Everyone drinks!
+            for p in self.players:
+                if p.puck_id != player.puck_id:
+                    if p.immunities > 0:
+                        p.immunities -= 1
+                    else:
+                        p.drinks_taken += 1
+
+        elif zone_name == "IMMUNITY":
+            player.immunities += 1
+
+        elif zone_name == "CHAMPION":
+            # Player picks someone to drink (handled in frontend)
+            self.pending_outcome = {"type": "champion_pick", "picker": player.puck_id}
+
+        elif zone_name == "CHALLENGE":
+            # 1v1 mini-game (simplified: random winner)
+            self.pending_outcome = {"type": "challenge", "challenger": player.puck_id}
+
+        elif zone_name == "SPIN AGAIN":
+            # Don't advance turn
+            return False  # Indicates don't advance
+
+        return True  # Advance turn
+
+    def update(self, puck_id: int, gyro_z: float = 0, **kwargs) -> Dict:
+        """Update game state based on puck input"""
+        if self.game_over:
+            return self.get_state()
+
+        now = time.time()
+        dt = now - self.last_update
+        self.last_update = now
+
+        current_player = self.get_current_player()
+
+        # Only current player can spin
+        if puck_id != current_player.puck_id:
+            return self.get_state()
+
+        # Detect new spin
+        if not self.spinning and self.detect_spin(gyro_z):
+            self.spinning = True
+            self.spin_velocity = gyro_z
+            self.spin_start_time = now
+
+            # Calculate target
+            rotation, zones = self.calculate_wheel_travel(gyro_z)
+            self.target_rotation = self.wheel_rotation + rotation
+
+            # Spin duration (3-8 seconds)
+            self.spin_duration = 3.0 + (min(abs(gyro_z), 400) / 400) * 5.0
+
+        # Update wheel rotation during spin
+        if self.spinning:
+            elapsed = now - self.spin_start_time
+            progress = min(elapsed / self.spin_duration, 1.0)
+
+            # Ease-out curve
+            ease_progress = 1 - math.pow(1 - progress, 3)
+            self.wheel_rotation = self.wheel_rotation + (self.target_rotation - self.wheel_rotation) * ease_progress * 0.1
+
+            # Spin complete
+            if progress >= 1.0:
+                self.spinning = False
+                self.wheel_rotation = self.target_rotation
+                self.last_zone = self.get_landed_zone()
+
+                # Apply outcome
+                should_advance = self.apply_zone_outcome(self.last_zone, current_player)
+                if should_advance:
+                    self.advance_turn()
+
+        # Turn timeout
+        if not self.spinning and (now - self.turn_start_time) > self.turn_timeout:
+            # Skip player for inactivity
+            self.advance_turn()
+
+        return self.get_state()
+
+    def get_state(self) -> Dict:
+        """Return current game state"""
+        current_player = self.get_current_player()
+
+        return {
+            "game_id": 62,
+            "game_type": "shot_roulette_royale",
+            "session_id": id(self),  # Temporary ID for state tracking
+            "wheel_rotation": round(self.wheel_rotation, 2),
+            "spinning": self.spinning,
+            "spin_velocity": round(self.spin_velocity, 2),
+            "current_player_id": current_player.puck_id,
+            "current_player_name": current_player.name,
+            "round": self.round,
+            "total_rounds": self.total_rounds,
+            "last_zone": self.last_zone["name"] if self.last_zone else None,
+            "last_zone_icon": self.last_zone["icon"] if self.last_zone else None,
+            "pending_outcome": self.pending_outcome,
+            "time_until_skip": max(0, int(self.turn_timeout - (time.time() - self.turn_start_time))),
+            "players": [
+                {
+                    "puck_id": p.puck_id,
+                    "name": p.name,
+                    "drinks_taken": p.drinks_taken,
+                    "immunities": p.immunities,
+                    "challenges_won": p.challenges_won,
+                    "color": p.color,
+                    "is_current": p.puck_id == current_player.puck_id
+                }
+                for p in self.players
+            ],
+            "game_over": self.game_over,
+            "winner": min(self.players, key=lambda p: p.drinks_taken).name if self.game_over else None
         }

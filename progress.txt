@@ -1,0 +1,69 @@
+## Codebase Patterns
+(This section will be updated as we learn patterns during development)
+
+- Flask server runs on port 5001
+- WebSocket events use flask-socketio
+- Puck firmware uses PlatformIO with Arduino framework
+- MPU6050 gyroscope Z-axis for spin detection (rad/s * 57.2958 = deg/s)
+- FastLED for WS2812B LED ring (16 LEDs on GPIO 23)
+- ESP-NOW for puck-to-puck communication (250m range)
+- TV game templates go in server/templates/tv_games/
+- Routes for TV games follow pattern: @tv_games_bp.route('/tv/<game-name>/<int:puck_id>')
+- Three.js v0.158.0 with UnrealBloomPass for 3D games
+- Use _TEMPLATE_3D.html as starting point for new 3D games
+
+---
+
+## Sprint 1: SHOT ROULETTE ROYALE (Brewery)
+
+### Session 1 - 2026-01-09
+- Initial Ralph Wiggum setup complete
+- AGENTS.md files created for root, src/, and server/
+- Directory structure: scripts/ralph/, tasks/, archive/
+- First PRD: SHOT ROULETTE ROYALE with 6 user stories
+- Ready to begin game development
+
+---
+
+## 2026-01-09 - US-001
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- Implemented 3D roulette wheel display with 8 zones
+- Files changed:
+  - server/templates/tv_games/shot_roulette_royale.html (new)
+  - server/tv_game_routes.py (added route)
+- **Learnings for future iterations:**
+  - Zone angles must sum to 360 degrees for proper wheel coverage
+  - Use THREE.ExtrudeGeometry with Shape for pie-slice segments
+  - Sprites work well for zone labels that face the camera
+  - Bloom post-processing adds dramatic visual appeal
+  - Camera position at (8, 2, 0) gives good side view of vertical wheel
+
+---
+
+## 2026-01-09 - US-002 Discovery Phase
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- **CRITICAL DISCOVERY**: Shot Roulette Royale needs MULTIPLAYER architecture, not single-player
+- **Files created:**
+  - SYSTEM_ARCHITECTURE.md (complete system map)
+  - server/templates/test_puck_simulator.html (testing tool)
+  - server/app.py (added /test/puck-simulator route)
+- **Learnings for future iterations:**
+  - TV games have TWO patterns: single-player (games 52-61) vs multiplayer (games 70-73)
+  - Single-player uses `puck_id`, multiplayer uses `session_id`
+  - Shot Roulette needs session-based multiplayer with turn management
+  - Firmware DOES NOT send gyro_z - only tilt_x, tilt_y, shake_intensity, button_held
+  - **ACTION REQUIRED**: Update firmware to include gyro_z in WebSocket payload
+  - Always verify complete API surface before implementing (tool coverage!)
+  - Phone UI + TV display dual-screen architecture is critical to understand
+
+### Next Steps for US-002:
+1. ✅ Create puck simulator for testing without hardware
+2. ⏳ Update multiplayer_engines.py to support game 62 (Shot Roulette)
+3. ⏳ Update multiplayer_routes.py to register game 62
+4. ⏳ Update shot_roulette_royale.html to use session-based WebSocket
+5. ⏳ Implement turn management and zone outcome logic
+6. ⏳ Create phone lobby UI for player registration
+7. ⏳ Update firmware to send gyro_z (separate task after backend complete)
+8. ⏳ Test complete end-to-end flow with simulator
+
+---

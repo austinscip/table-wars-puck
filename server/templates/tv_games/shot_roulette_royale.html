@@ -189,7 +189,7 @@
     </div>
 
     <script>
-        const PUCK_ID = {{ puck_id }};
+        const SESSION_ID = {{ session_id or 'null' }};
 
         // Zone definitions with colors, icons, and probabilities (angle size)
         const ZONES = [
@@ -456,33 +456,57 @@
         const socket = io();
 
         socket.on('connect', () => {
-            console.log('Connected to server');
-            socket.emit('join_game_room', { puck_id: PUCK_ID });
-            socket.emit('request_game_state', { puck_id: PUCK_ID });
+            console.log('✅ Connected to server');
+            if (SESSION_ID) {
+                socket.emit('join_multiplayer_session', { session_id: SESSION_ID });
+                console.log('📡 Joined session:', SESSION_ID);
+            } else {
+                console.error('❌ No session ID provided!');
+            }
         });
 
-        socket.on('game_state_update', (state) => {
+        socket.on('multiplayer_state_update', (state) => {
             gameState = state;
             updateHUD(state);
             updateWheel(state);
         });
 
-        socket.on('game_over', (data) => {
-            console.log('Game Over:', data);
+        socket.on('multiplayer_game_over', (data) => {
+            console.log('🏁 Game Over:', data);
+            gameState = data.state;
+            updateHUD(data.state);
+        });
+
+        socket.on('joined', (data) => {
+            console.log('✅ Joined:', data.message);
+        });
+
+        socket.on('error', (data) => {
+            console.error('❌ Error:', data.message);
         });
 
         function updateHUD(state) {
             document.getElementById('round').textContent = state.round || 1;
-            document.getElementById('totalRounds').textContent = state.totalRounds || 5;
-            document.getElementById('playerCount').textContent = state.playerCount || 0;
-            document.getElementById('spinnerName').textContent = state.currentSpinner || 'WAITING...';
+            document.getElementById('totalRounds').textContent = state.total_rounds || 5;
+            document.getElementById('playerCount').textContent = state.players ? state.players.length : 0;
+            document.getElementById('spinnerName').textContent = state.current_player_name || 'WAITING...';
+
+            // Log state for debugging
+            if (state.last_zone) {
+                console.log(`🎯 Landed on: ${state.last_zone} ${state.last_zone_icon || ''}`);
+            }
         }
 
         function updateWheel(state) {
-            if (state.wheelRotation !== undefined) {
-                targetRotation = (state.wheelRotation * Math.PI) / 180;
+            if (state.wheel_rotation !== undefined) {
+                targetRotation = (state.wheel_rotation * Math.PI) / 180;
             }
             isSpinning = state.spinning || false;
+
+            // Update current player indicator in the spin prompt
+            if (state.current_player_name) {
+                document.getElementById('spinnerName').textContent = state.current_player_name;
+            }
         }
 
         function animate() {

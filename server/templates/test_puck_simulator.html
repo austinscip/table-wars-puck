@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎮 Puck Simulator - Table Wars</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial Black', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #00d9ff;
+            text-shadow: 0 0 20px rgba(0, 217, 255, 0.5);
+            margin-bottom: 30px;
+        }
+
+        .panels {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(0, 217, 255, 0.3);
+            border-radius: 15px;
+            padding: 25px;
+        }
+
+        .panel h2 {
+            color: #ffd700;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+            color: #aaa;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            outline: none;
+            margin-bottom: 5px;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #00d9ff;
+            cursor: pointer;
+        }
+
+        input[type="number"], select {
+            width: 100%;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(0, 217, 255, 0.3);
+            border-radius: 8px;
+            color: white;
+            font-size: 1em;
+        }
+
+        .value-display {
+            font-size: 1.5em;
+            color: #00d9ff;
+            font-weight: bold;
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #00d9ff 0%, #0099cc 100%);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 1.2em;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 217, 255, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button.danger {
+            background: linear-gradient(135deg, #ff6b6b 0%, #cc5555 100%);
+        }
+
+        button.success {
+            background: linear-gradient(135deg, #51cf66 0%, #40a951 100%);
+        }
+
+        .status {
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            margin-top: 15px;
+            font-size: 0.9em;
+        }
+
+        .status.connected {
+            border-left: 4px solid #51cf66;
+        }
+
+        .status.disconnected {
+            border-left: 4px solid #ff6b6b;
+        }
+
+        .log {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 8px;
+            padding: 15px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            margin-top: 15px;
+        }
+
+        .log-entry {
+            padding: 5px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .log-entry.sent {
+            color: #00d9ff;
+        }
+
+        .log-entry.received {
+            color: #51cf66;
+        }
+
+        .log-entry.error {
+            color: #ff6b6b;
+        }
+
+        .presets {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .preset-btn {
+            padding: 10px;
+            font-size: 0.9em;
+            background: rgba(255, 215, 0, 0.2);
+            border: 2px solid rgba(255, 215, 0, 0.3);
+        }
+
+        .preset-btn:hover {
+            background: rgba(255, 215, 0, 0.3);
+            border-color: #ffd700;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 PUCK SIMULATOR</h1>
+
+        <div class="panels">
+            <!-- Left Panel: Controls -->
+            <div class="panel">
+                <h2>Puck Controls</h2>
+
+                <div class="control-group">
+                    <label>Session ID</label>
+                    <input type="number" id="sessionId" value="1736453128" min="1">
+                </div>
+
+                <div class="control-group">
+                    <label>Puck ID</label>
+                    <input type="number" id="puckId" value="1" min="1" max="8">
+                </div>
+
+                <div class="control-group">
+                    <label>Gyro Z (Spin) - <span class="value-display" id="gyroZValue">0</span> deg/s</label>
+                    <input type="range" id="gyroZ" min="-500" max="500" value="0" step="1">
+                </div>
+
+                <div class="control-group">
+                    <label>Tilt X - <span class="value-display" id="tiltXValue">0</span>°</label>
+                    <input type="range" id="tiltX" min="-45" max="45" value="0" step="1">
+                </div>
+
+                <div class="control-group">
+                    <label>Tilt Y - <span class="value-display" id="tiltYValue">0</span>°</label>
+                    <input type="range" id="tiltY" min="-45" max="45" value="0" step="1">
+                </div>
+
+                <div class="control-group">
+                    <label>Shake Intensity - <span class="value-display" id="shakeValue">0</span></label>
+                    <input type="range" id="shakeIntensity" min="0" max="100" value="0" step="1">
+                </div>
+
+                <div class="control-group">
+                    <label>
+                        <input type="checkbox" id="buttonHeld"> Button Held
+                    </label>
+                </div>
+
+                <button onclick="sendInput()">SEND INPUT</button>
+                <button class="success" onclick="startGame()">START GAME</button>
+                <button class="danger" onclick="endGame()">END GAME</button>
+
+                <div class="presets">
+                    <button class="preset-btn" onclick="presetLightSpin()">Light Spin (80)</button>
+                    <button class="preset-btn" onclick="presetMediumSpin()">Medium Spin (200)</button>
+                    <button class="preset-btn" onclick="presetHardSpin()">Hard Spin (350)</button>
+                    <button class="preset-btn" onclick="presetTiltLeft()">Tilt Left</button>
+                    <button class="preset-btn" onclick="presetTiltRight()">Tilt Right</button>
+                    <button class="preset-btn" onclick="presetShake()">Shake</button>
+                    <button class="preset-btn" onclick="resetAll()">Reset All</button>
+                </div>
+
+                <div id="connectionStatus" class="status disconnected">
+                    🔴 Disconnected
+                </div>
+            </div>
+
+            <!-- Right Panel: Log -->
+            <div class="panel">
+                <h2>WebSocket Log</h2>
+                <div class="log" id="log"></div>
+                <button onclick="clearLog()" style="margin-top: 15px;">Clear Log</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let connected = false;
+
+        // WebSocket connection
+        socket.on('connect', () => {
+            connected = true;
+            updateConnectionStatus(true);
+            addLog('Connected to server', 'received');
+        });
+
+        socket.on('disconnect', () => {
+            connected = false;
+            updateConnectionStatus(false);
+            addLog('Disconnected from server', 'error');
+        });
+
+        socket.on('multiplayer_state_update', (state) => {
+            addLog('State Update: ' + JSON.stringify(state, null, 2), 'received');
+        });
+
+        socket.on('multiplayer_game_over', (data) => {
+            addLog('GAME OVER: ' + JSON.stringify(data, null, 2), 'received');
+        });
+
+        socket.on('error', (data) => {
+            addLog('ERROR: ' + data.message, 'error');
+        });
+
+        socket.on('joined', (data) => {
+            addLog('Joined: ' + data.message, 'received');
+        });
+
+        // Update value displays
+        document.getElementById('gyroZ').oninput = function() {
+            document.getElementById('gyroZValue').textContent = this.value;
+        };
+
+        document.getElementById('tiltX').oninput = function() {
+            document.getElementById('tiltXValue').textContent = this.value;
+        };
+
+        document.getElementById('tiltY').oninput = function() {
+            document.getElementById('tiltYValue').textContent = this.value;
+        };
+
+        document.getElementById('shakeIntensity').oninput = function() {
+            document.getElementById('shakeValue').textContent = this.value;
+        };
+
+        // Send input
+        function sendInput() {
+            if (!connected) {
+                alert('Not connected to server!');
+                return;
+            }
+
+            const data = {
+                session_id: parseInt(document.getElementById('sessionId').value),
+                puck_id: parseInt(document.getElementById('puckId').value),
+                gyro_z: parseFloat(document.getElementById('gyroZ').value),
+                tilt_x: parseFloat(document.getElementById('tiltX').value),
+                tilt_y: parseFloat(document.getElementById('tiltY').value),
+                shake_intensity: parseFloat(document.getElementById('shakeIntensity').value),
+                shake_detected: parseFloat(document.getElementById('shakeIntensity').value) > 15,
+                button_held: document.getElementById('buttonHeld').checked,
+                timestamp: Date.now()
+            };
+
+            socket.emit('multiplayer_input', data);
+            addLog('Sent input: ' + JSON.stringify(data, null, 2), 'sent');
+        }
+
+        // Start game
+        async function startGame() {
+            const sessionId = parseInt(document.getElementById('sessionId').value);
+            const puckId = parseInt(document.getElementById('puckId').value);
+
+            const response = await fetch('/multiplayer/start/62', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    player_ids: [puckId],
+                    player_names: ['Test Player ' + puckId],
+                    rounds: 5
+                })
+            });
+
+            const result = await response.json();
+            addLog('Started game: ' + JSON.stringify(result, null, 2), 'received');
+
+            if (result.session_id) {
+                document.getElementById('sessionId').value = result.session_id;
+                socket.emit('join_multiplayer_session', { session_id: result.session_id });
+            }
+        }
+
+        // End game
+        async function endGame() {
+            const sessionId = parseInt(document.getElementById('sessionId').value);
+
+            const response = await fetch('/multiplayer/end/' + sessionId, {
+                method: 'POST'
+            });
+
+            const result = await response.json();
+            addLog('Ended game: ' + JSON.stringify(result, null, 2), 'received');
+        }
+
+        // Presets
+        function presetLightSpin() {
+            document.getElementById('gyroZ').value = 80;
+            document.getElementById('gyroZValue').textContent = 80;
+        }
+
+        function presetMediumSpin() {
+            document.getElementById('gyroZ').value = 200;
+            document.getElementById('gyroZValue').textContent = 200;
+        }
+
+        function presetHardSpin() {
+            document.getElementById('gyroZ').value = 350;
+            document.getElementById('gyroZValue').textContent = 350;
+        }
+
+        function presetTiltLeft() {
+            document.getElementById('tiltX').value = -30;
+            document.getElementById('tiltXValue').textContent = -30;
+        }
+
+        function presetTiltRight() {
+            document.getElementById('tiltX').value = 30;
+            document.getElementById('tiltXValue').textContent = 30;
+        }
+
+        function presetShake() {
+            document.getElementById('shakeIntensity').value = 50;
+            document.getElementById('shakeValue').textContent = 50;
+        }
+
+        function resetAll() {
+            document.getElementById('gyroZ').value = 0;
+            document.getElementById('gyroZValue').textContent = 0;
+            document.getElementById('tiltX').value = 0;
+            document.getElementById('tiltXValue').textContent = 0;
+            document.getElementById('tiltY').value = 0;
+            document.getElementById('tiltYValue').textContent = 0;
+            document.getElementById('shakeIntensity').value = 0;
+            document.getElementById('shakeValue').textContent = 0;
+            document.getElementById('buttonHeld').checked = false;
+        }
+
+        // Logging
+        function addLog(message, type = 'sent') {
+            const log = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry ' + type;
+            entry.textContent = '[' + new Date().toLocaleTimeString() + '] ' + message;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function updateConnectionStatus(isConnected) {
+            const status = document.getElementById('connectionStatus');
+            if (isConnected) {
+                status.className = 'status connected';
+                status.textContent = '🟢 Connected';
+            } else {
+                status.className = 'status disconnected';
+                status.textContent = '🔴 Disconnected';
+            }
+        }
+    </script>
+</body>
+</html>

@@ -21,21 +21,31 @@ multiplayer_bp = Blueprint('multiplayer', __name__)
 def start_mp_game(game_id):
     """
     Start a new multiplayer game
+    POST /multiplayer/start/62
+    Body: {"player_ids": [1, 2, 3, 4], "player_names": ["Alice", "Bob", "Charlie", "Dana"], "rounds": 5}
     POST /multiplayer/start/70
     Body: {"player_ids": [1, 2, 3, 4], "team_assignments": {1: 1, 2: 1, 3: 2, 4: 2}}
     """
     data = request.get_json()
     player_ids = data.get('player_ids', [])
     team_assignments = data.get('team_assignments')
+    player_names = data.get('player_names')
+    rounds = data.get('rounds', 5)
 
     if not player_ids:
         return jsonify({"error": "player_ids required"}), 400
 
-    if game_id not in [70, 71, 72, 73]:
+    if game_id not in [62, 70, 71, 72, 73]:
         return jsonify({"error": "Invalid game_id"}), 400
 
     try:
-        session_id, initial_state = start_multiplayer_game(game_id, player_ids, team_assignments)
+        session_id, initial_state = start_multiplayer_game(
+            game_id,
+            player_ids,
+            team_assignments,
+            player_names=player_names,
+            rounds=rounds
+        )
         return jsonify({
             "success": True,
             "session_id": session_id,
@@ -94,6 +104,13 @@ def tv_bomb_lobber():
 def tv_simon_says():
     """TV display for Simon Says Survival (Game 73)"""
     return render_template('tv_games/simon_says.html')
+
+
+@multiplayer_bp.route('/tv/shot-roulette-royale')
+def tv_shot_roulette_royale():
+    """TV display for Shot Roulette Royale (Game 62)"""
+    session_id = request.args.get('session', type=int)
+    return render_template('tv_games/shot_roulette_royale.html', session_id=session_id)
 
 
 # ============================================================================
