@@ -99,6 +99,18 @@ def tv_puck_racer(puck_id):
     return render_template('tv_games/puck_racer.html', puck_id=puck_id)
 
 
+@tv_games_bp.route('/tv/puck-racer-3d/<int:puck_id>')
+def tv_puck_racer_3d(puck_id):
+    """TV display for Puck Racer 3D (Game 52) - CINEMATIC VERSION"""
+    return render_template('tv_games/puck_racer_3d.html', puck_id=puck_id)
+
+
+@tv_games_bp.route('/tv/test-3d')
+def tv_test_3d():
+    """Simple 3D test - debugging"""
+    return render_template('tv_games/test_3d_simple.html')
+
+
 @tv_games_bp.route('/tv/obstacle-dodger/<int:puck_id>')
 def tv_obstacle_dodger(puck_id):
     """TV display for Obstacle Dodger (Game 53)"""
@@ -151,6 +163,12 @@ def tv_correlation_word(puck_id):
 def tv_greyhound_racing(puck_id):
     """TV display for Greyhound Racing (Game 61)"""
     return render_template('tv_games/greyhound_racing.html', puck_id=puck_id)
+
+
+@tv_games_bp.route('/tv/shot-roulette-royale/<int:puck_id>')
+def tv_shot_roulette_royale(puck_id):
+    """TV display for Shot Roulette Royale (Game 62)"""
+    return render_template('tv_games/shot_roulette_royale.html', puck_id=puck_id)
 
 
 # ============================================================================

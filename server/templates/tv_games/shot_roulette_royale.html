@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SHOT ROULETTE ROYALE - Table Wars</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/postprocessing/EffectComposer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/postprocessing/RenderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/shaders/CopyShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/postprocessing/ShaderPass.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0a1a;
+            font-family: 'Arial Black', sans-serif;
+            overflow: hidden;
+            color: white;
+        }
+
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 40px;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .hud-left, .hud-right {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .hud-item {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 12px 24px;
+            border-radius: 8px;
+            border: 2px solid #FFD700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .hud-label {
+            font-size: 14px;
+            color: #888;
+        }
+
+        .hud-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #FFD700;
+        }
+
+        #currentPlayer {
+            position: absolute;
+            top: 50%;
+            left: 40px;
+            transform: translateY(-50%);
+            z-index: 10;
+        }
+
+        #currentPlayer .player-name {
+            font-size: 48px;
+            color: #00FF88;
+            text-shadow: 0 0 20px #00FF88, 0 0 40px #00FF88;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        #currentPlayer .spin-prompt {
+            font-size: 24px;
+            color: #FFD700;
+            margin-top: 10px;
+            opacity: 0.8;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.02); }
+        }
+
+        #zoneLegend {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            z-index: 10;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 90%;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid white;
+        }
+
+        #title {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 36px;
+            color: #FFD700;
+            text-shadow: 0 0 30px #FFD700, 0 0 60px #FF6600;
+            letter-spacing: 4px;
+            z-index: 10;
+        }
+
+        #pointer {
+            position: absolute;
+            top: 50%;
+            right: 15%;
+            transform: translateY(-50%);
+            z-index: 5;
+        }
+
+        #pointer::before {
+            content: '';
+            display: block;
+            width: 0;
+            height: 0;
+            border-top: 30px solid transparent;
+            border-bottom: 30px solid transparent;
+            border-right: 50px solid #FFD700;
+            filter: drop-shadow(0 0 10px #FFD700);
+        }
+    </style>
+</head>
+<body>
+    <div id="title">SHOT ROULETTE ROYALE</div>
+
+    <div id="hud">
+        <div class="hud-left">
+            <div class="hud-item">
+                <div class="hud-label">Round</div>
+                <div class="hud-value"><span id="round">1</span> / <span id="totalRounds">5</span></div>
+            </div>
+        </div>
+        <div class="hud-right">
+            <div class="hud-item">
+                <div class="hud-label">Players</div>
+                <div class="hud-value" id="playerCount">0</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="currentPlayer">
+        <div class="player-name" id="spinnerName">WAITING...</div>
+        <div class="spin-prompt">SPIN YOUR PUCK!</div>
+    </div>
+
+    <div id="pointer"></div>
+
+    <div id="zoneLegend">
+        <div class="legend-item"><div class="legend-color" style="background: #FFD700;"></div>CHAMPION</div>
+        <div class="legend-item"><div class="legend-color" style="background: #4CAF50;"></div>DRINK ONE</div>
+        <div class="legend-item"><div class="legend-color" style="background: #8BC34A;"></div>DRINK TWO</div>
+        <div class="legend-item"><div class="legend-color" style="background: #F44336;"></div>CHUG</div>
+        <div class="legend-item"><div class="legend-color" style="background: #2196F3;"></div>SPIN AGAIN</div>
+        <div class="legend-item"><div class="legend-color" style="background: #9C27B0;"></div>IMMUNITY</div>
+        <div class="legend-item"><div class="legend-color" style="background: #FF9800;"></div>CHALLENGE</div>
+        <div class="legend-item"><div class="legend-color" style="background: #212121;"></div>BOMB</div>
+    </div>
+
+    <script>
+        const PUCK_ID = {{ puck_id }};
+
+        // Zone definitions with colors, icons, and probabilities (angle size)
+        const ZONES = [
+            { name: 'CHAMPION', color: 0xFFD700, angle: 25, icon: '👑' },      // Small - rare
+            { name: 'DRINK ONE', color: 0x4CAF50, angle: 60, icon: '🍺' },    // Large - common
+            { name: 'SPIN AGAIN', color: 0x2196F3, angle: 45, icon: '🔄' },   // Medium
+            { name: 'DRINK TWO', color: 0x8BC34A, angle: 50, icon: '🍻' },    // Medium-large
+            { name: 'IMMUNITY', color: 0x9C27B0, angle: 30, icon: '🛡️' },    // Small-medium
+            { name: 'CHUG', color: 0xF44336, angle: 35, icon: '💀' },          // Small-medium
+            { name: 'CHALLENGE', color: 0xFF9800, angle: 40, icon: '⚔️' },    // Medium
+            { name: 'BOMB', color: 0x212121, angle: 75, icon: '💣' }           // Large - dramatic
+        ];
+
+        // Verify angles sum to 360
+        const totalAngle = ZONES.reduce((sum, z) => sum + z.angle, 0);
+        console.log('Total angle:', totalAngle); // Should be 360
+
+        let scene, camera, renderer, composer;
+        let wheel, wheelGroup;
+        let zoneLabels = [];
+        let wheelRotation = 0;
+        let targetRotation = 0;
+        let isSpinning = false;
+        let lastFrameTime = performance.now();
+
+        // Game state
+        let gameState = {
+            currentSpinner: 'WAITING...',
+            round: 1,
+            totalRounds: 5,
+            playerCount: 0,
+            wheelRotation: 0,
+            spinning: false
+        };
+
+        function initThreeJS() {
+            // Scene with dark cosmic background
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a1a);
+
+            // Camera positioned to view wheel from the side
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(8, 2, 0);
+            camera.lookAt(0, 0, 0);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+
+            // Post-processing (Bloom for glow effects)
+            composer = new THREE.EffectComposer(renderer);
+            const renderPass = new THREE.RenderPass(scene, camera);
+            composer.addPass(renderPass);
+
+            const bloomPass = new THREE.UnrealBloomPass(
+                new THREE.Vector2(window.innerWidth, window.innerHeight),
+                1.2,   // strength
+                0.5,   // radius
+                0.7    // threshold
+            );
+            composer.addPass(bloomPass);
+
+            // Ambient light
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+
+            // Spotlight on wheel
+            const spotLight = new THREE.SpotLight(0xffffff, 1.5);
+            spotLight.position.set(10, 10, 5);
+            spotLight.castShadow = true;
+            spotLight.angle = Math.PI / 4;
+            scene.add(spotLight);
+
+            // Colored accent lights
+            const goldLight = new THREE.PointLight(0xFFD700, 0.8, 20);
+            goldLight.position.set(-5, 5, 5);
+            scene.add(goldLight);
+
+            const purpleLight = new THREE.PointLight(0x9C27B0, 0.5, 15);
+            purpleLight.position.set(5, -3, -5);
+            scene.add(purpleLight);
+
+            // Create the wheel
+            createRouletteWheel();
+
+            // Create background particles
+            createBackgroundParticles();
+
+            // Window resize handler
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function createRouletteWheel() {
+            wheelGroup = new THREE.Group();
+
+            const wheelRadius = 4;
+            const wheelDepth = 0.5;
+            let currentAngle = 0;
+
+            // Create each zone as a separate segment
+            ZONES.forEach((zone, index) => {
+                const startAngle = (currentAngle * Math.PI) / 180;
+                const endAngle = ((currentAngle + zone.angle) * Math.PI) / 180;
+                const midAngle = (startAngle + endAngle) / 2;
+
+                // Create zone segment using CylinderGeometry with custom shape
+                const shape = new THREE.Shape();
+                shape.moveTo(0, 0);
+                shape.absarc(0, 0, wheelRadius, startAngle, endAngle, false);
+                shape.lineTo(0, 0);
+
+                const extrudeSettings = {
+                    depth: wheelDepth,
+                    bevelEnabled: true,
+                    bevelThickness: 0.05,
+                    bevelSize: 0.05,
+                    bevelSegments: 3
+                };
+
+                const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+                const material = new THREE.MeshStandardMaterial({
+                    color: zone.color,
+                    metalness: 0.3,
+                    roughness: 0.4,
+                    emissive: zone.color,
+                    emissiveIntensity: 0.1
+                });
+
+                const segment = new THREE.Mesh(geometry, material);
+                segment.rotation.x = Math.PI / 2;
+                segment.position.z = -wheelDepth / 2;
+                segment.castShadow = true;
+                segment.receiveShadow = true;
+                segment.userData = { zoneName: zone.name, zoneIndex: index };
+                wheelGroup.add(segment);
+
+                // Add zone divider lines
+                const dividerGeometry = new THREE.BoxGeometry(wheelRadius + 0.1, 0.05, wheelDepth + 0.2);
+                const dividerMaterial = new THREE.MeshStandardMaterial({
+                    color: 0xFFD700,
+                    metalness: 0.8,
+                    roughness: 0.2
+                });
+                const divider = new THREE.Mesh(dividerGeometry, dividerMaterial);
+                divider.position.set(
+                    Math.cos(startAngle) * wheelRadius / 2,
+                    Math.sin(startAngle) * wheelRadius / 2,
+                    0
+                );
+                divider.rotation.z = startAngle;
+                wheelGroup.add(divider);
+
+                // Create 3D text label (using sprite for simplicity)
+                const canvas = document.createElement('canvas');
+                canvas.width = 512;
+                canvas.height = 256;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 48px Arial Black';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(zone.icon, 256, 80);
+                ctx.font = 'bold 32px Arial';
+                ctx.fillText(zone.name, 256, 160);
+
+                const texture = new THREE.CanvasTexture(canvas);
+                const spriteMaterial = new THREE.SpriteMaterial({
+                    map: texture,
+                    transparent: true
+                });
+                const sprite = new THREE.Sprite(spriteMaterial);
+                sprite.scale.set(2, 1, 1);
+                sprite.position.set(
+                    Math.cos(midAngle) * wheelRadius * 0.6,
+                    Math.sin(midAngle) * wheelRadius * 0.6,
+                    wheelDepth / 2 + 0.1
+                );
+                wheelGroup.add(sprite);
+                zoneLabels.push(sprite);
+
+                currentAngle += zone.angle;
+            });
+
+            // Center hub
+            const hubGeometry = new THREE.CylinderGeometry(0.8, 0.8, wheelDepth + 0.3, 32);
+            const hubMaterial = new THREE.MeshStandardMaterial({
+                color: 0x333333,
+                metalness: 0.9,
+                roughness: 0.1
+            });
+            const hub = new THREE.Mesh(hubGeometry, hubMaterial);
+            hub.rotation.x = Math.PI / 2;
+            hub.castShadow = true;
+            wheelGroup.add(hub);
+
+            // Golden rim
+            const rimGeometry = new THREE.TorusGeometry(wheelRadius + 0.1, 0.15, 16, 64);
+            const rimMaterial = new THREE.MeshStandardMaterial({
+                color: 0xFFD700,
+                metalness: 0.9,
+                roughness: 0.1,
+                emissive: 0xFFD700,
+                emissiveIntensity: 0.2
+            });
+            const rim = new THREE.Mesh(rimGeometry, rimMaterial);
+            wheelGroup.add(rim);
+
+            // Back rim
+            const backRim = rim.clone();
+            backRim.position.z = -wheelDepth;
+            wheelGroup.add(backRim);
+
+            scene.add(wheelGroup);
+        }
+
+        function createBackgroundParticles() {
+            const particleCount = 500;
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+            const colors = new Float32Array(particleCount * 3);
+
+            for (let i = 0; i < particleCount; i++) {
+                positions[i * 3] = (Math.random() - 0.5) * 50;
+                positions[i * 3 + 1] = (Math.random() - 0.5) * 50;
+                positions[i * 3 + 2] = (Math.random() - 0.5) * 50 - 10;
+
+                // Gold and purple particles
+                if (Math.random() > 0.5) {
+                    colors[i * 3] = 1;
+                    colors[i * 3 + 1] = 0.84;
+                    colors[i * 3 + 2] = 0;
+                } else {
+                    colors[i * 3] = 0.61;
+                    colors[i * 3 + 1] = 0.15;
+                    colors[i * 3 + 2] = 0.69;
+                }
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const material = new THREE.PointsMaterial({
+                size: 0.1,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.6
+            });
+
+            const particles = new THREE.Points(geometry, material);
+            scene.add(particles);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // WebSocket connection
+        const socket = io();
+
+        socket.on('connect', () => {
+            console.log('Connected to server');
+            socket.emit('join_game_room', { puck_id: PUCK_ID });
+            socket.emit('request_game_state', { puck_id: PUCK_ID });
+        });
+
+        socket.on('game_state_update', (state) => {
+            gameState = state;
+            updateHUD(state);
+            updateWheel(state);
+        });
+
+        socket.on('game_over', (data) => {
+            console.log('Game Over:', data);
+        });
+
+        function updateHUD(state) {
+            document.getElementById('round').textContent = state.round || 1;
+            document.getElementById('totalRounds').textContent = state.totalRounds || 5;
+            document.getElementById('playerCount').textContent = state.playerCount || 0;
+            document.getElementById('spinnerName').textContent = state.currentSpinner || 'WAITING...';
+        }
+
+        function updateWheel(state) {
+            if (state.wheelRotation !== undefined) {
+                targetRotation = (state.wheelRotation * Math.PI) / 180;
+            }
+            isSpinning = state.spinning || false;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const currentTime = performance.now();
+            const deltaTime = (currentTime - lastFrameTime) / 1000;
+            lastFrameTime = currentTime;
+
+            // Smooth wheel rotation
+            if (wheelGroup) {
+                if (isSpinning) {
+                    // During spin, lerp towards target
+                    wheelRotation = THREE.MathUtils.lerp(wheelRotation, targetRotation, 0.05);
+                } else {
+                    // Idle wobble animation
+                    wheelRotation += Math.sin(currentTime * 0.001) * 0.001;
+                }
+                wheelGroup.rotation.z = wheelRotation;
+
+                // Keep labels facing camera
+                zoneLabels.forEach(label => {
+                    label.quaternion.copy(camera.quaternion);
+                });
+            }
+
+            // Subtle camera movement
+            camera.position.y = 2 + Math.sin(currentTime * 0.0005) * 0.2;
+
+            composer.render();
+        }
+
+        // Initialize
+        initThreeJS();
+        animate();
+
+        console.log('SHOT ROULETTE ROYALE initialized - waiting for players...');
+    </script>
+</body>
+</html>
