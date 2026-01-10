@@ -1,0 +1,112 @@
+{
+  "projectName": "Table Wars - SHOT ROULETTE ROYALE",
+  "branchName": "feat/shot-roulette-royale",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Roulette Wheel Display",
+      "description": "As a player watching the bar screen, I want to see a massive 3D wheel with clear prize zones, so that I can plan my spin intensity and feel the tension.",
+      "acceptanceCriteria": [
+        "3D wheel renders with 8 zones: CHAMPION, DRINK ONE, DRINK TWO, CHUG, SPIN AGAIN, IMMUNITY, CHALLENGE, BOMB",
+        "Each zone has distinct color and icon",
+        "Wheel animates smoothly at 60fps",
+        "Current spinner's name highlighted",
+        "Zone sizes reflect probability (CHAMPION small, DRINK ONE large)",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Implemented 3D wheel with Three.js, 8 zones with distinct colors/icons, bloom effects"
+    },
+    {
+      "id": "US-002",
+      "title": "Puck Spin Detection",
+      "description": "As a player holding my puck, I want to physically spin my puck and have the wheel spin proportionally, so that my physical technique affects my outcome.",
+      "acceptanceCriteria": [
+        "Gyroscope Z-axis detects spin velocity (degrees/second)",
+        "Light spin (<100 deg/s) = wheel travels 1-2 zones",
+        "Medium spin (100-300 deg/s) = wheel travels 3-5 zones",
+        "Hard spin (>300 deg/s) = wheel travels 6-8 zones (risky!)",
+        "Spin data sent via WebSocket within 50ms",
+        "LED ring shows spin intensity (blue to yellow to red gradient)",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Implemented multiplayer session-based architecture with gyro_z spin detection, turn management, and zone outcomes. Firmware update needed separately."
+    },
+    {
+      "id": "US-003",
+      "title": "Wheel Physics and Resolution",
+      "description": "As a game system, I want realistic wheel physics with anticipation and resolution, so that every spin feels dramatic and uncertain.",
+      "acceptanceCriteria": [
+        "Wheel accelerates based on spin intensity",
+        "Wheel decelerates with realistic friction curve",
+        "Final 2 seconds play in slow motion for tension",
+        "Clicking sound as wheel passes each zone",
+        "Final zone highlighted with celebration/doom animation",
+        "SO CLOSE indicator when within 5% of adjacent zone",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Implemented cubic ease-out physics, slow-motion finale, Web Audio click sounds, zone highlighting with pulsing, and SO CLOSE indicator. Spin duration 3-8s based on velocity."
+    },
+    {
+      "id": "US-004",
+      "title": "Prize Zone Effects",
+      "description": "As a player landing on a zone, I want immediate visual and audio feedback with clear consequences, so that outcomes are dramatic and memorable.",
+      "acceptanceCriteria": [
+        "CHAMPION: Crown animation, winner picks someone to drink",
+        "DRINK ONE/TWO: Beer pour animation, player drinks",
+        "CHUG: Skull animation, dramatic music, player chugs",
+        "SPIN AGAIN: Arrows animation, immediate respin",
+        "IMMUNITY: Shield animation, skip next penalty",
+        "CHALLENGE: Swords animation, 1v1 mini-game prompt",
+        "BOMB: Explosion, EVERYONE drinks",
+        "Haptic feedback on puck matches outcome",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Multiplayer Turn Management",
+      "description": "As a group at the bar, I want clear turn order and scoreboard, so that everyone stays engaged and knows who's winning.",
+      "acceptanceCriteria": [
+        "Player queue displayed (who's next)",
+        "Current player highlighted with countdown (10 sec to spin)",
+        "Scoreboard: drinks taken, immunities held, challenges won",
+        "5 rounds per game by default (configurable)",
+        "Final results screen with champion declaration",
+        "Play Again shuffles turn order",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Controlled Spin Tutorial",
+      "description": "As a new player, I want a practice mode that teaches optimal spin technique, so that I develop skill and feel confident competing.",
+      "acceptanceCriteria": [
+        "Training Mode option before joining game",
+        "Target zones displayed with spin intensity required",
+        "Real-time feedback: Too light! Spin harder",
+        "Progress tracker: spins completed, accuracy %",
+        "Unlock Certified Spinner badge after 10 accurate spins",
+        "Tutorial completable in under 2 minutes",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

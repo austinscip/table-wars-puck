@@ -127,3 +127,28 @@ Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
 8. Turn advances after spin resolution
 
 ---
+
+## 2026-01-09 - US-003 COMPLETE: Dramatic Wheel Physics
+Thread: https://ampcode.com/threads/$AMP_CURRENT_THREAD_ID
+- **Achievement**: Transformed basic wheel into casino-quality experience
+- **Files changed:**
+  - server/templates/tv_games/shot_roulette_royale.html (major physics upgrade)
+- **Implementation details:**
+  - Cubic ease-out deceleration curve (matches backend physics)
+  - Slow-motion effect for final 2 seconds (lerpFactor 0.02-0.1)
+  - Web Audio API: whoosh on spin start, clicks on zone crossings
+  - Click frequency increases as spin slows (600-1000 Hz for tension)
+  - Zone highlighting: pulsing during slow-motion, bright on landing
+  - Brief flash (0.5 emissive) when crossing each zone
+  - "SO CLOSE" indicator when within 18° (5%) of adjacent zone
+  - Spin duration calculated: 3-8 seconds based on velocity
+- **Learnings for future iterations:**
+  - Web Audio must be initialized on user interaction (first spin)
+  - Cubic ease-out (1 - (1-p)³) feels much more realistic than linear lerp
+  - Slow-motion finale is CRITICAL for tension - reduces lerp to 0.02
+  - Zone crossing detection via modulo arithmetic and currentAngle tracking
+  - setTimeout for brief flash effects works well without blocking animation
+  - Pulsing emissive intensity during slow-motion builds anticipation
+  - "SO CLOSE" indicator adds dramatic near-miss moments
+
+---
