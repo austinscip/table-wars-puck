@@ -226,9 +226,19 @@
         };
 
         function initThreeJS() {
+            console.log('🔄 Initializing Three.js...');
+
+            if (typeof THREE === 'undefined') {
+                console.error('❌ THREE.js not loaded!');
+                alert('THREE.js failed to load. Check console.');
+                return;
+            }
+            console.log('✅ THREE.js loaded, version:', THREE.REVISION);
+
             // Scene with dark cosmic background
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x0a0a1a);
+            console.log('✅ Scene created');
 
             // Camera positioned to view wheel from the side
             camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -241,19 +251,28 @@
             renderer.shadowMap.enabled = true;
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
             document.body.appendChild(renderer.domElement);
+            console.log('✅ Renderer created and appended to body');
 
             // Post-processing (Bloom for glow effects)
-            composer = new THREE.EffectComposer(renderer);
-            const renderPass = new THREE.RenderPass(scene, camera);
-            composer.addPass(renderPass);
+            try {
+                composer = new THREE.EffectComposer(renderer);
+                const renderPass = new THREE.RenderPass(scene, camera);
+                composer.addPass(renderPass);
 
-            const bloomPass = new THREE.UnrealBloomPass(
-                new THREE.Vector2(window.innerWidth, window.innerHeight),
-                1.2,   // strength
-                0.5,   // radius
-                0.7    // threshold
-            );
-            composer.addPass(bloomPass);
+                const bloomPass = new THREE.UnrealBloomPass(
+                    new THREE.Vector2(window.innerWidth, window.innerHeight),
+                    1.2,   // strength
+                    0.5,   // radius
+                    0.7    // threshold
+                );
+                composer.addPass(bloomPass);
+                console.log('✅ Post-processing (bloom) setup complete');
+            } catch (e) {
+                console.error('❌ Post-processing failed:', e);
+                console.warn('⚠️ Falling back to basic rendering');
+                // Fall back to basic rendering without post-processing
+                composer = null;
+            }
 
             // Ambient light
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
@@ -276,17 +295,24 @@
             scene.add(purpleLight);
 
             // Create the wheel
+            console.log('🎡 Creating roulette wheel...');
             createRouletteWheel();
+            console.log('✅ Wheel created');
 
             // Create background particles
+            console.log('✨ Creating background particles...');
             createBackgroundParticles();
+            console.log('✅ Particles created');
 
             // Window resize handler
             window.addEventListener('resize', onWindowResize);
+
+            console.log('✅ Three.js initialization complete!');
         }
 
         function createRouletteWheel() {
             wheelGroup = new THREE.Group();
+            console.log('  - Creating wheel group with', ZONES.length, 'zones');
 
             const wheelRadius = 4;
             const wheelDepth = 0.5;
@@ -534,7 +560,12 @@
             // Subtle camera movement
             camera.position.y = 2 + Math.sin(currentTime * 0.0005) * 0.2;
 
-            composer.render();
+            // Render with or without post-processing
+            if (composer) {
+                composer.render();
+            } else {
+                renderer.render(scene, camera);
+            }
         }
 
         // Initialize
