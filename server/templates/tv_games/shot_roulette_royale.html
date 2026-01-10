@@ -518,14 +518,12 @@
 
             // Smooth wheel rotation
             if (wheelGroup) {
-                if (isSpinning) {
-                    // During spin, lerp towards target
-                    wheelRotation = THREE.MathUtils.lerp(wheelRotation, targetRotation, 0.05);
-                } else {
-                    // Idle wobble animation
-                    wheelRotation += Math.sin(currentTime * 0.001) * 0.001;
-                }
-                wheelGroup.rotation.z = wheelRotation;
+                // Always lerp towards target rotation
+                wheelRotation = THREE.MathUtils.lerp(wheelRotation, targetRotation, isSpinning ? 0.1 : 0.05);
+
+                // Add subtle wobble when idle
+                const wobble = isSpinning ? 0 : Math.sin(currentTime * 0.001) * 0.001;
+                wheelGroup.rotation.z = wheelRotation + wobble;
 
                 // Keep labels facing camera
                 zoneLabels.forEach(label => {
