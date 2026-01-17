@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Table Wars - Game Library</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+      color: white;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 5rem;
+      font-weight: 900;
+      text-align: center;
+      margin-bottom: 20px;
+      text-shadow: 0 8px 30px rgba(0,0,0,0.3);
+      letter-spacing: -3px;
+    }
+
+    .subtitle {
+      text-align: center;
+      font-size: 1.8rem;
+      opacity: 0.9;
+      margin-bottom: 60px;
+    }
+
+    .stats {
+      display: flex;
+      justify-content: center;
+      gap: 40px;
+      margin-bottom: 60px;
+      flex-wrap: wrap;
+    }
+
+    .stat {
+      background: rgba(255,255,255,0.1);
+      padding: 20px 40px;
+      border-radius: 20px;
+      backdrop-filter: blur(10px);
+    }
+
+    .stat-number {
+      font-size: 3rem;
+      font-weight: 900;
+      display: block;
+    }
+
+    .stat-label {
+      font-size: 1rem;
+      opacity: 0.8;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .games-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 30px;
+      margin-bottom: 60px;
+    }
+
+    .game-card {
+      background: rgba(255,255,255,0.1);
+      border-radius: 20px;
+      padding: 30px;
+      backdrop-filter: blur(10px);
+      transition: all 0.3s ease;
+      cursor: pointer;
+      border: 2px solid transparent;
+    }
+
+    .game-card:hover {
+      transform: translateY(-10px);
+      background: rgba(255,255,255,0.2);
+      border-color: rgba(255,255,255,0.3);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    }
+
+    .game-icon {
+      font-size: 4rem;
+      margin-bottom: 15px;
+    }
+
+    .game-title {
+      font-size: 1.8rem;
+      font-weight: 900;
+      margin-bottom: 10px;
+    }
+
+    .game-description {
+      font-size: 1rem;
+      opacity: 0.8;
+      margin-bottom: 15px;
+      line-height: 1.5;
+    }
+
+    .game-tags {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .tag {
+      background: rgba(255,255,255,0.2);
+      padding: 5px 12px;
+      border-radius: 50px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .tag.tap { background: rgba(255, 107, 107, 0.3); }
+    .tag.shake { background: rgba(255, 165, 0, 0.3); }
+    .tag.tilt { background: rgba(78, 205, 196, 0.3); }
+    .tag.spin { background: rgba(255, 217, 61, 0.3); }
+    .tag.multi { background: rgba(149, 225, 211, 0.3); }
+
+    footer {
+      text-align: center;
+      padding: 40px;
+      opacity: 0.7;
+    }
+
+    .coming-soon {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    .badge {
+      display: inline-block;
+      background: #FFD93D;
+      color: #1a1a2e;
+      padding: 5px 15px;
+      border-radius: 50px;
+      font-size: 0.8rem;
+      font-weight: 900;
+      margin-left: 10px;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎮 TABLE WARS</h1>
+    <p class="subtitle">Screen-Centric Magic Remote Games</p>
+
+    <div class="stats">
+      <div class="stat">
+        <span class="stat-number">11</span>
+        <span class="stat-label">Games Ready</span>
+      </div>
+      <div class="stat">
+        <span class="stat-number">349</span>
+        <span class="stat-label">Total Planned</span>
+      </div>
+      <div class="stat">
+        <span class="stat-number">27</span>
+        <span class="stat-label">Verticals</span>
+      </div>
+    </div>
+
+    <div class="games-grid">
+      <!-- Row 1: Core Action Games -->
+      <div class="game-card" onclick="location.href='speed-tap-challenge.html'">
+        <div class="game-icon">⚡</div>
+        <div class="game-title">Speed Tap Challenge</div>
+        <div class="game-description">Tap as fast as you can in 10 seconds. Test your finger speed with real-time TPS tracking!</div>
+        <div class="game-tags">
+          <span class="tag tap">TAP</span>
+          <span class="tag">1 Player</span>
+        </div>
+      </div>
+
+      <div class="game-card" onclick="location.href='spin-master.html'">
+        <div class="game-icon">🎰</div>
+        <div class="game-title">Spin Master</div>
+        <div class="game-description">Spin the wheel to win big! Beautiful physics wheel with jackpot celebrations.</div>
+        <div class="game-tags">
+          <span class="tag spin">SPIN</span>
+          <span class="tag">1-4 Players</span>
+        </div>
+      </div>
+
+      <div class="game-card" onclick="location.href='shake-duel.html'">
+        <div class="game-icon">💥</div>
+        <div class="game-title">Shake Duel</div>
+        <div class="game-description">Head-to-head shake battle! Shake faster than your opponent to win.</div>
+        <div class="game-tags">
+          <span class="tag shake">SHAKE</span>
+          <span class="tag multi">2 Players</span>
+        </div>
+      </div>
+
+      <!-- Row 2: Tilt/Balance Games -->
+      <div class="game-card" onclick="location.href='balance-hold.html'">
+        <div class="game-icon">⚖️</div>
+        <div class="game-title">Balance Hold</div>
+        <div class="game-description">Keep the ball centered for 30 seconds! Difficulty increases over time.</div>
+        <div class="game-tags">
+          <span class="tag tilt">TILT</span>
+          <span class="tag">1 Player</span>
+        </div>
+      </div>
+
+      <div class="game-card" onclick="location.href='tilt-maze.html'">
+        <div class="game-icon">🎯</div>
+        <div class="game-title">Tilt Maze Navigator</div>
+        <div class="game-description">Navigate through 3 maze levels. Race against the clock!</div>
+        <div class="game-tags">
+          <span class="tag tilt">TILT</span>
+          <span class="tag">1 Player</span>
+        </div>
+      </div>
+
+      <!-- Row 3: Reaction & Timing -->
+      <div class="game-card" onclick="location.href='reaction-time-test.html'">
+        <div class="game-icon">⏱️</div>
+        <div class="game-title">Reaction Time Test</div>
+        <div class="game-description">How fast are your reflexes? Measure your reaction time in milliseconds!</div>
+        <div class="game-tags">
+          <span class="tag tap">TAP</span>
+          <span class="tag">1 Player</span>
+        </div>
+      </div>
+
+      <div class="game-card" onclick="location.href='hot-potato.html'">
+        <div class="game-icon">🔥</div>
+        <div class="game-title">Hot Potato</div>
+        <div class="game-description">Pass the puck before time runs out! Last player standing wins.</div>
+        <div class="game-tags">
+          <span class="tag tap">TAP</span>
+          <span class="tag multi">2-4 Players</span>
+        </div>
+      </div>
+
+      <!-- Row 4: Team & Social -->
+      <div class="game-card" onclick="location.href='team-coordination.html'">
+        <div class="game-icon">🤝</div>
+        <div class="game-title">Team Coordination</div>
+        <div class="game-description">Shake in sync! Reach 90% team synchronization to win.</div>
+        <div class="game-tags">
+          <span class="tag shake">SHAKE</span>
+          <span class="tag multi">4 Players</span>
+        </div>
+      </div>
+
+      <div class="game-card" onclick="location.href='trivia-buzzer.html'">
+        <div class="game-icon">🧠</div>
+        <div class="game-title">Trivia Buzzer</div>
+        <div class="game-description">Quiz show competition! First to buzz in wins points.</div>
+        <div class="game-tags">
+          <span class="tag tap">TAP</span>
+          <span class="tag multi">2-4 Players</span>
+        </div>
+      </div>
+
+      <div class="game-card" onclick="location.href='find-your-match.html'">
+        <div class="game-icon">🎭</div>
+        <div class="game-title">Find Your Match</div>
+        <div class="game-description">Icebreaker game! Find your matching partner based on secret categories.</div>
+        <div class="game-tags">
+          <span class="tag tap">TAP</span>
+          <span class="tag multi">8 Players</span>
+        </div>
+      </div>
+
+      <!-- Row 5: Memory & Skill -->
+      <div class="game-card" onclick="location.href='simon-says-puck.html'">
+        <div class="game-icon">🧩</div>
+        <div class="game-title">Simon Says Puck</div>
+        <div class="game-description">Memory sequence challenge! Watch and repeat the growing pattern.</div>
+        <div class="game-tags">
+          <span class="tag tap">TAP</span>
+          <span class="tag shake">SHAKE</span>
+          <span class="tag tilt">TILT</span>
+          <span class="tag">1 Player</span>
+        </div>
+      </div>
+
+      <!-- Coming Soon Games -->
+      <div class="game-card coming-soon">
+        <div class="game-icon">🎲</div>
+        <div class="game-title">Dice Roll <span class="badge">Soon</span></div>
+        <div class="game-description">Shake to roll virtual dice. Perfect for board games!</div>
+        <div class="game-tags">
+          <span class="tag shake">SHAKE</span>
+        </div>
+      </div>
+
+      <div class="game-card coming-soon">
+        <div class="game-icon">🏆</div>
+        <div class="game-title">Tournament Mode <span class="badge">Soon</span></div>
+        <div class="game-description">Bracket-style competition across multiple games.</div>
+        <div class="game-tags">
+          <span class="tag multi">Multi-Game</span>
+        </div>
+      </div>
+
+      <div class="game-card coming-soon">
+        <div class="game-icon">🎨</div>
+        <div class="game-title">Custom Game Builder <span class="badge">Soon</span></div>
+        <div class="game-description">Create your own puck-controlled games!</div>
+        <div class="game-tags">
+          <span class="tag">Creator</span>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <p style="font-size: 1.2rem; margin-bottom: 10px;">🤖 Built with Claude Code</p>
+      <p style="opacity: 0.7;">Table Wars - Magic Remote Platform</p>
+      <p style="opacity: 0.7; margin-top: 20px;">🎮 11 Games Ready | 338 More Coming Soon</p>
+      <p style="opacity: 0.5; margin-top: 20px; font-size: 0.9rem;">All games ready for puck WebSocket integration</p>
+    </footer>
+  </div>
+</body>
+</html>

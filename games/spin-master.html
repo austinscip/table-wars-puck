@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spin Master - Table Wars</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: radial-gradient(circle at center, #1a1a2e 0%, #0f0f1e 100%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      color: white;
+    }
+
+    #game-container {
+      text-align: center;
+      width: 100%;
+      max-width: 1400px;
+      padding: 40px;
+    }
+
+    h1 {
+      font-size: 4rem;
+      font-weight: 900;
+      margin-bottom: 20px;
+      background: linear-gradient(45deg, #FFD700, #FFA500);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-shadow: 0 0 40px rgba(255, 215, 0, 0.3);
+      letter-spacing: -2px;
+    }
+
+    #instructions {
+      font-size: 1.5rem;
+      margin-bottom: 40px;
+      opacity: 0.8;
+    }
+
+    #canvas-container {
+      position: relative;
+      width: 600px;
+      height: 600px;
+      margin: 40px auto;
+    }
+
+    canvas {
+      display: block;
+      border-radius: 50%;
+      box-shadow: 0 0 60px rgba(255, 215, 0, 0.4), 0 0 100px rgba(255, 215, 0, 0.2);
+    }
+
+    #pointer {
+      position: absolute;
+      top: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 25px solid transparent;
+      border-right: 25px solid transparent;
+      border-top: 40px solid #FFD700;
+      filter: drop-shadow(0 4px 10px rgba(255, 215, 0, 0.6));
+      z-index: 10;
+    }
+
+    #rpm-meter {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-top: 20px;
+      color: #FFD700;
+    }
+
+    #score-display {
+      font-size: 3rem;
+      font-weight: 900;
+      margin-top: 30px;
+      color: #4ECDC4;
+    }
+
+    #spin-instruction {
+      font-size: 1.8rem;
+      margin-top: 30px;
+      padding: 20px 40px;
+      background: rgba(255, 215, 0, 0.1);
+      border-radius: 50px;
+      display: inline-block;
+      animation: pulse 2s ease infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    #start-btn {
+      background: linear-gradient(135deg, #FFD700, #FFA500);
+      color: #1a1a2e;
+      border: none;
+      padding: 30px 60px;
+      font-size: 2rem;
+      font-weight: 900;
+      border-radius: 100px;
+      cursor: pointer;
+      box-shadow: 0 10px 40px rgba(255, 215, 0, 0.4);
+      transition: all 0.3s ease;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    #start-btn:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 15px 50px rgba(255, 215, 0, 0.6);
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    #jackpot-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    #jackpot-message {
+      font-size: 8rem;
+      font-weight: 900;
+      color: #FFD700;
+      text-shadow: 0 0 20px #FFD700, 0 0 40px #FFD700, 0 0 60px #FFD700;
+      animation: jackpotPulse 0.5s ease infinite;
+    }
+
+    @keyframes jackpotPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+
+    .coin {
+      position: fixed;
+      font-size: 3rem;
+      pointer-events: none;
+      animation: coinFall 2s ease-out forwards;
+    }
+
+    @keyframes coinFall {
+      0% {
+        opacity: 1;
+        transform: translateY(0) rotate(0deg);
+      }
+      100% {
+        opacity: 0;
+        transform: translateY(600px) rotate(720deg);
+      }
+    }
+
+    #keyboard-hint {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 1.2rem;
+      opacity: 0.5;
+      background: rgba(0,0,0,0.3);
+      padding: 15px 30px;
+      border-radius: 50px;
+    }
+
+    #result-banner {
+      font-size: 3rem;
+      font-weight: 900;
+      margin-top: 30px;
+      padding: 20px 40px;
+      border-radius: 20px;
+      display: inline-block;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+
+    #result-banner.show {
+      opacity: 1;
+    }
+
+    #result-banner.big-win {
+      background: linear-gradient(135deg, #FFD700, #FFA500);
+      color: #1a1a2e;
+      box-shadow: 0 0 40px rgba(255, 215, 0, 0.6);
+    }
+
+    #result-banner.small-win {
+      background: linear-gradient(135deg, #4ECDC4, #44A08D);
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <div id="lobby">
+      <h1>🎰 SPIN MASTER 🎰</h1>
+      <p id="instructions">Spin the wheel, win big prizes!</p>
+      <button id="start-btn" onclick="startGame()">START GAME</button>
+    </div>
+
+    <div id="gameplay" class="hidden">
+      <h1>🎰 SPIN MASTER 🎰</h1>
+
+      <div id="canvas-container">
+        <div id="pointer"></div>
+        <canvas id="wheel-canvas" width="600" height="600"></canvas>
+      </div>
+
+      <div id="rpm-meter">RPM: 0</div>
+      <div id="spin-instruction">HOLD SPACEBAR TO SPIN</div>
+      <div id="result-banner"></div>
+      <div id="score-display">Total Score: 0</div>
+
+      <button id="start-btn" onclick="resetGame()" style="margin-top: 30px;">SPIN AGAIN</button>
+    </div>
+  </div>
+
+  <div id="jackpot-overlay">
+    <div id="jackpot-message">💰 JACKPOT! 💰</div>
+  </div>
+
+  <div id="keyboard-hint">HOLD SPACEBAR to spin (simulates spinning puck)</div>
+
+  <script>
+    // Game State
+    let gameState = 'LOBBY'; // LOBBY, SPINNING, SLOWING, STOPPED
+    let totalScore = 0;
+
+    // Wheel Physics
+    let wheelAngle = 0;
+    let wheelVelocity = 0;
+    let spinPower = 0;
+    let isSpinning = false;
+    let isStopped = true;
+
+    // Canvas
+    const canvas = document.getElementById('wheel-canvas');
+    const ctx = canvas.getContext('2d');
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const radius = 280;
+
+    // Wheel Segments
+    const segments = 30;
+    const segmentAngle = 360 / segments;
+
+    // Prize values (distributed around wheel)
+    const prizes = [
+      500, 100, 200, 100, 300, 100, 400, 100, 200, 100,
+      300, 100, 500, 100, 200, 100, 1000, 100, 200, 100, // 1000 = Big prize
+      300, 100, 400, 100, 200, 100, 5000, 100, 300, 100  // 5000 = JACKPOT
+    ];
+
+    // Segment colors
+    const colors = ['#FF6B6B', '#4ECDC4', '#FFD93D', '#95E1D3', '#F38181'];
+
+    // Audio
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // DOM Elements
+    const lobby = document.getElementById('lobby');
+    const gameplay = document.getElementById('gameplay');
+    const rpmMeter = document.getElementById('rpm-meter');
+    const scoreDisplay = document.getElementById('score-display');
+    const spinInstruction = document.getElementById('spin-instruction');
+    const resultBanner = document.getElementById('result-banner');
+    const jackpotOverlay = document.getElementById('jackpot-overlay');
+
+    // Keyboard Input
+    let spacePressed = false;
+
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && !spacePressed && gameState === 'PLAYING') {
+        e.preventDefault();
+        spacePressed = true;
+        startSpinning();
+      }
+    });
+
+    document.addEventListener('keyup', (e) => {
+      if (e.code === 'Space' && spacePressed) {
+        e.preventDefault();
+        spacePressed = false;
+        releaseSpinning();
+      }
+    });
+
+    function startGame() {
+      gameState = 'PLAYING';
+      lobby.classList.add('hidden');
+      gameplay.classList.remove('hidden');
+
+      totalScore = 0;
+      scoreDisplay.textContent = 'Total Score: ' + totalScore;
+      resultBanner.classList.remove('show');
+
+      // Start render loop
+      requestAnimationFrame(gameLoop);
+    }
+
+    function startSpinning() {
+      if (isStopped) {
+        isStopped = false;
+        isSpinning = true;
+        spinInstruction.textContent = 'SPINNING...';
+        resultBanner.classList.remove('show');
+      }
+    }
+
+    function releaseSpinning() {
+      if (isSpinning) {
+        isSpinning = false;
+        // Set initial velocity based on how long they held
+        wheelVelocity = spinPower * 0.5;
+        spinPower = 0;
+        spinInstruction.textContent = 'Wheel is spinning...';
+        playWhoosh();
+      }
+    }
+
+    function gameLoop() {
+      update();
+      render();
+      requestAnimationFrame(gameLoop);
+    }
+
+    function update() {
+      if (isSpinning) {
+        // Building up spin power while holding
+        spinPower = Math.min(spinPower + 0.5, 50);
+        wheelVelocity = spinPower;
+      } else if (wheelVelocity > 0.1) {
+        // Wheel is slowing down (friction)
+        wheelVelocity *= 0.97;
+
+        // Tick sound as wheel slows
+        if (wheelVelocity < 5 && wheelVelocity > 0.1) {
+          const currentSegment = Math.floor((wheelAngle % 360) / segmentAngle);
+          const prevSegment = Math.floor(((wheelAngle - wheelVelocity) % 360) / segmentAngle);
+
+          if (currentSegment !== prevSegment) {
+            playTick();
+          }
+        }
+      } else if (wheelVelocity <= 0.1 && !isStopped) {
+        // Wheel stopped
+        wheelVelocity = 0;
+        isStopped = true;
+        onWheelStopped();
+      }
+
+      // Update wheel angle
+      wheelAngle += wheelVelocity;
+      if (wheelAngle >= 360) wheelAngle -= 360;
+
+      // Update RPM display
+      const rpm = Math.round(wheelVelocity * 10);
+      rpmMeter.textContent = 'RPM: ' + rpm;
+    }
+
+    function render() {
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw wheel
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.rotate((wheelAngle * Math.PI) / 180);
+
+      for (let i = 0; i < segments; i++) {
+        const startAngle = (i * segmentAngle * Math.PI) / 180;
+        const endAngle = ((i + 1) * segmentAngle * Math.PI) / 180;
+
+        // Segment color
+        const colorIndex = i % colors.length;
+        ctx.fillStyle = colors[colorIndex];
+
+        // Special colors for big prizes
+        if (prizes[i] === 5000) {
+          ctx.fillStyle = '#FFD700'; // Gold for jackpot
+        } else if (prizes[i] === 1000) {
+          ctx.fillStyle = '#FF1493'; // Hot pink for 1000
+        }
+
+        // Draw segment
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, radius, startAngle, endAngle);
+        ctx.closePath();
+        ctx.fill();
+
+        // Draw border
+        ctx.strokeStyle = '#1a1a2e';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Draw prize value
+        ctx.save();
+        ctx.rotate(startAngle + (segmentAngle * Math.PI) / 360);
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#1a1a2e';
+        ctx.font = 'bold 20px Inter';
+        ctx.fillText(prizes[i], radius * 0.7, 5);
+        ctx.restore();
+      }
+
+      // Draw center circle
+      ctx.beginPath();
+      ctx.arc(0, 0, 40, 0, 2 * Math.PI);
+      ctx.fillStyle = '#1a1a2e';
+      ctx.fill();
+      ctx.strokeStyle = '#FFD700';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function onWheelStopped() {
+      // Calculate which segment the pointer is on
+      const pointerAngle = 90; // Pointer at top (90 degrees)
+      const normalizedAngle = (360 - wheelAngle + pointerAngle) % 360;
+      const segmentIndex = Math.floor(normalizedAngle / segmentAngle);
+      const prize = prizes[segmentIndex];
+
+      // Award points
+      totalScore += prize;
+      scoreDisplay.textContent = 'Total Score: ' + totalScore.toLocaleString();
+
+      // Result message
+      if (prize === 5000) {
+        showJackpot();
+      } else if (prize >= 1000) {
+        showBigWin(prize);
+      } else {
+        showSmallWin(prize);
+      }
+
+      spinInstruction.textContent = 'HOLD SPACEBAR TO SPIN AGAIN';
+    }
+
+    function showJackpot() {
+      // Jackpot overlay
+      jackpotOverlay.style.display = 'flex';
+
+      // Coin explosion
+      for (let i = 0; i < 50; i++) {
+        setTimeout(() => createCoin(), i * 50);
+      }
+
+      // Sound
+      playJackpotSound();
+
+      setTimeout(() => {
+        jackpotOverlay.style.display = 'none';
+      }, 3000);
+
+      // Result banner
+      resultBanner.textContent = '💰 JACKPOT! +5000 💰';
+      resultBanner.className = 'big-win show';
+    }
+
+    function showBigWin(prize) {
+      resultBanner.textContent = '🔥 BIG WIN! +' + prize + ' 🔥';
+      resultBanner.className = 'big-win show';
+      playWinSound();
+
+      for (let i = 0; i < 10; i++) {
+        setTimeout(() => createCoin(), i * 100);
+      }
+    }
+
+    function showSmallWin(prize) {
+      resultBanner.textContent = '✨ +' + prize + ' points ✨';
+      resultBanner.className = 'small-win show';
+      playSmallWinSound();
+    }
+
+    function createCoin() {
+      const coin = document.createElement('div');
+      coin.className = 'coin';
+      coin.textContent = '💰';
+      coin.style.left = (Math.random() * window.innerWidth) + 'px';
+      coin.style.top = '0px';
+      document.body.appendChild(coin);
+
+      setTimeout(() => coin.remove(), 2000);
+    }
+
+    function resetGame() {
+      wheelAngle = 0;
+      wheelVelocity = 0;
+      spinPower = 0;
+      isSpinning = false;
+      isStopped = true;
+      resultBanner.classList.remove('show');
+    }
+
+    // Sound Effects
+    function playWhoosh() {
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      oscillator.frequency.value = 100;
+      oscillator.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.5);
+      oscillator.type = 'sawtooth';
+
+      gainNode.gain.value = 0.3;
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.5);
+    }
+
+    function playTick() {
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      oscillator.frequency.value = 200;
+      oscillator.type = 'square';
+
+      gainNode.gain.value = 0.1;
+
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.02);
+    }
+
+    function playSmallWinSound() {
+      [261.63, 329.63, 392.00].forEach((freq, i) => {
+        setTimeout(() => {
+          const oscillator = audioCtx.createOscillator();
+          const gainNode = audioCtx.createGain();
+
+          oscillator.connect(gainNode);
+          gainNode.connect(audioCtx.destination);
+
+          oscillator.frequency.value = freq;
+          oscillator.type = 'sine';
+          gainNode.gain.value = 0.2;
+
+          oscillator.start();
+          oscillator.stop(audioCtx.currentTime + 0.2);
+        }, i * 100);
+      });
+    }
+
+    function playWinSound() {
+      [261.63, 329.63, 392.00, 523.25].forEach((freq, i) => {
+        setTimeout(() => {
+          const oscillator = audioCtx.createOscillator();
+          const gainNode = audioCtx.createGain();
+
+          oscillator.connect(gainNode);
+          gainNode.connect(audioCtx.destination);
+
+          oscillator.frequency.value = freq;
+          oscillator.type = 'sine';
+          gainNode.gain.value = 0.3;
+
+          oscillator.start();
+          oscillator.stop(audioCtx.currentTime + 0.3);
+        }, i * 150);
+      });
+    }
+
+    function playJackpotSound() {
+      // Ascending arpeggio loop
+      for (let j = 0; j < 3; j++) {
+        [261.63, 329.63, 392.00, 523.25, 659.25].forEach((freq, i) => {
+          setTimeout(() => {
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            oscillator.frequency.value = freq;
+            oscillator.type = 'sine';
+            gainNode.gain.value = 0.3;
+
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.2);
+          }, j * 500 + i * 100);
+        });
+      }
+    }
+  </script>
+</body>
+</html>

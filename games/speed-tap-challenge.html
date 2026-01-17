@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Speed Tap Challenge - Table Wars</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      color: white;
+    }
+
+    #game-container {
+      text-align: center;
+      width: 100%;
+      max-width: 1200px;
+      padding: 40px;
+    }
+
+    h1 {
+      font-size: 4rem;
+      font-weight: 900;
+      margin-bottom: 20px;
+      text-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      letter-spacing: -2px;
+    }
+
+    #instructions {
+      font-size: 1.5rem;
+      margin-bottom: 40px;
+      opacity: 0.9;
+    }
+
+    #tap-counter {
+      font-size: 12rem;
+      font-weight: 900;
+      line-height: 1;
+      margin: 40px 0;
+      text-shadow: 0 8px 40px rgba(0,0,0,0.4);
+      transition: transform 0.1s ease;
+    }
+
+    #tap-counter.tap-animation {
+      transform: scale(1.2);
+    }
+
+    #timer {
+      font-size: 3rem;
+      font-weight: 700;
+      margin-bottom: 40px;
+      opacity: 0.8;
+    }
+
+    #timer.warning {
+      color: #ff4757;
+      animation: pulse 0.5s ease infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.8; }
+      50% { opacity: 1; }
+    }
+
+    #start-btn {
+      background: white;
+      color: #667eea;
+      border: none;
+      padding: 30px 60px;
+      font-size: 2rem;
+      font-weight: 900;
+      border-radius: 100px;
+      cursor: pointer;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+      transition: all 0.3s ease;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    #start-btn:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 15px 50px rgba(0,0,0,0.4);
+    }
+
+    #start-btn:active {
+      transform: translateY(-2px);
+    }
+
+    #results {
+      display: none;
+      animation: slideIn 0.5s ease;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    #final-score {
+      font-size: 10rem;
+      font-weight: 900;
+      color: #ffd93d;
+      text-shadow: 0 8px 40px rgba(255, 217, 61, 0.5);
+      margin: 40px 0;
+    }
+
+    #rating {
+      font-size: 2.5rem;
+      margin-bottom: 40px;
+    }
+
+    .particle {
+      position: fixed;
+      pointer-events: none;
+      font-size: 3rem;
+      animation: explode 1s ease-out forwards;
+    }
+
+    @keyframes explode {
+      0% {
+        opacity: 1;
+        transform: translate(0, 0) scale(1);
+      }
+      100% {
+        opacity: 0;
+        transform: translate(var(--tx), var(--ty)) scale(0.5);
+      }
+    }
+
+    #tps-meter {
+      font-size: 1.5rem;
+      opacity: 0.7;
+      margin-top: 20px;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    #countdown-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.9);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    #countdown-number {
+      font-size: 20rem;
+      font-weight: 900;
+      color: white;
+      animation: countdownPulse 1s ease;
+    }
+
+    @keyframes countdownPulse {
+      0% {
+        transform: scale(0);
+        opacity: 0;
+      }
+      50% {
+        transform: scale(1.2);
+        opacity: 1;
+      }
+      100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+
+    #keyboard-hint {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 1.2rem;
+      opacity: 0.5;
+      background: rgba(0,0,0,0.3);
+      padding: 15px 30px;
+      border-radius: 50px;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <div id="lobby">
+      <h1>⚡ SPEED TAP CHALLENGE ⚡</h1>
+      <p id="instructions">Tap as fast as you can in 10 seconds!</p>
+      <button id="start-btn">START GAME</button>
+    </div>
+
+    <div id="gameplay" class="hidden">
+      <div id="timer">10.0</div>
+      <div id="tap-counter">0</div>
+      <div id="tps-meter">0.0 taps/sec</div>
+    </div>
+
+    <div id="results">
+      <h1>🎉 FINAL SCORE 🎉</h1>
+      <div id="final-score">0</div>
+      <div id="rating">Loading...</div>
+      <button id="start-btn" onclick="resetGame()">PLAY AGAIN</button>
+    </div>
+  </div>
+
+  <div id="countdown-overlay">
+    <div id="countdown-number">3</div>
+  </div>
+
+  <div id="keyboard-hint">Press SPACEBAR to tap (simulates puck button)</div>
+
+  <script>
+    // Game State
+    let gameState = 'LOBBY'; // LOBBY, COUNTDOWN, PLAYING, RESULTS
+    let tapCount = 0;
+    let timeRemaining = 10.0;
+    let gameInterval = null;
+    let tpsInterval = null;
+    let lastSecondTaps = 0;
+    let currentTPS = 0;
+
+    // Audio Context for sound effects
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // DOM Elements
+    const lobby = document.getElementById('lobby');
+    const gameplay = document.getElementById('gameplay');
+    const results = document.getElementById('results');
+    const tapCounter = document.getElementById('tap-counter');
+    const timer = document.getElementById('timer');
+    const tpsMeter = document.getElementById('tps-meter');
+    const finalScore = document.getElementById('final-score');
+    const rating = document.getElementById('rating');
+    const countdownOverlay = document.getElementById('countdown-overlay');
+    const countdownNumber = document.getElementById('countdown-number');
+
+    // Start Game
+    document.getElementById('start-btn').addEventListener('click', startGame);
+
+    // Keyboard Input (simulates puck tap)
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && gameState === 'PLAYING') {
+        e.preventDefault();
+        handleTap();
+      }
+    });
+
+    function startGame() {
+      gameState = 'COUNTDOWN';
+      lobby.classList.add('hidden');
+      gameplay.classList.remove('hidden');
+      results.style.display = 'none';
+
+      // Reset state
+      tapCount = 0;
+      timeRemaining = 10.0;
+      lastSecondTaps = 0;
+      currentTPS = 0;
+      updateDisplay();
+
+      // Countdown 3, 2, 1, GO!
+      playCountdown();
+    }
+
+    function playCountdown() {
+      countdownOverlay.style.display = 'flex';
+      let count = 3;
+
+      const countdownInterval = setInterval(() => {
+        if (count > 0) {
+          countdownNumber.textContent = count;
+          countdownNumber.style.animation = 'none';
+          setTimeout(() => {
+            countdownNumber.style.animation = 'countdownPulse 1s ease';
+          }, 10);
+          playBeep(400, 0.1);
+          count--;
+        } else {
+          countdownNumber.textContent = 'GO!';
+          countdownNumber.style.animation = 'none';
+          setTimeout(() => {
+            countdownNumber.style.animation = 'countdownPulse 1s ease';
+          }, 10);
+          playBeep(600, 0.2);
+
+          setTimeout(() => {
+            countdownOverlay.style.display = 'none';
+            startGameplay();
+          }, 1000);
+
+          clearInterval(countdownInterval);
+        }
+      }, 1000);
+    }
+
+    function startGameplay() {
+      gameState = 'PLAYING';
+
+      // Game timer (updates every 100ms for smooth countdown)
+      gameInterval = setInterval(() => {
+        timeRemaining -= 0.1;
+
+        if (timeRemaining <= 0) {
+          endGame();
+        } else {
+          updateDisplay();
+
+          // Warning at 5 seconds
+          if (timeRemaining <= 5 && timeRemaining > 4.9) {
+            timer.classList.add('warning');
+            playBeep(300, 0.1);
+          }
+        }
+      }, 100);
+
+      // TPS meter (updates every second)
+      tpsInterval = setInterval(() => {
+        currentTPS = tapCount - lastSecondTaps;
+        lastSecondTaps = tapCount;
+        tpsMeter.textContent = currentTPS.toFixed(1) + ' taps/sec';
+      }, 1000);
+    }
+
+    function handleTap() {
+      tapCount++;
+      updateDisplay();
+
+      // Visual feedback
+      tapCounter.classList.remove('tap-animation');
+      setTimeout(() => tapCounter.classList.add('tap-animation'), 10);
+
+      // Sound feedback
+      playTapSound();
+
+      // Particle explosion
+      createParticles();
+
+      // Milestone celebrations
+      if (tapCount === 50) {
+        celebrate('50 TAPS! 🔥');
+      } else if (tapCount === 100) {
+        celebrate('100 TAPS! 💯');
+      } else if (tapCount === 150) {
+        celebrate('150 TAPS! 🚀');
+      }
+    }
+
+    function updateDisplay() {
+      tapCounter.textContent = tapCount;
+      timer.textContent = timeRemaining.toFixed(1);
+    }
+
+    function endGame() {
+      gameState = 'RESULTS';
+      clearInterval(gameInterval);
+      clearInterval(tpsInterval);
+      timer.classList.remove('warning');
+
+      // Hide gameplay, show results
+      gameplay.classList.add('hidden');
+      results.style.display = 'block';
+
+      // Animate final score counting up
+      let currentScore = 0;
+      const scoreInterval = setInterval(() => {
+        currentScore += Math.ceil(tapCount / 20);
+        if (currentScore >= tapCount) {
+          currentScore = tapCount;
+          clearInterval(scoreInterval);
+        }
+        finalScore.textContent = currentScore;
+      }, 50);
+
+      // Rating based on performance
+      const avgTPS = tapCount / 10;
+      let ratingText = '';
+
+      if (avgTPS >= 12) {
+        ratingText = '🏆 SUPERHUMAN! 🏆';
+      } else if (avgTPS >= 10) {
+        ratingText = '⭐ AMAZING! ⭐';
+      } else if (avgTPS >= 8) {
+        ratingText = '🔥 GREAT JOB! 🔥';
+      } else if (avgTPS >= 6) {
+        ratingText = '👍 NICE WORK! 👍';
+      } else if (avgTPS >= 4) {
+        ratingText = '😊 GOOD TRY! 😊';
+      } else {
+        ratingText = '💪 KEEP PRACTICING! 💪';
+      }
+
+      rating.textContent = ratingText + ' (' + avgTPS.toFixed(1) + ' taps/sec)';
+
+      // Celebration sound
+      playSuccessSound();
+    }
+
+    function resetGame() {
+      gameState = 'LOBBY';
+      results.style.display = 'none';
+      lobby.classList.remove('hidden');
+      gameplay.classList.add('hidden');
+    }
+
+    function createParticles() {
+      const emojis = ['⚡', '💥', '✨', '⭐'];
+      const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+
+      for (let i = 0; i < 3; i++) {
+        const particle = document.createElement('div');
+        particle.className = 'particle';
+        particle.textContent = emoji;
+        particle.style.left = '50%';
+        particle.style.top = '50%';
+
+        const tx = (Math.random() - 0.5) * 300;
+        const ty = (Math.random() - 0.5) * 300;
+        particle.style.setProperty('--tx', tx + 'px');
+        particle.style.setProperty('--ty', ty + 'px');
+
+        document.body.appendChild(particle);
+
+        setTimeout(() => particle.remove(), 1000);
+      }
+    }
+
+    function celebrate(message) {
+      // Create celebration banner
+      const banner = document.createElement('div');
+      banner.style.cssText = `
+        position: fixed;
+        top: 20%;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 3rem;
+        font-weight: 900;
+        color: #ffd93d;
+        text-shadow: 0 4px 20px rgba(255, 217, 61, 0.8);
+        animation: slideIn 0.5s ease;
+        z-index: 999;
+        pointer-events: none;
+      `;
+      banner.textContent = message;
+      document.body.appendChild(banner);
+
+      // Extra particles
+      for (let i = 0; i < 20; i++) {
+        setTimeout(() => createParticles(), i * 50);
+      }
+
+      // Celebration sound
+      playMilestoneSound();
+
+      setTimeout(() => banner.remove(), 2000);
+    }
+
+    // Sound Effects using Web Audio API
+    function playTapSound() {
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      oscillator.frequency.value = 800 + (tapCount % 10) * 50; // Rising pitch
+      oscillator.type = 'sine';
+
+      gainNode.gain.value = 0.1;
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.1);
+    }
+
+    function playBeep(frequency, duration) {
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      oscillator.frequency.value = frequency;
+      oscillator.type = 'square';
+
+      gainNode.gain.value = 0.2;
+
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + duration);
+    }
+
+    function playMilestoneSound() {
+      // Ascending arpeggio
+      [0, 200, 400, 600].forEach((delay, i) => {
+        setTimeout(() => {
+          playBeep(400 + i * 200, 0.2);
+        }, delay);
+      });
+    }
+
+    function playSuccessSound() {
+      // Victory fanfare
+      const notes = [261.63, 329.63, 392.00, 523.25]; // C, E, G, C
+      notes.forEach((freq, i) => {
+        setTimeout(() => {
+          playBeep(freq, 0.3);
+        }, i * 200);
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shake Duel - Table Wars</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      color: white;
+    }
+
+    #game-container {
+      text-align: center;
+      width: 100%;
+      max-width: 1400px;
+      padding: 40px;
+    }
+
+    h1 {
+      font-size: 5rem;
+      font-weight: 900;
+      margin-bottom: 20px;
+      text-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      letter-spacing: -2px;
+      animation: shake-title 0.5s ease infinite;
+    }
+
+    @keyframes shake-title {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-5px) rotate(-1deg); }
+      75% { transform: translateX(5px) rotate(1deg); }
+    }
+
+    #instructions {
+      font-size: 1.5rem;
+      margin-bottom: 40px;
+      opacity: 0.9;
+    }
+
+    #battle-area {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      margin: 60px 0;
+      gap: 40px;
+    }
+
+    .player-section {
+      flex: 1;
+      max-width: 400px;
+    }
+
+    .player-name {
+      font-size: 3rem;
+      font-weight: 900;
+      margin-bottom: 20px;
+    }
+
+    .shake-meter {
+      width: 100%;
+      height: 400px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 20px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: inset 0 4px 20px rgba(0,0,0,0.3);
+    }
+
+    .shake-fill {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      background: linear-gradient(to top, #4ECDC4, #44A08D);
+      transition: height 0.1s ease;
+      border-radius: 0 0 20px 20px;
+    }
+
+    .player1 .shake-fill {
+      background: linear-gradient(to top, #FF6B6B, #FF4757);
+    }
+
+    .player2 .shake-fill {
+      background: linear-gradient(to top, #4ECDC4, #44A08D);
+    }
+
+    .shake-value {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 4rem;
+      font-weight: 900;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+      z-index: 10;
+    }
+
+    #timer {
+      font-size: 4rem;
+      font-weight: 900;
+      margin-bottom: 30px;
+      color: #FFD93D;
+    }
+
+    #countdown-display {
+      font-size: 15rem;
+      font-weight: 900;
+      color: white;
+      text-shadow: 0 0 40px rgba(255,255,255,0.8);
+      animation: pulse 1s ease;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0); opacity: 0; }
+      50% { transform: scale(1.2); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    #start-btn {
+      background: white;
+      color: #ee0979;
+      border: none;
+      padding: 30px 60px;
+      font-size: 2rem;
+      font-weight: 900;
+      border-radius: 100px;
+      cursor: pointer;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+      transition: all 0.3s ease;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    #start-btn:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 15px 50px rgba(0,0,0,0.4);
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    #results {
+      display: none;
+      animation: slideIn 0.5s ease;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    #winner-announcement {
+      font-size: 6rem;
+      font-weight: 900;
+      margin: 40px 0;
+      text-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+
+    .winner-player1 {
+      color: #FF6B6B;
+    }
+
+    .winner-player2 {
+      color: #4ECDC4;
+    }
+
+    #keyboard-hint {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 1.2rem;
+      opacity: 0.5;
+      background: rgba(0,0,0,0.3);
+      padding: 15px 30px;
+      border-radius: 50px;
+    }
+
+    .shake-particle {
+      position: fixed;
+      pointer-events: none;
+      font-size: 3rem;
+      animation: explode 1s ease-out forwards;
+    }
+
+    @keyframes explode {
+      0% {
+        opacity: 1;
+        transform: translate(0, 0) scale(1);
+      }
+      100% {
+        opacity: 0;
+        transform: translate(var(--tx), var(--ty)) scale(0.5);
+      }
+    }
+
+    #vs-divider {
+      font-size: 6rem;
+      font-weight: 900;
+      color: rgba(255,255,255,0.3);
+      text-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <div id="lobby">
+      <h1>💥 SHAKE DUEL 💥</h1>
+      <p id="instructions">Shake faster than your opponent for 10 seconds!</p>
+      <button id="start-btn" onclick="startGame()">START BATTLE</button>
+    </div>
+
+    <div id="gameplay" class="hidden">
+      <h1>💥 SHAKE DUEL 💥</h1>
+      <div id="timer">10.0s</div>
+
+      <div id="battle-area">
+        <div class="player-section player1">
+          <div class="player-name">PLAYER 1</div>
+          <div class="shake-meter">
+            <div class="shake-fill" id="shake1"></div>
+            <div class="shake-value" id="value1">0</div>
+          </div>
+        </div>
+
+        <div id="vs-divider">VS</div>
+
+        <div class="player-section player2">
+          <div class="player-name">PLAYER 2</div>
+          <div class="shake-meter">
+            <div class="shake-fill" id="shake2"></div>
+            <div class="shake-value" id="value2">0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="results">
+      <div id="winner-announcement">PLAYER 1 WINS!</div>
+      <button id="start-btn" onclick="resetGame()">BATTLE AGAIN</button>
+    </div>
+  </div>
+
+  <div id="keyboard-hint">A/D = Player 1 shake | Left/Right Arrow = Player 2 shake</div>
+
+  <script>
+    // Game State
+    let gameState = 'LOBBY';
+    let timeRemaining = 10.0;
+    let player1Score = 0;
+    let player2Score = 0;
+    let player1Intensity = 0;
+    let player2Intensity = 0;
+
+    // Audio
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // DOM Elements
+    const lobby = document.getElementById('lobby');
+    const gameplay = document.getElementById('gameplay');
+    const results = document.getElementById('results');
+    const timerDisplay = document.getElementById('timer');
+    const shake1Fill = document.getElementById('shake1');
+    const shake2Fill = document.getElementById('shake2');
+    const value1 = document.getElementById('value1');
+    const value2 = document.getElementById('value2');
+    const winnerAnnouncement = document.getElementById('winner-announcement');
+
+    // Keyboard tracking
+    let lastP1Key = null;
+    let lastP2Key = null;
+    let p1ShakeSpeed = 0;
+    let p2ShakeSpeed = 0;
+
+    document.addEventListener('keydown', (e) => {
+      if (gameState !== 'PLAYING') return;
+
+      const now = Date.now();
+
+      // Player 1 (A/D keys)
+      if (e.key === 'a' || e.key === 'd' || e.key === 'A' || e.key === 'D') {
+        if (lastP1Key && now - lastP1Key < 200) {
+          // Fast alternating = shaking!
+          player1Intensity = Math.min(player1Intensity + 5, 100);
+          p1ShakeSpeed++;
+          createParticles('left', '#FF6B6B');
+          playShakeSound(400);
+        }
+        lastP1Key = now;
+      }
+
+      // Player 2 (Arrow Left/Right)
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        if (lastP2Key && now - lastP2Key < 200) {
+          // Fast alternating = shaking!
+          player2Intensity = Math.min(player2Intensity + 5, 100);
+          p2ShakeSpeed++;
+          createParticles('right', '#4ECDC4');
+          playShakeSound(600);
+        }
+        lastP2Key = now;
+      }
+    });
+
+    function startGame() {
+      gameState = 'COUNTDOWN';
+      lobby.classList.add('hidden');
+      gameplay.classList.remove('hidden');
+      results.style.display = 'none';
+
+      // Reset
+      player1Score = 0;
+      player2Score = 0;
+      player1Intensity = 0;
+      player2Intensity = 0;
+      timeRemaining = 10.0;
+      p1ShakeSpeed = 0;
+      p2ShakeSpeed = 0;
+
+      updateDisplay();
+
+      // Countdown
+      playCountdown();
+    }
+
+    function playCountdown() {
+      let count = 3;
+      const countdownInterval = setInterval(() => {
+        if (count > 0) {
+          playBeep(400, 0.2);
+          count--;
+        } else {
+          playBeep(600, 0.3);
+          gameState = 'PLAYING';
+          requestAnimationFrame(gameLoop);
+          clearInterval(countdownInterval);
+        }
+      }, 1000);
+    }
+
+    function gameLoop() {
+      if (gameState === 'PLAYING') {
+        update();
+        render();
+        requestAnimationFrame(gameLoop);
+      }
+    }
+
+    function update() {
+      // Update timer
+      timeRemaining -= 1/60;
+      if (timeRemaining <= 0) {
+        endGame();
+        return;
+      }
+
+      // Decay intensity (shake harder to maintain!)
+      player1Intensity = Math.max(player1Intensity - 0.5, 0);
+      player2Intensity = Math.max(player2Intensity - 0.5, 0);
+
+      // Score based on intensity
+      player1Score += player1Intensity * 0.1;
+      player2Score += player2Intensity * 0.1;
+
+      updateDisplay();
+    }
+
+    function render() {
+      // Update shake meters
+      shake1Fill.style.height = player1Intensity + '%';
+      shake2Fill.style.height = player2Intensity + '%';
+
+      value1.textContent = Math.floor(player1Score);
+      value2.textContent = Math.floor(player2Score);
+
+      // Leading player gets glow
+      if (player1Score > player2Score) {
+        shake1Fill.style.boxShadow = '0 0 40px rgba(255, 107, 107, 0.8)';
+        shake2Fill.style.boxShadow = 'none';
+      } else if (player2Score > player1Score) {
+        shake2Fill.style.boxShadow = '0 0 40px rgba(78, 205, 196, 0.8)';
+        shake1Fill.style.boxShadow = 'none';
+      }
+    }
+
+    function updateDisplay() {
+      timerDisplay.textContent = timeRemaining.toFixed(1) + 's';
+    }
+
+    function endGame() {
+      gameState = 'RESULTS';
+      gameplay.classList.add('hidden');
+      results.style.display = 'block';
+
+      // Determine winner
+      if (player1Score > player2Score) {
+        winnerAnnouncement.textContent = '🏆 PLAYER 1 WINS! 🏆';
+        winnerAnnouncement.className = 'winner-player1';
+        playVictorySound();
+        // Confetti
+        for (let i = 0; i < 50; i++) {
+          setTimeout(() => createParticles('center', '#FF6B6B'), i * 50);
+        }
+      } else if (player2Score > player1Score) {
+        winnerAnnouncement.textContent = '🏆 PLAYER 2 WINS! 🏆';
+        winnerAnnouncement.className = 'winner-player2';
+        playVictorySound();
+        // Confetti
+        for (let i = 0; i < 50; i++) {
+          setTimeout(() => createParticles('center', '#4ECDC4'), i * 50);
+        }
+      } else {
+        winnerAnnouncement.textContent = '🤝 TIE GAME! 🤝';
+        winnerAnnouncement.className = '';
+      }
+
+      winnerAnnouncement.textContent += '\n\nP1: ' + Math.floor(player1Score) + ' | P2: ' + Math.floor(player2Score);
+    }
+
+    function resetGame() {
+      gameState = 'LOBBY';
+      results.style.display = 'none';
+      lobby.classList.remove('hidden');
+    }
+
+    function createParticles(side, color) {
+      const emojis = ['💥', '⚡', '💫'];
+      const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+
+      const particle = document.createElement('div');
+      particle.className = 'shake-particle';
+      particle.textContent = emoji;
+      particle.style.color = color;
+
+      if (side === 'left') {
+        particle.style.left = '25%';
+      } else if (side === 'right') {
+        particle.style.left = '75%';
+      } else {
+        particle.style.left = '50%';
+      }
+
+      particle.style.top = '50%';
+
+      const tx = (Math.random() - 0.5) * 300;
+      const ty = (Math.random() - 0.5) * 300;
+      particle.style.setProperty('--tx', tx + 'px');
+      particle.style.setProperty('--ty', ty + 'px');
+
+      document.body.appendChild(particle);
+
+      setTimeout(() => particle.remove(), 1000);
+    }
+
+    // Sound Effects
+    function playShakeSound(freq) {
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      oscillator.frequency.value = freq;
+      oscillator.type = 'sine';
+
+      gainNode.gain.value = 0.05;
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.1);
+    }
+
+    function playBeep(freq, duration) {
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      oscillator.frequency.value = freq;
+      oscillator.type = 'square';
+
+      gainNode.gain.value = 0.2;
+
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + duration);
+    }
+
+    function playVictorySound() {
+      const notes = [261.63, 329.63, 392.00, 523.25, 659.25];
+      notes.forEach((freq, i) => {
+        setTimeout(() => {
+          playBeep(freq, 0.3);
+        }, i * 150);
+      });
+    }
+  </script>
+</body>
+</html>

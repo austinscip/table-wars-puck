@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simon Says Puck - Memory Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .game-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 30px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 800px;
+            width: 90%;
+            position: relative;
+        }
+
+        h1 {
+            text-align: center;
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .scores-container {
+            display: flex;
+            justify-content: space-around;
+            margin: 30px 0;
+        }
+
+        .score-display {
+            text-align: center;
+        }
+
+        .score-label {
+            color: #666;
+            font-size: 1.1em;
+            margin-bottom: 5px;
+        }
+
+        .score-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .action-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 20px;
+            padding: 40px 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: white;
+            font-size: 1.5em;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .action-button:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .action-button.tap {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .action-button.shake {
+            background: linear-gradient(135deg, #38ef7d 0%, #11998e 100%);
+        }
+
+        .action-button.tilt-left {
+            background: linear-gradient(135deg, #feca57 0%, #ff9ff3 100%);
+        }
+
+        .action-button.tilt-right {
+            background: linear-gradient(135deg, #48c6ef 0%, #6f86d6 100%);
+        }
+
+        .action-button.active {
+            transform: scale(1.1);
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.8);
+            animation: action-pulse 0.3s ease;
+        }
+
+        @keyframes action-pulse {
+            0%, 100% { transform: scale(1.1); }
+            50% { transform: scale(1.15); }
+        }
+
+        .action-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .action-icon {
+            font-size: 2em;
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        .action-key {
+            font-size: 0.7em;
+            opacity: 0.8;
+            margin-top: 10px;
+        }
+
+        .sequence-display {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            padding: 30px;
+            margin: 30px 0;
+            text-align: center;
+            min-height: 150px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .sequence-title {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 1.2em;
+            margin-bottom: 15px;
+        }
+
+        .sequence-icons {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+            font-size: 2em;
+        }
+
+        .sequence-icon {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            padding: 10px 15px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .controls {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            color: #333;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2em;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            margin: 5px;
+            font-weight: bold;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn:active {
+            transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status {
+            text-align: center;
+            font-size: 1.3em;
+            color: #667eea;
+            margin: 20px 0;
+            font-weight: 500;
+            min-height: 30px;
+        }
+
+        .celebration {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .celebration.show {
+            display: flex;
+            animation: fadeIn 0.5s ease;
+        }
+
+        .celebration-content {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+            padding: 60px;
+            border-radius: 30px;
+            text-align: center;
+            animation: bounceIn 0.6s ease;
+        }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .celebration-content h2 {
+            font-size: 3em;
+            color: white;
+            margin-bottom: 20px;
+            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .final-score {
+            font-size: 2em;
+            color: white;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>🧠 Simon Says Puck</h1>
+        <p class="subtitle">Watch, remember, and repeat the sequence!</p>
+
+        <div class="scores-container">
+            <div class="score-display">
+                <div class="score-label">Current Round</div>
+                <div class="score-value" id="currentRound">0</div>
+            </div>
+            <div class="score-display">
+                <div class="score-label">High Score</div>
+                <div class="score-value" id="highScore">0</div>
+            </div>
+        </div>
+
+        <div class="sequence-display">
+            <div class="sequence-title" id="sequenceTitle">Press Start to begin!</div>
+            <div class="sequence-icons" id="sequenceIcons"></div>
+        </div>
+
+        <div class="status" id="status"></div>
+
+        <div class="actions-grid">
+            <button class="action-button tap" id="tapBtn" onclick="handleAction('tap')" disabled>
+                <span class="action-icon">👆</span>
+                <div>TAP</div>
+                <div class="action-key">Spacebar</div>
+            </button>
+            <button class="action-button shake" id="shakeBtn" onclick="handleAction('shake')" disabled>
+                <span class="action-icon">🔄</span>
+                <div>SHAKE</div>
+                <div class="action-key">S Key</div>
+            </button>
+            <button class="action-button tilt-left" id="tiltLeftBtn" onclick="handleAction('tilt-left')" disabled>
+                <span class="action-icon">⬅️</span>
+                <div>TILT LEFT</div>
+                <div class="action-key">← Arrow</div>
+            </button>
+            <button class="action-button tilt-right" id="tiltRightBtn" onclick="handleAction('tilt-right')" disabled>
+                <span class="action-icon">➡️</span>
+                <div>TILT RIGHT</div>
+                <div class="action-key">→ Arrow</div>
+            </button>
+        </div>
+
+        <div class="controls">
+            <button class="btn" id="startBtn" onclick="startGame()">Start Game</button>
+        </div>
+    </div>
+
+    <div class="celebration" id="celebration">
+        <div class="celebration-content">
+            <h2>❌ Game Over!</h2>
+            <div class="final-score" id="finalScore"></div>
+            <button class="btn" onclick="resetGame()">Try Again</button>
+        </div>
+    </div>
+
+    <script>
+        // Web Audio API setup
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playSound(frequency, duration, type = 'sine') {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.frequency.value = frequency;
+            oscillator.type = type;
+
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + duration);
+        }
+
+        const actionSounds = {
+            'tap': 440,
+            'shake': 554,
+            'tilt-left': 659,
+            'tilt-right': 784
+        };
+
+        function playActionSound(action) {
+            playSound(actionSounds[action], 0.2, 'sine');
+        }
+
+        function playErrorSound() {
+            playSound(200, 0.5, 'sawtooth');
+        }
+
+        function playSuccessSound() {
+            playSound(523, 0.15, 'sine');
+            setTimeout(() => playSound(659, 0.15, 'sine'), 100);
+        }
+
+        // Action icons
+        const actionIcons = {
+            'tap': '👆',
+            'shake': '🔄',
+            'tilt-left': '⬅️',
+            'tilt-right': '➡️'
+        };
+
+        // Game state
+        let gameActive = false;
+        let sequence = [];
+        let playerSequence = [];
+        let currentRound = 0;
+        let highScore = 0;
+        let showingSequence = false;
+        let waitingForInput = false;
+
+        function initGame() {
+            // Load high score from localStorage
+            const saved = localStorage.getItem('simonSaysHighScore');
+            if (saved) {
+                highScore = parseInt(saved);
+                document.getElementById('highScore').textContent = highScore;
+            }
+
+            // Keyboard controls
+            document.addEventListener('keydown', (e) => {
+                if (!waitingForInput) return;
+
+                let action = null;
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    action = 'tap';
+                } else if (e.code === 'KeyS') {
+                    action = 'shake';
+                } else if (e.code === 'ArrowLeft') {
+                    e.preventDefault();
+                    action = 'tilt-left';
+                } else if (e.code === 'ArrowRight') {
+                    e.preventDefault();
+                    action = 'tilt-right';
+                }
+
+                if (action) {
+                    handleAction(action);
+                }
+            });
+        }
+
+        function startGame() {
+            gameActive = true;
+            sequence = [];
+            playerSequence = [];
+            currentRound = 0;
+
+            document.getElementById('startBtn').style.display = 'none';
+            document.getElementById('status').textContent = 'Watch carefully!';
+
+            nextRound();
+        }
+
+        function nextRound() {
+            currentRound++;
+            playerSequence = [];
+
+            document.getElementById('currentRound').textContent = currentRound;
+
+            // Add random action to sequence
+            const actions = ['tap', 'shake', 'tilt-left', 'tilt-right'];
+            const randomAction = actions[Math.floor(Math.random() * actions.length)];
+            sequence.push(randomAction);
+
+            // Show sequence
+            showSequence();
+        }
+
+        async function showSequence() {
+            showingSequence = true;
+            waitingForInput = false;
+
+            disableButtons();
+
+            document.getElementById('sequenceTitle').textContent = 'Watch the sequence:';
+            document.getElementById('sequenceIcons').innerHTML = '';
+            document.getElementById('status').textContent = 'Memorize this pattern...';
+
+            // Show each action in sequence
+            for (let i = 0; i < sequence.length; i++) {
+                await wait(500);
+
+                const action = sequence[i];
+                highlightAction(action);
+                playActionSound(action);
+
+                // Add icon to display
+                const icon = document.createElement('div');
+                icon.className = 'sequence-icon';
+                icon.textContent = actionIcons[action];
+                document.getElementById('sequenceIcons').appendChild(icon);
+
+                await wait(600);
+                unhighlightAction(action);
+            }
+
+            await wait(500);
+
+            // Now player's turn
+            showingSequence = false;
+            waitingForInput = true;
+            enableButtons();
+
+            document.getElementById('sequenceTitle').textContent = 'Your turn - repeat the sequence!';
+            document.getElementById('status').textContent = `Enter ${sequence.length} action${sequence.length > 1 ? 's' : ''}`;
+        }
+
+        function handleAction(action) {
+            // WebSocket integration point: This would receive puck data
+            // When puck is tapped -> handleAction('tap')
+            // When puck is shaken -> handleAction('shake')
+            // When puck tilts left -> handleAction('tilt-left')
+            // When puck tilts right -> handleAction('tilt-right')
+
+            if (!waitingForInput) return;
+
+            playerSequence.push(action);
+
+            highlightAction(action);
+            playActionSound(action);
+
+            setTimeout(() => {
+                unhighlightAction(action);
+            }, 300);
+
+            // Check if correct
+            const index = playerSequence.length - 1;
+            if (playerSequence[index] !== sequence[index]) {
+                // Wrong!
+                gameOver();
+                return;
+            }
+
+            // Check if sequence complete
+            if (playerSequence.length === sequence.length) {
+                // Correct sequence!
+                waitingForInput = false;
+                disableButtons();
+
+                playSuccessSound();
+                document.getElementById('status').textContent = 'Perfect! Get ready for next round...';
+
+                setTimeout(() => {
+                    nextRound();
+                }, 1500);
+            }
+        }
+
+        function highlightAction(action) {
+            const btn = document.querySelector(`.action-button.${action}`);
+            btn.classList.add('active');
+        }
+
+        function unhighlightAction(action) {
+            const btn = document.querySelector(`.action-button.${action}`);
+            btn.classList.remove('active');
+        }
+
+        function enableButtons() {
+            document.querySelectorAll('.action-button').forEach(btn => {
+                btn.disabled = false;
+            });
+        }
+
+        function disableButtons() {
+            document.querySelectorAll('.action-button').forEach(btn => {
+                btn.disabled = true;
+            });
+        }
+
+        function gameOver() {
+            gameActive = false;
+            waitingForInput = false;
+            disableButtons();
+
+            playErrorSound();
+
+            const score = currentRound - 1;
+
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('simonSaysHighScore', highScore);
+                document.getElementById('highScore').textContent = highScore;
+                document.getElementById('finalScore').innerHTML = `
+                    <div>Your Score: ${score}</div>
+                    <div style="color: #FFD700; margin-top: 10px;">🏆 NEW HIGH SCORE! 🏆</div>
+                `;
+            } else {
+                document.getElementById('finalScore').textContent = `Your Score: ${score}`;
+            }
+
+            document.getElementById('status').textContent = 'Wrong sequence!';
+
+            setTimeout(() => {
+                document.getElementById('celebration').classList.add('show');
+            }, 1000);
+        }
+
+        function resetGame() {
+            gameActive = false;
+            sequence = [];
+            playerSequence = [];
+            currentRound = 0;
+
+            document.getElementById('celebration').classList.remove('show');
+            document.getElementById('startBtn').style.display = 'inline-block';
+            document.getElementById('currentRound').textContent = '0';
+            document.getElementById('sequenceTitle').textContent = 'Press Start to begin!';
+            document.getElementById('sequenceIcons').innerHTML = '';
+            document.getElementById('status').textContent = '';
+
+            disableButtons();
+        }
+
+        function wait(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // Initialize on load
+        initGame();
+    </script>
+</body>
+</html>

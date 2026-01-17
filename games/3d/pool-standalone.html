@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cinematic Pool - Table Wars</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; font-family: monospace; }
+    #info {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      color: #fff;
+      font-size: 1.2rem;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+      pointer-events: none;
+      z-index: 100;
+    }
+    #controls {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #fff;
+      background: rgba(0,0,0,0.7);
+      padding: 15px 30px;
+      border-radius: 10px;
+      text-align: center;
+      backdrop-filter: blur(10px);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <div>🎱 CINEMATIC POOL</div>
+    <div style="font-size: 0.9rem; opacity: 0.7; margin-top: 10px;" id="status">
+      ⌨️  Arrow Keys + Space (Loading...)
+    </div>
+  </div>
+
+  <div id="controls">
+    <div>ARROW KEYS → Aim | SPACE → Power Shot</div>
+    <div style="opacity: 0.5; margin-top: 5px; font-size: 0.8rem;">
+      (Puck tilt + shake when connected)
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+    // WebSocket connection for pucks
+    let ws = null;
+    try {
+      ws = new WebSocket('ws://localhost:8080');
+      ws.onopen = () => {
+        console.log('🎮 Puck connected!');
+        document.getElementById('status').textContent = '🎮 Puck Connected';
+        ws.send(JSON.stringify({ type: 'DISPLAY_CONNECT' }));
+      };
+      ws.onerror = () => {
+        console.log('⚠️ Puck WebSocket not available');
+        document.getElementById('status').textContent = '⌨️  Arrow Keys + Space';
+      };
+    } catch (err) {
+      console.log('WebSocket not available, using keyboard');
+    }
+
+    // Scene setup
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x000428, 0.02);
+
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 20, 25);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    document.body.appendChild(renderer.domElement);
+
+    // Post-processing
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      2.0,  // strength
+      0.4,  // radius
+      0.2   // threshold
+    );
+    composer.addPass(bloomPass);
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0x404080, 0.3);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    dirLight.position.set(10, 20, 10);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
+    scene.add(dirLight);
+
+    // Colored lights for bar vibe
+    const cyanLight = new THREE.PointLight(0x00ffff, 2, 50);
+    cyanLight.position.set(-10, 5, 0);
+    scene.add(cyanLight);
+
+    const magentaLight = new THREE.PointLight(0xff00ff, 2, 50);
+    magentaLight.position.set(10, 5, 0);
+    scene.add(magentaLight);
+
+    // Pool table
+    const tableGeometry = new THREE.BoxGeometry(20, 1, 10);
+    const tableMaterial = new THREE.MeshStandardMaterial({
+      color: 0x0a5d29,
+      roughness: 0.8,
+    });
+    const table = new THREE.Mesh(tableGeometry, tableMaterial);
+    table.position.y = -0.5;
+    table.receiveShadow = true;
+    scene.add(table);
+
+    // Rails
+    const railMaterial = new THREE.MeshStandardMaterial({
+      color: 0x8B4513,
+      metalness: 0.3,
+      roughness: 0.7,
+    });
+
+    const rails = [
+      { pos: [0, 0.5, 5.5], size: [20, 1, 0.5] },
+      { pos: [0, 0.5, -5.5], size: [20, 1, 0.5] },
+      { pos: [10.25, 0.5, 0], size: [0.5, 1, 10] },
+      { pos: [-10.25, 0.5, 0], size: [0.5, 1, 10] },
+    ];
+
+    rails.forEach(({ pos, size }) => {
+      const railGeometry = new THREE.BoxGeometry(...size);
+      const rail = new THREE.Mesh(railGeometry, railMaterial);
+      rail.position.set(...pos);
+      rail.castShadow = true;
+      scene.add(rail);
+    });
+
+    // Cue ball (player controlled)
+    const cueBallGeometry = new THREE.SphereGeometry(0.5, 32, 32);
+    const cueBallMaterial = new THREE.MeshStandardMaterial({
+      color: 0x00ffff,
+      metalness: 0.9,
+      roughness: 0.1,
+      emissive: 0x00ffff,
+      emissiveIntensity: 0.3,
+    });
+    const cueBall = new THREE.Mesh(cueBallGeometry, cueBallMaterial);
+    cueBall.position.set(0, 1, 3);
+    cueBall.castShadow = true;
+    scene.add(cueBall);
+
+    // Ball physics (simple)
+    let ballVelocity = new THREE.Vector3();
+    let tiltX = 0, tiltY = 0;
+
+    // Target balls
+    const targetBalls = [];
+    const targetPositions = [
+      [0, 1, -3], [1, 1, -3], [-1, 1, -3],
+      [0.5, 1, -4], [-0.5, 1, -4],
+    ];
+    const targetColors = [0xff0040, 0xff6b00, 0xffd700, 0x00ff80, 0x0080ff];
+
+    targetPositions.forEach((pos, i) => {
+      const ballGeometry = new THREE.SphereGeometry(0.5, 32, 32);
+      const ballMaterial = new THREE.MeshStandardMaterial({
+        color: targetColors[i],
+        metalness: 0.8,
+        roughness: 0.2,
+      });
+      const ball = new THREE.Mesh(ballGeometry, ballMaterial);
+      ball.position.set(...pos);
+      ball.castShadow = true;
+      ball.velocity = new THREE.Vector3();
+      scene.add(ball);
+      targetBalls.push(ball);
+    });
+
+    // WebSocket input
+    if (ws) {
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          if (data.type === 'SENSOR_UPDATE') {
+            const ax = data.data.ax || 0;
+            const ay = data.data.ay || 0;
+            tiltX = ax / 10;
+            tiltY = ay / 10;
+          }
+
+          if (data.type === 'SHAKE_DETECTED') {
+            // Power shot
+            ballVelocity.x = tiltX * 15;
+            ballVelocity.z = tiltY * 15;
+          }
+        } catch (err) {}
+      };
+    }
+
+    // Keyboard controls
+    const keys = {};
+    window.addEventListener('keydown', (e) => {
+      keys[e.key] = true;
+
+      if (e.key === ' ') {
+        // Power shot
+        ballVelocity.x = tiltX * 10;
+        ballVelocity.z = tiltY * 10;
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      keys[e.key] = false;
+    });
+
+    // Controls
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enablePan = false;
+    controls.minDistance = 10;
+    controls.maxDistance = 40;
+    controls.maxPolarAngle = Math.PI / 2.5;
+
+    // Animation loop
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Keyboard input (fallback)
+      if (keys['ArrowLeft']) tiltX = -1;
+      else if (keys['ArrowRight']) tiltX = 1;
+      else tiltX *= 0.9;
+
+      if (keys['ArrowUp']) tiltY = -1;
+      else if (keys['ArrowDown']) tiltY = 1;
+      else tiltY *= 0.9;
+
+      // Apply tilt force to cue ball
+      ballVelocity.x += tiltX * 0.1;
+      ballVelocity.z += tiltY * 0.1;
+
+      // Apply velocity
+      cueBall.position.add(ballVelocity);
+
+      // Damping
+      ballVelocity.multiplyScalar(0.95);
+
+      // Ball-to-ball collisions (simple)
+      targetBalls.forEach((ball, i) => {
+        const dist = cueBall.position.distanceTo(ball.position);
+        if (dist < 1) {
+          // Collision!
+          const direction = new THREE.Vector3()
+            .subVectors(ball.position, cueBall.position)
+            .normalize();
+
+          ball.velocity.add(direction.multiplyScalar(ballVelocity.length()));
+          ballVelocity.multiplyScalar(-0.5); // Bounce back
+        }
+
+        // Update target ball positions
+        ball.position.add(ball.velocity);
+        ball.velocity.multiplyScalar(0.95);
+
+        // Keep on table
+        ball.position.x = Math.max(-9.5, Math.min(9.5, ball.position.x));
+        ball.position.z = Math.max(-5, Math.min(5, ball.position.z));
+      });
+
+      // Keep cue ball on table
+      cueBall.position.x = Math.max(-9.5, Math.min(9.5, cueBall.position.x));
+      cueBall.position.z = Math.max(-5, Math.min(5, cueBall.position.z));
+
+      // Animated lights
+      cyanLight.intensity = 2 + Math.sin(Date.now() * 0.001) * 0.5;
+      magentaLight.intensity = 2 + Math.cos(Date.now() * 0.001) * 0.5;
+
+      controls.update();
+      composer.render();
+    }
+
+    animate();
+
+    // Window resize
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      composer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
