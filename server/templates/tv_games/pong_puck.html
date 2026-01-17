@@ -18,6 +18,8 @@
     </div>
     <canvas id="gameCanvas" width="800" height="600"></canvas>
 
+    <!-- Sprint 1D: State validation -->
+    <script src="/static/js/game_state_validator.js"></script>
     <script>
         const PUCK_ID = {{ puck_id }};
         const socket = io();
@@ -25,12 +27,21 @@
         const ctx = canvas.getContext('2d');
         let gameState = null;
 
+        // Sprint 1D: Validator for single-player game
+        const stateValidator = SinglePlayerValidator;
+
         socket.on('connect', () => {
             socket.emit('join_game_room', { puck_id: PUCK_ID });
             socket.emit('request_game_state', { puck_id: PUCK_ID });
         });
 
         socket.on('game_state_update', (state) => {
+            // Sprint 1D: Validate state
+            if (!stateValidator.validate(state)) {
+                console.error('Invalid game state received, skipping update');
+                return;
+            }
+
             gameState = state;
             document.getElementById('playerScore').textContent = state.player_score;
             document.getElementById('aiScore').textContent = state.ai_score;

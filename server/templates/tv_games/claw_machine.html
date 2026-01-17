@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🎰 CLAW MACHINE - Table Wars</title>
+    <!-- Sprint 1D: State validation -->
+    <script src="/static/js/game_state_validator.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
@@ -225,6 +227,11 @@
         // Game state
         let gameState = null;
 
+        // Sprint 1D: Validator for 3D game
+        const stateValidator = new GameStateValidator([\'score\', \'game_over\'])
+            .withTypes({ score: \'number\', game_over: \'boolean\' })
+            .withOptional([\'position\', \'rotation\', \'speed\']);
+
         // Socket events
         socket.on('connect', () => {
             console.log('Connected to server');
@@ -233,6 +240,12 @@
         });
 
         socket.on('game_state_update', (state) => {
+            // Sprint 1D: Validate state
+            if (!stateValidator.validate(state)) {
+                console.error('Invalid game state received, skipping update');
+                return;
+            }
+
             gameState = state;
             updateGame(state);
         });

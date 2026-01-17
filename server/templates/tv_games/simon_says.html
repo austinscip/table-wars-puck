@@ -90,9 +90,14 @@
 
     <div class="players" id="players"></div>
 
+    <!-- Sprint 1D: State validation -->
+    <script src="/static/js/game_state_validator.js"></script>
     <script>
         const socket = io();
         let gameState = null;
+
+        // Sprint 1D: Validator for multiplayer game
+        const stateValidator = MultiplayerValidator;
 
         const commandIcons = {
             'SHAKE': '🔄',

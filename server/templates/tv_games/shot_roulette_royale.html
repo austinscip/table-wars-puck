@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SHOT ROULETTE ROYALE - Table Wars</title>
+    <!-- Sprint 1D: State validation -->
+    <script src="/static/js/game_state_validator.js"></script>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/postprocessing/EffectComposer.js"></script>
@@ -235,6 +237,11 @@
             wheelRotation: 0,
             spinning: false
         };
+
+        // Sprint 1D: Validator for 3D game
+        const stateValidator = new GameStateValidator([\'score\', \'game_over\'])
+            .withTypes({ score: \'number\', game_over: \'boolean\' })
+            .withOptional([\'position\', \'rotation\', \'speed\']);
 
         function initThreeJS() {
             console.log('🔄 Initializing Three.js...');
@@ -625,6 +632,12 @@
         });
 
         socket.on('multiplayer_state_update', (state) => {
+            // Sprint 1D: Validate state
+            if (!stateValidator.validate(state)) {
+                console.error('Invalid game state received, skipping update');
+                return;
+            }
+
             demoMode = false;  // Real game is running, disable demo mode
             gameState = state;
             updateHUD(state);

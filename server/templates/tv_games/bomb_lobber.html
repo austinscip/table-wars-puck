@@ -75,6 +75,8 @@
     </div>
     <div class="player-stats" id="playerStats"></div>
 
+    <!-- Sprint 1D: State validation -->
+    <script src="/static/js/game_state_validator.js"></script>
     <script>
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
@@ -83,6 +85,9 @@
 
         const socket = io();
         let gameState = null;
+
+        // Sprint 1D: Validator for multiplayer game
+        const stateValidator = MultiplayerValidator;
 
         socket.on('connect', () => {
             const urlParams = new URLSearchParams(window.location.search);
@@ -93,6 +98,12 @@
         });
 
         socket.on('multiplayer_state_update', (state) => {
+            // Sprint 1D: Validate state
+            if (!stateValidator.validate(state)) {
+                console.error('Invalid game state received, skipping update');
+                return;
+            }
+
             gameState = state;
             updateHUD(state);
         });
