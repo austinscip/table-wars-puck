@@ -168,6 +168,9 @@
         </div>
     </div>
 
+    <!-- Sprint 1D: State validation -->
+    <script src="/static/js/game_state_validator.js"></script>
+
     <script>
         const PUCK_ID = {{ puck_id }};
         const socket = io();
@@ -176,6 +179,12 @@
 
         let gameState = null;
         let lastCrashes = 0;
+
+        // Sprint 1D: Create validator for this game
+        const stateValidator = new GameStateValidator(['score', 'position', 'game_over'])
+            .withTypes({ score: 'number', position: 'object', game_over: 'boolean' })
+            .withRanges({ score: [0, 1000000] })
+            .withOptional(['crashes', 'nitro', 'speed', 'distance', 'combo']);
 
         // Connect to WebSocket
         socket.on('connect', () => {
@@ -186,16 +195,23 @@
 
         // Receive game state updates
         socket.on('game_state_update', (state) => {
+            // Sprint 1D: Validate state before using
+            if (!stateValidator.validate(state)) {
+                console.error('Invalid game state received, skipping update');
+                return;
+            }
+
             demoMode = false;  // Real game is running, disable demo
             gameState = state;
             updateHUD(state);
             render(state);
 
-            // Detect crashes (flash screen)
-            if (state.crashes > lastCrashes) {
+            // Detect crashes (flash screen) - Sprint 1D: Safe access
+            const crashes = safeGet(state, 'crashes', 0);
+            if (crashes > lastCrashes) {
                 document.body.classList.add('crash-flash');
                 setTimeout(() => document.body.classList.remove('crash-flash'), 300);
-                lastCrashes = state.crashes;
+                lastCrashes = crashes;
             }
         });
 

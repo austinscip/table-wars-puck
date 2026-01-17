@@ -36,6 +36,9 @@ from multiplayer_routes import init_multiplayer_routes
 # Import firmware OTA routes
 from firmware_routes import init_firmware_routes
 
+# Import analytics routes
+from analytics_routes import init_analytics_routes
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'tablewars_secret_2024'
 CORS(app)
@@ -675,14 +678,16 @@ if __name__ == '__main__':
     init_trivia_routes(app, socketio)
     init_tv_game_routes(app, socketio)
     init_multiplayer_routes(app, socketio)
-    init_firmware_routes(app)  # NEW: OTA firmware updates
+    init_firmware_routes(app)  # OTA firmware updates
+    init_analytics_routes(app)  # NEW: Analytics dashboard (Sprint 1B)
 
     print("🚀 Starting server...")
     print("📊 Leaderboard: http://localhost:5001")
     print("🎭 Admin Dashboard: http://localhost:5001/admin")
     print("📡 API Docs: http://localhost:5001/api/stats")
     print("🎮 TV Games (52-56): http://localhost:5001/tv/puck-racer/1")
-    print("🔧 Firmware Dashboard: http://localhost:5001/firmware/dashboard")  # NEW
+    print("🔧 Firmware Dashboard: http://localhost:5001/firmware/dashboard")
+    print("📈 Analytics: http://localhost:5001/admin/analytics/<bar-slug>")  # NEW
     print("\n⏸️  Press Ctrl+C to stop\n")
 
     socketio.run(app, host='0.0.0.0', port=5001, debug=True, allow_unsafe_werkzeug=True)
