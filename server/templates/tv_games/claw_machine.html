@@ -277,8 +277,13 @@
                 finger.rotation.x = Math.sin(angle) * fingerAngle;
             });
 
-            // Update prizes
-            prizes.forEach(prize => scene.remove(prize));
+            // Update prizes - Sprint 1D: Properly dispose to prevent memory leak
+            prizes.forEach(prize => {
+                scene.remove(prize);
+                // Dispose geometry and material to free GPU memory
+                if (prize.geometry) prize.geometry.dispose();
+                if (prize.material) prize.material.dispose();
+            });
             prizes.length = 0;
 
             state.prizes.forEach(prizeData => {
@@ -287,21 +292,28 @@
                 }
             });
 
-            // If prize is grabbed, attach to claw
+            // If prize is grabbed, attach to claw - Sprint 1D: Prevent duplicate meshes
+            const clawFingersCount = clawFingers.length;
             if (state.grabbed_prize) {
-                const grabbedGeometry = new THREE.SphereGeometry(0.3, 16, 16);
-                const grabbedMaterial = new THREE.MeshPhongMaterial({
-                    color: prizeColors[state.grabbed_prize.type],
-                    emissive: 0xFFFF00,
-                    emissiveIntensity: 0.5
-                });
-                const grabbedMesh = new THREE.Mesh(grabbedGeometry, grabbedMaterial);
-                grabbedMesh.position.y = -0.8;
-                clawHead.add(grabbedMesh);
+                // Only create if not already attached
+                if (clawHead.children.length === clawFingersCount) {
+                    const grabbedGeometry = new THREE.SphereGeometry(0.3, 16, 16);
+                    const grabbedMaterial = new THREE.MeshPhongMaterial({
+                        color: prizeColors[state.grabbed_prize.type],
+                        emissive: 0xFFFF00,
+                        emissiveIntensity: 0.5
+                    });
+                    const grabbedMesh = new THREE.Mesh(grabbedGeometry, grabbedMaterial);
+                    grabbedMesh.position.y = -0.8;
+                    clawHead.add(grabbedMesh);
+                }
             } else {
-                // Remove any attached prizes
-                while(clawHead.children.length > 4) {
-                    clawHead.remove(clawHead.children[clawHead.children.length - 1]);
+                // Remove any attached prizes - Sprint 1D: Dispose properly
+                while(clawHead.children.length > clawFingersCount) {
+                    const child = clawHead.children[clawHead.children.length - 1];
+                    clawHead.remove(child);
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) child.material.dispose();
                 }
             }
         }

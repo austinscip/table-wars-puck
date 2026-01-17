@@ -17,7 +17,7 @@
         <div>HITS: <span id="hits">0/5</span></div>
         <div>TIME: <span id="time">60</span>s</div>
     </div>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <canvas id="gameCanvas"></canvas>
 
     <!-- Sprint 1D: State validation -->
     <script src="/static/js/game_state_validator.js"></script>
@@ -28,6 +28,12 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         let gameState = null;
+
+        // Sprint 1D: Responsive canvas scaling for TV displays
+        let CANVAS_WIDTH = window.innerWidth;
+        let CANVAS_HEIGHT = window.innerHeight;
+        canvas.width = CANVAS_WIDTH;
+        canvas.height = CANVAS_HEIGHT;
 
         // Sprint 1D: Validator for single-player game
         const stateValidator = SinglePlayerValidator;
@@ -53,11 +59,11 @@
         function render() {
             if (!gameState) return;
 
-            ctx.clearRect(0, 0, 800, 600);
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
             // Draw player
-            const px = (gameState.player_x / 100) * 800;
-            const py = (gameState.player_y / 100) * 600;
+            const px = (gameState.player_x / 100) * CANVAS_WIDTH;
+            const py = (gameState.player_y / 100) * CANVAS_HEIGHT;
             ctx.fillStyle = '#0f0';
             ctx.beginPath();
             ctx.arc(px, py, 25, 0, Math.PI * 2);
@@ -65,8 +71,8 @@
 
             // Draw falling objects
             gameState.objects.forEach(obj => {
-                const x = (obj.x / 100) * 800;
-                const y = (obj.y / 100) * 600;
+                const x = (obj.x / 100) * CANVAS_WIDTH;
+                const y = (obj.y / 100) * CANVAS_HEIGHT;
 
                 if (obj.type === 'meteor') {
                     ctx.fillStyle = '#f00';
@@ -74,7 +80,7 @@
                     ctx.arc(x, y, 20, 0, Math.PI * 2);
                     ctx.fill();
                 } else if (obj.type === 'bomb') {
-                    ctx.fillStyle = '#ff8800';
+                    ctx.fillStyle = '#ff8CANVAS_WIDTH';
                     ctx.fillRect(x - 18, y - 18, 36, 36);
                 } else if (obj.type === 'star') {
                     ctx.fillStyle = '#ffff00';
@@ -94,6 +100,14 @@
         }
 
         render();
+
+        // Sprint 1D: Handle window resize for responsive scaling
+        window.addEventListener('resize', () => {
+            CANVAS_WIDTH = window.innerWidth;
+            CANVAS_HEIGHT = window.innerHeight;
+            canvas.width = CANVAS_WIDTH;
+            canvas.height = CANVAS_HEIGHT;
+        });
     </script>
 
     <!-- Sprint 0.5: Connection Health Monitoring -->

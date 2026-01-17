@@ -422,10 +422,13 @@
         }
 
         function updateObstacles(obstacleData) {
-            // Remove old obstacles that are too far
+            // Remove old obstacles that are too far - Sprint 1D: Properly dispose to prevent memory leak
             obstacles = obstacles.filter(obs => {
                 if (obs.userData.distance > 500 || obs.userData.distance < -10) {
                     scene.remove(obs);
+                    // Dispose geometry and material to free GPU memory
+                    if (obs.geometry) obs.geometry.dispose();
+                    if (obs.material) obs.material.dispose();
                     return false;
                 }
                 return true;
@@ -465,6 +468,19 @@
         }
 
         function updateCollectibles(collectibleData) {
+            // Sprint 1D: Remove collected or out-of-range collectibles to prevent memory leak
+            collectibles = collectibles.filter((col, index) => {
+                const data = collectibleData[index];
+                if (!data || data.collected || data.distance > 500 || data.distance < -10) {
+                    scene.remove(col);
+                    // Dispose geometry and material to free GPU memory
+                    if (col.geometry) col.geometry.dispose();
+                    if (col.material) col.material.dispose();
+                    return false;
+                }
+                return true;
+            });
+
             collectibleData.forEach((data, index) => {
                 if (data.collected) return;
 

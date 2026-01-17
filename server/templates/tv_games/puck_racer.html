@@ -158,7 +158,7 @@
         COMBO x<span id="comboValue">2</span>
     </div>
 
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <canvas id="gameCanvas"></canvas>
 
     <div id="gameOver">
         <h1>🏁 GAME OVER</h1>
@@ -178,6 +178,12 @@
         const ctx = canvas.getContext('2d');
 
         let gameState = null;
+
+        // Sprint 1D: Responsive canvas scaling for TV displays
+        let CANVAS_WIDTH = window.innerWidth;
+        let CANVAS_HEIGHT = window.innerHeight;
+        canvas.width = CANVAS_WIDTH;
+        canvas.height = CANVAS_HEIGHT;
         let lastCrashes = 0;
 
         // Sprint 1D: Create validator for this game
@@ -331,12 +337,12 @@
         function drawRoad() {
             // Road background
             ctx.fillStyle = '#222';
-            ctx.fillRect(100, 0, 600, 600);
+            ctx.fillRect(100, 0, CANVAS_HEIGHT, CANVAS_HEIGHT);
 
             // Road edges
             ctx.fillStyle = '#fff';
-            ctx.fillRect(100, 0, 10, 600);
-            ctx.fillRect(690, 0, 10, 600);
+            ctx.fillRect(100, 0, 10, CANVAS_HEIGHT);
+            ctx.fillRect(690, 0, 10, CANVAS_HEIGHT);
         }
 
         function drawLanes() {
@@ -349,7 +355,7 @@
                 const x = 100 + (lane * 150);
                 ctx.beginPath();
                 ctx.moveTo(x, 0);
-                ctx.lineTo(x, 600);
+                ctx.lineTo(x, CANVAS_HEIGHT);
                 ctx.stroke();
             }
 
@@ -389,7 +395,7 @@
 
             if (obs.type === 'cone') {
                 // Orange cone
-                ctx.fillStyle = '#ff8800';
+                ctx.fillStyle = '#ff8CANVAS_WIDTH';
                 ctx.beginPath();
                 ctx.moveTo(x, y - 30);
                 ctx.lineTo(x - 15, y + 10);
@@ -436,10 +442,10 @@
                 ctx.beginPath();
                 ctx.arc(x, y, 15, 0, Math.PI * 2);
                 ctx.fill();
-                ctx.strokeStyle = '#ff8800';
+                ctx.strokeStyle = '#ff8CANVAS_WIDTH';
                 ctx.lineWidth = 3;
                 ctx.stroke();
-                ctx.fillStyle = '#ff8800';
+                ctx.fillStyle = '#ff8CANVAS_WIDTH';
                 ctx.font = '16px Arial Black';
                 ctx.textAlign = 'center';
                 ctx.fillText('$', x, y + 6);
@@ -462,8 +468,8 @@
             ctx.lineWidth = 3;
 
             for (let i = 0; i < 10; i++) {
-                const x = Math.random() * 800;
-                const y = Math.random() * 600;
+                const x = Math.random() * CANVAS_WIDTH;
+                const y = Math.random() * CANVAS_HEIGHT;
                 ctx.beginPath();
                 ctx.moveTo(x, y);
                 ctx.lineTo(x - 50, y + 30);

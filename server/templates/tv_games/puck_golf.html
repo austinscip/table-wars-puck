@@ -19,7 +19,7 @@
         <div>STROKES: <span id="strokes">0</span></div>
         <div>SCORE: <span id="score">1000</span></div>
     </div>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <canvas id="gameCanvas"></canvas>
     <div id="power"><div id="powerBar"></div></div>
 
     <!-- Sprint 1D: State validation -->
@@ -30,6 +30,12 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         let gameState = null;
+
+        // Sprint 1D: Responsive canvas scaling for TV displays
+        let CANVAS_WIDTH = window.innerWidth;
+        let CANVAS_HEIGHT = window.innerHeight;
+        canvas.width = CANVAS_WIDTH;
+        canvas.height = CANVAS_HEIGHT;
 
         // Sprint 1D: Validator for single-player game
         const stateValidator = SinglePlayerValidator;
@@ -58,11 +64,11 @@
 
             // Background
             ctx.fillStyle = '#228B22';
-            ctx.fillRect(0, 0, 800, 600);
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
             // Hole
-            const holeX = (gameState.hole_x / 100) * 800;
-            const holeY = (gameState.hole_y / 100) * 600;
+            const holeX = (gameState.hole_x / 100) * CANVAS_WIDTH;
+            const holeY = (gameState.hole_y / 100) * CANVAS_HEIGHT;
             ctx.fillStyle = '#000';
             ctx.beginPath();
             ctx.arc(holeX, holeY, 20, 0, Math.PI * 2);
@@ -71,8 +77,8 @@
             ctx.fillRect(holeX - 2, holeY - 40, 4, 40);
 
             // Ball
-            const ballX = (gameState.ball_x / 100) * 800;
-            const ballY = (gameState.ball_y / 100) * 600;
+            const ballX = (gameState.ball_x / 100) * CANVAS_WIDTH;
+            const ballY = (gameState.ball_y / 100) * CANVAS_HEIGHT;
             ctx.fillStyle = '#fff';
             ctx.beginPath();
             ctx.arc(ballX, ballY, 12, 0, Math.PI * 2);
@@ -97,6 +103,15 @@
         }
 
         render();
+    
+
+        // Sprint 1D: Handle window resize for responsive scaling
+        window.addEventListener('resize', () => {
+            CANVAS_WIDTH = window.innerWidth;
+            CANVAS_HEIGHT = window.innerHeight;
+            canvas.width = CANVAS_WIDTH;
+            canvas.height = CANVAS_HEIGHT;
+        });
     </script>
     <!-- Sprint 0.5: Connection Health Monitoring -->
     {% include 'tv_games/_debug_panel.html' %}

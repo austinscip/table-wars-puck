@@ -16,7 +16,7 @@
         <div>YOU: <span id="playerScore">0</span></div>
         <div>AI: <span id="aiScore">0</span></div>
     </div>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <canvas id="gameCanvas"></canvas>
 
     <!-- Sprint 1D: State validation -->
     <script src="/static/js/game_state_validator.js"></script>
@@ -26,6 +26,12 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         let gameState = null;
+
+        // Sprint 1D: Responsive canvas scaling for TV displays
+        let CANVAS_WIDTH = window.innerWidth;
+        let CANVAS_HEIGHT = window.innerHeight;
+        canvas.width = CANVAS_WIDTH;
+        canvas.height = CANVAS_HEIGHT;
 
         // Sprint 1D: Validator for single-player game
         const stateValidator = SinglePlayerValidator;
@@ -51,30 +57,30 @@
             if (!gameState) return;
 
             ctx.fillStyle = '#111';
-            ctx.fillRect(0, 0, 800, 600);
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
             // Center line
             ctx.strokeStyle = '#444';
             ctx.setLineDash([10, 10]);
             ctx.beginPath();
-            ctx.moveTo(400, 0);
-            ctx.lineTo(400, 600);
+            ctx.moveTo(CANVAS_WIDTH / 2, 0);
+            ctx.lineTo(CANVAS_WIDTH / 2, CANVAS_HEIGHT);
             ctx.stroke();
             ctx.setLineDash([]);
 
             // Player paddle
-            const playerY = (gameState.paddle_y / 100) * 600;
+            const playerY = (gameState.paddle_y / 100) * CANVAS_HEIGHT;
             ctx.fillStyle = '#0f0';
             ctx.fillRect(30, playerY - 50, 15, 100);
 
             // AI paddle
-            const aiY = (gameState.ai_paddle_y / 100) * 600;
+            const aiY = (gameState.ai_paddle_y / 100) * CANVAS_HEIGHT;
             ctx.fillStyle = '#f00';
-            ctx.fillRect(755, aiY - 50, 15, 100);
+            ctx.fillRect(CANVAS_WIDTH - 45, aiY - 50, 15, 100);
 
             // Ball
-            const ballX = (gameState.ball_x / 100) * 800;
-            const ballY = (gameState.ball_y / 100) * 600;
+            const ballX = (gameState.ball_x / 100) * CANVAS_WIDTH;
+            const ballY = (gameState.ball_y / 100) * CANVAS_HEIGHT;
             ctx.fillStyle = '#fff';
             ctx.beginPath();
             ctx.arc(ballX, ballY, 10, 0, Math.PI * 2);
@@ -84,6 +90,14 @@
         }
 
         render();
+
+        // Sprint 1D: Handle window resize for responsive scaling
+        window.addEventListener('resize', () => {
+            CANVAS_WIDTH = window.innerWidth;
+            CANVAS_HEIGHT = window.innerHeight;
+            canvas.width = CANVAS_WIDTH;
+            canvas.height = CANVAS_HEIGHT;
+        });
     </script>
     <!-- Sprint 0.5: Connection Health Monitoring -->
     {% include 'tv_games/_debug_panel.html' %}

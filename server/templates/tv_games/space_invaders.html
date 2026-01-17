@@ -18,7 +18,7 @@
         <div>WAVE: <span id="wave">1</span></div>
         <div>LIVES: <span id="lives">3</span></div>
     </div>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <canvas id="gameCanvas"></canvas>
     <div id="gameOver"><h1>GAME OVER</h1><div id="finalScore" style="margin-top: 20px;"></div></div>
 
     <!-- Sprint 1D: State validation -->
@@ -29,6 +29,12 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         let gameState = null;
+
+        // Sprint 1D: Responsive canvas scaling for TV displays
+        let CANVAS_WIDTH = window.innerWidth;
+        let CANVAS_HEIGHT = window.innerHeight;
+        canvas.width = CANVAS_WIDTH;
+        canvas.height = CANVAS_HEIGHT;
 
         // Sprint 1D: Validator for single-player game
         const stateValidator = SinglePlayerValidator;
@@ -60,26 +66,26 @@
             if (!gameState) return;
 
             ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, 800, 600);
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
             // Draw ship
-            const shipX = (gameState.ship_x / 100) * 800;
+            const shipX = (gameState.ship_x / 100) * CANVAS_WIDTH;
             ctx.fillStyle = '#0f0';
             ctx.fillRect(shipX - 25, 550, 50, 30);
             ctx.fillRect(shipX - 10, 530, 20, 20);
 
             // Draw aliens
             gameState.aliens.forEach(alien => {
-                const x = (alien.x / 100) * 800;
-                const y = (alien.y / 100) * 600;
+                const x = (alien.x / 100) * CANVAS_WIDTH;
+                const y = (alien.y / 100) * CANVAS_HEIGHT;
                 ctx.fillStyle = '#f00';
                 ctx.fillRect(x - 15, y - 10, 30, 20);
             });
 
             // Draw bullets
             gameState.bullets.forEach(bullet => {
-                const x = (bullet.x / 100) * 800;
-                const y = (bullet.y / 100) * 600;
+                const x = (bullet.x / 100) * CANVAS_WIDTH;
+                const y = (bullet.y / 100) * CANVAS_HEIGHT;
                 ctx.fillStyle = bullet.player ? '#0f0' : '#f00';
                 ctx.fillRect(x - 2, y - 5, 4, 10);
             });
@@ -88,6 +94,15 @@
         }
 
         render();
+    
+
+        // Sprint 1D: Handle window resize for responsive scaling
+        window.addEventListener('resize', () => {
+            CANVAS_WIDTH = window.innerWidth;
+            CANVAS_HEIGHT = window.innerHeight;
+            canvas.width = CANVAS_WIDTH;
+            canvas.height = CANVAS_HEIGHT;
+        });
     </script>
     <!-- Sprint 0.5: Connection Health Monitoring -->
     {% include 'tv_games/_debug_panel.html' %}
