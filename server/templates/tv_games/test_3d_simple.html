@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple 3D Test</title>
+    <style>
+        body { margin: 0; background: #000; color: #0f0; font-family: monospace; }
+        #status { position: absolute; top: 20px; left: 20px; font-size: 20px; z-index: 100; }
+        #canvas { width: 100vw; height: 100vh; }
+    </style>
+</head>
+<body>
+    <div id="status">
+        <div>🔄 Testing 3D Setup...</div>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        const log = document.getElementById('log');
+        function logMsg(msg) {
+            log.innerHTML += `<div>${msg}</div>`;
+            console.log(msg);
+        }
+
+        // Test 1: Check if THREE is loaded via CDN
+        logMsg('1. Loading Three.js from CDN...');
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+
+    <script>
+        if (typeof THREE !== 'undefined') {
+            logMsg('✅ THREE.js loaded successfully!');
+            logMsg(`   Version: ${THREE.REVISION}`);
+        } else {
+            logMsg('❌ THREE.js failed to load from CDN');
+        }
+
+        // Test 2: Create basic scene
+        try {
+            logMsg('2. Creating basic scene...');
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            logMsg('✅ Scene, camera, renderer created');
+
+            // Add a cube
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            const cube = new THREE.Mesh(geometry, material);
+            scene.add(cube);
+            camera.position.z = 5;
+
+            logMsg('✅ Cube added to scene');
+
+            // Animate
+            function animate() {
+                requestAnimationFrame(animate);
+                cube.rotation.x += 0.01;
+                cube.rotation.y += 0.01;
+                renderer.render(scene, camera);
+            }
+            animate();
+
+            logMsg('✅ Animation loop started');
+            logMsg('');
+            logMsg('✅ ALL TESTS PASSED!');
+            logMsg('You should see a spinning green cube');
+
+        } catch (error) {
+            logMsg('❌ Error: ' + error.message);
+        }
+    </script>
+</body>
+</html>

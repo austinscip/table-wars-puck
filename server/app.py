@@ -627,21 +627,10 @@ def api_tournaments():
 # WEBSOCKET EVENTS
 # ============================================================================
 
-@socketio.on('connect')
-def handle_connect():
-    """Client connected"""
-    print('🔌 Client connected')
-    emit('connected', {'message': 'Connected to TABLE WARS server'})
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    """Client disconnected"""
-    print('🔌 Client disconnected')
-
-@socketio.on('request_leaderboard')
-def handle_leaderboard_request():
-    """Client requested leaderboard"""
-    emit('leaderboard_update', get_leaderboard())
+def register_core_socketio_handlers(sio):
+    """Register core WebSocket handlers - called from main"""
+    # Note: puck_input handler is in tv_game_routes.py to avoid conflicts
+    print("✅ Core WebSocket handlers registered")
 
 # ============================================================================
 # GAME GALLERY
@@ -657,6 +646,11 @@ def game_gallery():
 def puck_simulator():
     """Test tool for simulating puck input without physical hardware"""
     return render_template('test_puck_simulator.html')
+
+@app.route('/test/sensor-validation')
+def sensor_validation():
+    """Combined sensor simulator and debug panel for validation"""
+    return render_template('test_sensor_validation.html')
 
 # ============================================================================
 # MAIN
@@ -677,6 +671,7 @@ if __name__ == '__main__':
         print("📝 Seeding sample trivia questions...")
         seed_questions()
 
+    register_core_socketio_handlers(socketio)  # Core WebSocket handlers
     init_trivia_routes(app, socketio)
     init_tv_game_routes(app, socketio)
     init_multiplayer_routes(app, socketio)

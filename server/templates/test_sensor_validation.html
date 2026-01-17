@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sensor Validation - Table Wars</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Arial Black', sans-serif;
+            background: #0a0a0a;
+            color: white;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .layout {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            height: 100vh;
+        }
+
+        /* Control Panel */
+        .control-panel {
+            background: linear-gradient(180deg, #1a1a2e 0%, #0d0d1a 100%);
+            padding: 15px;
+            overflow-y: auto;
+            border-right: 3px solid #00ff00;
+        }
+        h1 {
+            color: #00ff00;
+            font-size: 1.2em;
+            text-align: center;
+            margin-bottom: 15px;
+            text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+        }
+        .section {
+            background: rgba(0, 0, 0, 0.3);
+            border: 2px solid #333;
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+        .section-title {
+            color: #00ff00;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 5px;
+        }
+
+        /* Controls */
+        .control { margin-bottom: 12px; }
+        .control label {
+            display: block;
+            color: #888;
+            font-size: 0.8em;
+            margin-bottom: 3px;
+        }
+        .control input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: #333;
+        }
+        .control-value {
+            text-align: center;
+            font-size: 1.4em;
+            color: #00ff00;
+            font-weight: bold;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #00ff00 0%, #00aa00 100%);
+            border: none;
+            border-radius: 8px;
+            color: black;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 8px;
+        }
+        button:hover { filter: brightness(1.1); }
+        button:active { transform: scale(0.98); }
+
+        .presets {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+        .preset-btn {
+            padding: 8px;
+            font-size: 0.75em;
+            background: #222;
+            border: 1px solid #00ff00;
+            color: #00ff00;
+        }
+
+        /* Debug Display */
+        .debug-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px;
+            margin: 4px 0;
+            background: rgba(0, 255, 0, 0.05);
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        .debug-label { color: #888; }
+        .debug-value { color: #00ff00; font-weight: bold; }
+        .indicator {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 0.7em;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+        .indicator.fast { background: #ff0000; color: white; }
+        .indicator.shaking { background: #ff0000; color: white; animation: pulse 0.3s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        .status {
+            text-align: center;
+            padding: 8px;
+            border-radius: 5px;
+            font-size: 0.85em;
+            margin-top: 8px;
+        }
+        .status.connected { background: rgba(0, 255, 0, 0.2); color: #00ff00; }
+        .status.disconnected { background: rgba(255, 0, 0, 0.2); color: #ff0000; }
+
+        /* Game Frame */
+        .game-container {
+            position: relative;
+            background: #000;
+        }
+        .game-container iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .game-selector {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 8px;
+            border: 2px solid #00ff00;
+        }
+        .game-selector select {
+            padding: 8px;
+            font-size: 1em;
+            background: #222;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <!-- Control Panel -->
+        <div class="control-panel">
+            <h1>PUCK SIMULATOR</h1>
+
+            <div class="section">
+                <div class="section-title">PUCK CONTROLS</div>
+
+                <div class="control">
+                    <label>Spin Speed (Gyro Z)</label>
+                    <input type="range" id="gyroZ" min="0" max="500" value="0">
+                    <div class="control-value"><span id="gyroZValue">0</span> deg/s</div>
+                </div>
+
+                <div class="control">
+                    <label>Tilt X (Roll)</label>
+                    <input type="range" id="tiltX" min="-45" max="45" value="0">
+                    <div class="control-value"><span id="tiltXValue">0</span>°</div>
+                </div>
+
+                <div class="control">
+                    <label>Tilt Y (Pitch)</label>
+                    <input type="range" id="tiltY" min="-45" max="45" value="0">
+                    <div class="control-value"><span id="tiltYValue">0</span>°</div>
+                </div>
+
+                <div class="control">
+                    <label>Shake Intensity</label>
+                    <input type="range" id="shakeIntensity" min="0" max="50" value="0">
+                    <div class="control-value"><span id="shakeValue">0</span> m/s²</div>
+                </div>
+
+                <button onclick="sendInput()">SEND INPUT</button>
+
+                <div class="presets">
+                    <button class="preset-btn" onclick="preset('lightSpin')">Light Spin</button>
+                    <button class="preset-btn" onclick="preset('hardSpin')">Hard Spin</button>
+                    <button class="preset-btn" onclick="preset('shake')">Shake</button>
+                    <button class="preset-btn" onclick="preset('tiltLeft')">Tilt Left</button>
+                    <button class="preset-btn" onclick="preset('tiltRight')">Tilt Right</button>
+                    <button class="preset-btn" onclick="preset('reset')">Reset All</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">LIVE SENSOR DATA</div>
+
+                <div class="debug-row">
+                    <span class="debug-label">Gyro Z</span>
+                    <span class="debug-value"><span id="debug-gyro">0.0000</span> rad/s</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Spin</span>
+                    <span class="debug-value">
+                        <span id="debug-spin">0.0</span> deg/s
+                        <span class="indicator" id="spin-indicator" style="display:none;"></span>
+                    </span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Shake</span>
+                    <span class="debug-value">
+                        <span id="debug-shake">0.0</span> m/s²
+                        <span class="indicator" id="shake-indicator" style="display:none;"></span>
+                    </span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Tilt X</span>
+                    <span class="debug-value"><span id="debug-tiltx">0.0</span>°</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Tilt Y</span>
+                    <span class="debug-value"><span id="debug-tilty">0.0</span>°</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Puck ID</span>
+                    <span class="debug-value" id="debug-puck">1</span>
+                </div>
+
+                <div id="connectionStatus" class="status disconnected">Connecting...</div>
+            </div>
+        </div>
+
+        <!-- Game Display -->
+        <div class="game-container">
+            <div class="game-selector">
+                <select id="gameSelect" onchange="changeGame()">
+                    <option value="/tv/shot-roulette-royale/1">Shot Roulette Royale</option>
+                    <option value="/tv/puck-racer/1">Puck Racer</option>
+                    <option value="/tv/space-invaders/1">Space Invaders</option>
+                    <option value="/tv/pong-puck/1">Pong Puck</option>
+                    <option value="/tv/obstacle-dodger/1">Obstacle Dodger</option>
+                </select>
+            </div>
+            <iframe id="gameFrame" src="/tv/shot-roulette-royale/1"></iframe>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+
+        // Connection
+        socket.on('connect', () => {
+            document.getElementById('connectionStatus').className = 'status connected';
+            document.getElementById('connectionStatus').textContent = 'Connected';
+        });
+        socket.on('disconnect', () => {
+            document.getElementById('connectionStatus').className = 'status disconnected';
+            document.getElementById('connectionStatus').textContent = 'Disconnected!';
+        });
+
+        // Listen for sensor updates
+        socket.on('sensor_data_update', (data) => {
+            document.getElementById('debug-gyro').textContent = (data.gyro_z || 0).toFixed(4);
+            document.getElementById('debug-spin').textContent = (data.spin_speed || 0).toFixed(1);
+            document.getElementById('debug-shake').textContent = (data.shake_intensity || 0).toFixed(1);
+            document.getElementById('debug-tiltx').textContent = (data.tilt_x || 0).toFixed(1);
+            document.getElementById('debug-tilty').textContent = (data.tilt_y || 0).toFixed(1);
+            document.getElementById('debug-puck').textContent = data.puck_id || '-';
+
+            // Spin indicator
+            const spinIndicator = document.getElementById('spin-indicator');
+            if (data.spin_speed > 100) {
+                spinIndicator.textContent = 'FAST';
+                spinIndicator.className = 'indicator fast';
+                spinIndicator.style.display = 'inline-block';
+            } else {
+                spinIndicator.style.display = 'none';
+            }
+
+            // Shake indicator
+            const shakeIndicator = document.getElementById('shake-indicator');
+            if (data.shake_detected) {
+                shakeIndicator.textContent = 'SHAKING!';
+                shakeIndicator.className = 'indicator shaking';
+                shakeIndicator.style.display = 'inline-block';
+            } else {
+                shakeIndicator.style.display = 'none';
+            }
+        });
+
+        // Slider displays
+        ['gyroZ', 'tiltX', 'tiltY', 'shakeIntensity'].forEach(id => {
+            document.getElementById(id).oninput = function() {
+                const displayId = id === 'shakeIntensity' ? 'shakeValue' : id + 'Value';
+                document.getElementById(displayId).textContent = this.value;
+            };
+        });
+
+        // Send input
+        function sendInput() {
+            const data = {
+                puck_id: 1,
+                gyro_z: parseFloat(document.getElementById('gyroZ').value) / 57.2958,
+                spin_speed: parseFloat(document.getElementById('gyroZ').value),
+                tilt_x: parseFloat(document.getElementById('tiltX').value),
+                tilt_y: parseFloat(document.getElementById('tiltY').value),
+                shake_intensity: parseFloat(document.getElementById('shakeIntensity').value),
+                shake_detected: parseFloat(document.getElementById('shakeIntensity').value) > 15
+            };
+            socket.emit('puck_input', data);
+        }
+
+        // Presets - auto-send
+        function preset(type) {
+            const presets = {
+                lightSpin: { gyroZ: 80, tiltX: 0, tiltY: 0, shake: 0 },
+                hardSpin: { gyroZ: 350, tiltX: 0, tiltY: 0, shake: 0 },
+                shake: { gyroZ: 0, tiltX: 0, tiltY: 0, shake: 30 },
+                tiltLeft: { gyroZ: 0, tiltX: -30, tiltY: 0, shake: 0 },
+                tiltRight: { gyroZ: 0, tiltX: 30, tiltY: 0, shake: 0 },
+                reset: { gyroZ: 0, tiltX: 0, tiltY: 0, shake: 0 }
+            };
+            const p = presets[type];
+            document.getElementById('gyroZ').value = p.gyroZ;
+            document.getElementById('gyroZValue').textContent = p.gyroZ;
+            document.getElementById('tiltX').value = p.tiltX;
+            document.getElementById('tiltXValue').textContent = p.tiltX;
+            document.getElementById('tiltY').value = p.tiltY;
+            document.getElementById('tiltYValue').textContent = p.tiltY;
+            document.getElementById('shakeIntensity').value = p.shake;
+            document.getElementById('shakeValue').textContent = p.shake;
+            sendInput();
+        }
+
+        // Change game
+        function changeGame() {
+            document.getElementById('gameFrame').src = document.getElementById('gameSelect').value;
+        }
+    </script>
+</body>
+</html>

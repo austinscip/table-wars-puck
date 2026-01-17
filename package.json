@@ -1,0 +1,31 @@
+{
+  "name": "table-wars-puck",
+  "version": "1.0.0",
+  "description": "> **Professional multiplayer gaming system with 56 games and 8 advanced ESP32 features**",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://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@github.com/austinscip/table-wars-puck.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/austinscip/table-wars-puck/issues"
+  },
+  "homepage": "https://github.com/austinscip/table-wars-puck#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.57.0"
+  }
+}

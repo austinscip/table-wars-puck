@@ -186,6 +186,7 @@
 
         // Receive game state updates
         socket.on('game_state_update', (state) => {
+            demoMode = false;  // Real game is running, disable demo
             gameState = state;
             updateHUD(state);
             render(state);
@@ -204,6 +205,55 @@
             document.getElementById('finalDistance').textContent = data.state.distance;
             document.getElementById('gameOver').style.display = 'block';
         });
+
+        // Sprint 0D: Direct sensor control for testing/demo
+        // This allows the car to respond to sensor input without needing the full game server
+        let localCarLane = 2;  // Start in middle lane
+        let localSpeed = 0;
+        let demoMode = true;  // Enable demo mode when no server game is active
+
+        socket.on('sensor_data_update', (data) => {
+            if (!demoMode) return;  // Skip if real game is running
+
+            // Only respond to our puck
+            if (data.puck_id !== PUCK_ID) return;
+
+            // Tilt X controls lane: negative = left, positive = right
+            const tiltX = data.tilt_x || 0;
+            if (tiltX < -15) {
+                localCarLane = Math.max(1, localCarLane - 1);
+            } else if (tiltX > 15) {
+                localCarLane = Math.min(4, localCarLane + 1);
+            }
+
+            // Spin speed controls car speed display
+            localSpeed = Math.round(data.spin_speed || 0);
+
+            // Update HUD
+            document.getElementById('speed').textContent = localSpeed;
+
+            // Render the car in the new position
+            renderDemoMode();
+        });
+
+        function renderDemoMode() {
+            // Clear canvas
+            ctx.fillStyle = '#0f0f0f';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw road
+            drawRoad();
+            drawLanes();
+
+            // Draw car at local position
+            drawCar(localCarLane);
+
+            // Draw "DEMO MODE" text
+            ctx.fillStyle = 'rgba(255, 255, 0, 0.8)';
+            ctx.font = '24px Arial Black';
+            ctx.textAlign = 'center';
+            ctx.fillText('TILT PUCK TO STEER', canvas.width / 2, 50);
+        }
 
         // Update HUD
         function updateHUD(state) {
@@ -415,5 +465,7 @@
 
         gameLoop();
     </script>
+
+    {% include 'tv_games/_debug_panel.html' %}
 </body>
 </html>

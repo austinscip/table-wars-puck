@@ -295,6 +295,11 @@
             addLog('Joined: ' + data.message, 'received');
         });
 
+        // Sprint 0D: Listen for sensor_data_update from puck_input handler
+        socket.on('sensor_data_update', (data) => {
+            addLog('Sensor Data Update: ' + JSON.stringify(data, null, 2), 'received');
+        });
+
         // Update value displays
         document.getElementById('gyroZ').oninput = function() {
             document.getElementById('gyroZValue').textContent = this.value;
@@ -344,7 +349,20 @@
             };
 
             socket.emit('multiplayer_input', data);
-            addLog('Sent input: ' + JSON.stringify(data, null, 2), 'sent');
+
+            // Sprint 0D: Also emit puck_input for sensor data pipeline
+            const puckData = {
+                puck_id: data.puck_id,
+                tilt_x: data.tilt_x,
+                tilt_y: data.tilt_y,
+                gyro_z: data.gyro_z / 57.2958,  // Convert deg/s to rad/s for consistency
+                spin_speed: Math.abs(data.gyro_z),  // Spin speed in deg/s
+                shake_intensity: data.shake_intensity,
+                shake_detected: data.shake_detected
+            };
+            socket.emit('puck_input', puckData);
+
+            addLog('Sent multiplayer_input + puck_input: ' + JSON.stringify(data, null, 2), 'sent');
         }
 
         // Start game

@@ -5,6 +5,8 @@ WebSocket-based real-time game control
 
 from flask import Blueprint, render_template, request, jsonify
 from flask_socketio import emit
+from datetime import datetime
+import time
 from tv_game_engines import (
     start_game,
     update_game,
@@ -14,6 +16,13 @@ from tv_game_engines import (
 )
 
 tv_games_bp = Blueprint('tv_games', __name__)
+
+# Sprint 0.5: Packet statistics for connection health monitoring
+packet_stats = {
+    'total_packets': 0,
+    'dropped_packets': 0,
+    'last_update_time': None
+}
 
 # ============================================================================
 # REST API ROUTES
@@ -87,6 +96,26 @@ def get_active_games():
         })
 
     return jsonify({"active_games": games_list})
+
+
+@tv_games_bp.route('/api/health', methods=['GET'])
+def api_health():
+    """
+    Sprint 0.5: Connection health statistics
+    Returns packet counts and drop rate
+    """
+    total = packet_stats['total_packets']
+    dropped = packet_stats['dropped_packets']
+
+    # Calculate drop rate (avoid divide by zero)
+    drop_rate = (dropped / total * 100) if total > 0 else 0
+
+    return jsonify({
+        'total_packets': total,
+        'dropped_packets': dropped,
+        'drop_rate': round(drop_rate, 2),
+        'last_update_time': packet_stats['last_update_time']
+    })
 
 
 # ============================================================================
@@ -188,6 +217,8 @@ def register_tv_game_socketio(socketio):
             "puck_id": 1,
             "tilt_x": -15.3,
             "tilt_y": 8.2,
+            "gyro_z": 0.523,           # Raw gyro Z (rad/s)
+            "spin_speed": 30.0,        # Spin speed (deg/s)
             "shake_intensity": 12.5,
             "shake_detected": true,
             "button_held": false,
@@ -195,9 +226,32 @@ def register_tv_game_socketio(socketio):
         }
         """
         puck_id = data.get('puck_id')
+        tilt_x = data.get('tilt_x', 0)
+        tilt_y = data.get('tilt_y', 0)
+        gyro_z = data.get('gyro_z', 0)
+        spin_speed = data.get('spin_speed', 0)
+        shake_intensity = data.get('shake_intensity', 0)
+        shake_detected = data.get('shake_detected', False)
 
+        # Sprint 0.5: Update packet statistics
+        packet_stats['total_packets'] += 1
+        packet_stats['last_update_time'] = time.time()
+
+        # Sprint 0D: Always broadcast sensor data for debug panel (separate event)
+        print(f"📥 puck_input: puck={puck_id} spin={spin_speed:.1f} shake={shake_intensity:.1f}")
+        emit('sensor_data_update', {
+            'puck_id': puck_id,
+            'tilt_x': tilt_x,
+            'tilt_y': tilt_y,
+            'gyro_z': gyro_z,
+            'spin_speed': spin_speed,
+            'shake_intensity': shake_intensity,
+            'shake_detected': shake_detected,
+            'timestamp': time.time()  # Sprint 0.5: Connection health monitoring
+        }, broadcast=True)
+
+        # If no active game, we're done (sensor data already broadcast)
         if not puck_id or puck_id not in active_games:
-            emit('error', {"message": "No active game for this puck"})
             return
 
         # Update game state
@@ -237,6 +291,16 @@ def register_tv_game_socketio(socketio):
                 emit('game_state_update', state)
             else:
                 emit('error', {"message": "No active game"})
+
+
+    @socketio.on('disconnect')
+    def handle_disconnect():
+        """
+        Sprint 0.5: Track disconnections as dropped packets
+        This helps identify connection instability in bar environments
+        """
+        packet_stats['dropped_packets'] += 1
+        print(f"⚠️  Client disconnected - dropped packets: {packet_stats['dropped_packets']}")
 
 
 def init_tv_game_routes(app, socketio):

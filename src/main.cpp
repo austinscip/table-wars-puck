@@ -10,6 +10,26 @@
  */
 
 #include <Arduino.h>
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
+#include <Wire.h>
+
+// MPU6050 sensor
+Adafruit_MPU6050 mpu;
+sensors_event_t accel_event, gyro_event, temp_event;
+
+// Computed sensor values
+float shake_intensity = 0;
+bool shake_detected = false;
+float tilt_x = 0;
+float tilt_y = 0;
+float gyro_z_raw = 0;
+float spin_speed = 0;
+const char* spin_direction = "NONE";
+
+// Sprint 0B: Rate limiting for ESP-NOW broadcasts
+unsigned long last_send = 0;
+const unsigned long SEND_INTERVAL_MS = 200;  // 5 Hz default send rate
 
 // Pin definitions
 #define BUZZER_PIN    15
@@ -621,6 +641,19 @@ void setup() {
   Serial.println("  🎵 TABLE WARS - EPIC TUNE LIBRARY 🎵");
   Serial.println("  ✨ 31 ICONIC TUNES - AUTO-PLAY MODE!");
   Serial.println("========================================");
+
+  // Initialize I2C and MPU6050
+  Wire.begin();
+  if (!mpu.begin()) {
+    Serial.println("Failed to find MPU6050 chip");
+    while (1) { delay(10); }
+  }
+  Serial.println("MPU6050 Found!");
+
+  // Configure sensor ranges
+  mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+  mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+  mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
   Serial.println();
   Serial.println("Wiring:");
   Serial.println("  Buzzer + (red)  → GPIO 15");
@@ -638,6 +671,55 @@ void setup() {
 }
 
 void loop() {
+  // Read MPU6050 sensor data
+  mpu.getEvent(&accel_event, &gyro_event, &temp_event);
+
+  // Compute shake_intensity (magnitude of acceleration vector)
+  shake_intensity = sqrt(
+    accel_event.acceleration.x * accel_event.acceleration.x +
+    accel_event.acceleration.y * accel_event.acceleration.y +
+    accel_event.acceleration.z * accel_event.acceleration.z
+  );
+
+  // Detect shake when intensity exceeds threshold (above gravity ~9.8)
+  shake_detected = (shake_intensity > 12.0);
+
+  // Compute tilt angles from accelerometer
+  tilt_x = atan2(accel_event.acceleration.y, accel_event.acceleration.z) * 180.0 / PI;
+  tilt_y = atan2(-accel_event.acceleration.x,
+    sqrt(accel_event.acceleration.y * accel_event.acceleration.y +
+         accel_event.acceleration.z * accel_event.acceleration.z)) * 180.0 / PI;
+
+  // Compute spin speed from gyroscope Z axis
+  gyro_z_raw = gyro_event.gyro.z;
+  spin_speed = abs(gyro_z_raw) * 57.2958; // rad/s to deg/s
+  spin_direction = (gyro_z_raw > 0.1) ? "CW" : (gyro_z_raw < -0.1) ? "CCW" : "NONE";
+
+  // Sprint 0B: Rate-limited sensor data broadcast (for ESP-NOW integration)
+  // Sends at SEND_INTERVAL_MS rate, or immediately if shake detected
+  if (millis() - last_send > SEND_INTERVAL_MS || shake_detected) {
+    // Debug output - shows sensor values that would be sent
+    Serial.print("TX: tilt_x="); Serial.print(tilt_x, 1);
+    Serial.print(" tilt_y="); Serial.print(tilt_y, 1);
+    Serial.print(" gyro_z="); Serial.print(gyro_z_raw, 4);
+    Serial.print(" spin="); Serial.print(spin_speed, 1);
+    Serial.print(" shake="); Serial.println(shake_detected ? "YES" : "no");
+
+    /* ESP-NOW send pattern (uncomment when ESP-NOW enabled):
+    PuckMessage msg;
+    msg.senderPuckId = PUCK_ID;
+    msg.tilt_x = tilt_x;
+    msg.tilt_y = tilt_y;
+    msg.shake_intensity = shake_intensity;
+    msg.spin_speed = spin_speed;
+    msg.gyro_z = gyro_z_raw;
+    msg.shake_detected = shake_detected;
+    esp_now_send(broadcastAddress, (uint8_t *)&msg, sizeof(msg));
+    */
+
+    last_send = millis();
+  }
+
   Serial.println("\n👑 Playing BOHEMIAN RHAPSODY snippet...\n");
   Serial.println("   (20-second intro showing complexity)\n");
 

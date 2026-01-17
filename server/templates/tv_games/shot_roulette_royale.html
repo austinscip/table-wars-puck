@@ -621,6 +621,7 @@
         });
 
         socket.on('multiplayer_state_update', (state) => {
+            demoMode = false;  // Real game is running, disable demo mode
             gameState = state;
             updateHUD(state);
             updateWheel(state);
@@ -638,6 +639,71 @@
 
         socket.on('error', (data) => {
             console.error('❌ Error:', data.message);
+        });
+
+        // ============================================================================
+        // DEMO MODE - Direct sensor control for testing without full game server
+        // ============================================================================
+
+        let demoMode = true;  // Enable when no multiplayer session
+        let lastSpinTime = 0;
+        const SPIN_COOLDOWN = 3000; // 3 second cooldown between spins
+
+        socket.on('sensor_data_update', (data) => {
+            if (!demoMode) return;  // Skip if real game is running
+
+            const spinSpeed = data.spin_speed || 0;
+            const currentTime = performance.now();
+
+            // Trigger spin if spin_speed > 50 and not on cooldown
+            if (spinSpeed > 50 && !isSpinning && (currentTime - lastSpinTime) > SPIN_COOLDOWN) {
+                lastSpinTime = currentTime;
+
+                // Initialize audio on first spin
+                initAudio();
+
+                // Calculate target rotation based on spin intensity
+                // Light spin (<100) = 1-2 zones, Medium (100-300) = 3-5 zones, Hard (>300) = 6-8 zones
+                let zonesTravel;
+                if (spinSpeed < 100) {
+                    zonesTravel = 1 + Math.random();  // 1-2 zones
+                } else if (spinSpeed < 300) {
+                    zonesTravel = 3 + Math.random() * 2;  // 3-5 zones
+                } else {
+                    zonesTravel = 6 + Math.random() * 2;  // 6-8 zones
+                }
+
+                // Calculate rotation in radians (each zone is ~45 degrees average)
+                const avgZoneAngle = 360 / ZONES.length;
+                const rotationDegrees = zonesTravel * avgZoneAngle + 360 * (2 + Math.random()); // 2-3 full rotations + zone travel
+                targetRotation = wheelRotation + (rotationDegrees * Math.PI / 180);
+
+                // Set spin parameters
+                spinStartTime = currentTime;
+                spinStartRotation = wheelRotation;
+                spinVelocity = spinSpeed;
+
+                // Duration based on spin intensity (3-8 seconds)
+                spinDuration = 3000 + Math.min(spinSpeed, 400) / 400 * 5000;
+
+                isSpinning = true;
+                lastCrossedZone = -1;
+
+                playWhooshSound(0.5);
+                console.log(`🌀 DEMO SPIN! Speed: ${spinSpeed.toFixed(0)} deg/s, Zones: ${zonesTravel.toFixed(1)}, Duration: ${(spinDuration/1000).toFixed(1)}s`);
+
+                // Update HUD
+                document.getElementById('spinnerName').textContent = `SPIN: ${spinSpeed.toFixed(0)}°/s`;
+
+                // Auto-stop spin after duration
+                setTimeout(() => {
+                    isSpinning = false;
+                    const landedZone = getLandedZoneIndex(wheelRotation);
+                    highlightZone(landedZone, 0.6);
+                    document.getElementById('spinnerName').textContent = `${ZONES[landedZone].icon} ${ZONES[landedZone].name}!`;
+                    console.log(`🎯 Landed on: ${ZONES[landedZone].name}`);
+                }, spinDuration);
+            }
         });
 
         function updateHUD(state) {
@@ -801,5 +867,7 @@
 
         console.log('SHOT ROULETTE ROYALE initialized - waiting for players...');
     </script>
+    <!-- Sprint 0.5: Connection Health Monitoring -->
+    {% include 'tv_games/_debug_panel.html' %}
 </body>
 </html>

@@ -1,112 +1,733 @@
 {
-  "projectName": "Table Wars - SHOT ROULETTE ROYALE",
-  "branchName": "feat/shot-roulette-royale",
+  "projectName": "Table Wars - Foundation Sprint 0",
+  "branchName": "feat/sprint-0-foundation",
+  "sprintGoal": "Zero to calibrated sensor data flowing end-to-end (puck -> gateway -> server -> browser)",
+  "granularityLevel": "Level 4-5 (atomic/diff-level, 5-20 min per story)",
   "userStories": [
     {
-      "id": "US-001",
-      "title": "Roulette Wheel Display",
-      "description": "As a player watching the bar screen, I want to see a massive 3D wheel with clear prize zones, so that I can plan my spin intensity and feel the tension.",
+      "id": "US-001a-1",
+      "title": "Add MPU6050 lib to platformio.ini",
+      "description": "Add Adafruit MPU6050 library dependency to enable gyroscope/accelerometer reading",
+      "sprint": "0A",
+      "diff": "[env:esp32dev]\n+ lib_deps = adafruit/Adafruit MPU6050@^2.2.0",
+      "file": "platformio.ini",
       "acceptanceCriteria": [
-        "3D wheel renders with 8 zones: CHAMPION, DRINK ONE, DRINK TWO, CHUG, SPIN AGAIN, IMMUNITY, CHALLENGE, BOMB",
-        "Each zone has distinct color and icon",
-        "Wheel animates smoothly at 60fps",
-        "Current spinner's name highlighted",
-        "Zone sizes reflect probability (CHAMPION small, DRINK ONE large)",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "pio pkg install succeeds",
+        "pio run builds without error"
       ],
       "priority": 1,
+      "effort": "5 min",
+      "dependency": null,
       "passes": true,
-      "notes": "Implemented 3D wheel with Three.js, 8 zones with distinct colors/icons, bloom effects"
+      "notes": "Already present + NeoPixel added to fix build"
     },
     {
-      "id": "US-002",
-      "title": "Puck Spin Detection",
-      "description": "As a player holding my puck, I want to physically spin my puck and have the wheel spin proportionally, so that my physical technique affects my outcome.",
+      "id": "US-001a-2",
+      "title": "Add Unified Sensor lib to platformio.ini",
+      "description": "Add Adafruit Unified Sensor library (required dependency for MPU6050)",
+      "sprint": "0A",
+      "diff": "lib_deps = adafruit/Adafruit MPU6050@^2.2.0\n+          , adafruit/Adafruit Unified Sensor@^1.1.14",
+      "file": "platformio.ini",
       "acceptanceCriteria": [
-        "Gyroscope Z-axis detects spin velocity (degrees/second)",
-        "Light spin (<100 deg/s) = wheel travels 1-2 zones",
-        "Medium spin (100-300 deg/s) = wheel travels 3-5 zones",
-        "Hard spin (>300 deg/s) = wheel travels 6-8 zones (risky!)",
-        "Spin data sent via WebSocket within 50ms",
-        "LED ring shows spin intensity (blue to yellow to red gradient)",
-        "Typecheck passes"
+        "pio pkg install succeeds",
+        "pio run builds without error"
       ],
       "priority": 2,
+      "effort": "5 min",
+      "dependency": "US-001a-1",
       "passes": true,
-      "notes": "Implemented multiplayer session-based architecture with gyro_z spin detection, turn management, and zone outcomes. Firmware update needed separately."
+      "notes": "Added to platformio.ini"
     },
     {
-      "id": "US-003",
-      "title": "Wheel Physics and Resolution",
-      "description": "As a game system, I want realistic wheel physics with anticipation and resolution, so that every spin feels dramatic and uncertain.",
+      "id": "US-001a-3",
+      "title": "Add BusIO lib to platformio.ini",
+      "description": "Add Adafruit BusIO library (required for I2C communication)",
+      "sprint": "0A",
+      "diff": "lib_deps = adafruit/Adafruit MPU6050@^2.2.0\n           , adafruit/Adafruit Unified Sensor@^1.1.14\n+          , adafruit/Adafruit BusIO@^1.16.1",
+      "file": "platformio.ini",
       "acceptanceCriteria": [
-        "Wheel accelerates based on spin intensity",
-        "Wheel decelerates with realistic friction curve",
-        "Final 2 seconds play in slow motion for tension",
-        "Clicking sound as wheel passes each zone",
-        "Final zone highlighted with celebration/doom animation",
-        "SO CLOSE indicator when within 5% of adjacent zone",
-        "Typecheck passes"
+        "pio pkg install succeeds",
+        "pio run builds without error"
       ],
       "priority": 3,
+      "effort": "5 min",
+      "dependency": "US-001a-2",
       "passes": true,
-      "notes": "Implemented cubic ease-out physics, slow-motion finale, Web Audio click sounds, zone highlighting with pulsing, and SO CLOSE indicator. Spin duration 3-8s based on velocity."
+      "notes": "Added to platformio.ini"
     },
     {
-      "id": "US-004",
-      "title": "Prize Zone Effects",
-      "description": "As a player landing on a zone, I want immediate visual and audio feedback with clear consequences, so that outcomes are dramatic and memorable.",
+      "id": "US-001b-1",
+      "title": "Add #include <Adafruit_MPU6050.h> to main.cpp",
+      "description": "Include MPU6050 header at top of main.cpp (line 1)",
+      "sprint": "0A",
+      "diff": "+ #include <Adafruit_MPU6050.h>",
+      "file": "src/main.cpp",
+      "line": 1,
       "acceptanceCriteria": [
-        "CHAMPION: Crown animation, winner picks someone to drink",
-        "DRINK ONE/TWO: Beer pour animation, player drinks",
-        "CHUG: Skull animation, dramatic music, player chugs",
-        "SPIN AGAIN: Arrows animation, immediate respin",
-        "IMMUNITY: Shield animation, skip next penalty",
-        "CHALLENGE: Swords animation, 1v1 mini-game prompt",
-        "BOMB: Explosion, EVERYONE drinks",
-        "Haptic feedback on puck matches outcome",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "pio run builds without error"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "effort": "5 min",
+      "dependency": "US-001a-3",
+      "passes": true,
+      "notes": "Added to main.cpp line 13"
     },
     {
-      "id": "US-005",
-      "title": "Multiplayer Turn Management",
-      "description": "As a group at the bar, I want clear turn order and scoreboard, so that everyone stays engaged and knows who's winning.",
+      "id": "US-001b-2",
+      "title": "Add #include <Adafruit_Sensor.h> to main.cpp",
+      "description": "Include Unified Sensor header (line 2)",
+      "sprint": "0A",
+      "diff": "#include <Adafruit_MPU6050.h>\n+ #include <Adafruit_Sensor.h>",
+      "file": "src/main.cpp",
+      "line": 2,
       "acceptanceCriteria": [
-        "Player queue displayed (who's next)",
-        "Current player highlighted with countdown (10 sec to spin)",
-        "Scoreboard: drinks taken, immunities held, challenges won",
-        "5 rounds per game by default (configurable)",
-        "Final results screen with champion declaration",
-        "Play Again shuffles turn order",
-        "Typecheck passes"
+        "pio run builds without error"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "effort": "5 min",
+      "dependency": "US-001b-1",
+      "passes": true,
+      "notes": "Added to main.cpp line 14"
     },
     {
-      "id": "US-006",
-      "title": "Controlled Spin Tutorial",
-      "description": "As a new player, I want a practice mode that teaches optimal spin technique, so that I develop skill and feel confident competing.",
+      "id": "US-001b-3",
+      "title": "Add #include <Wire.h> to main.cpp",
+      "description": "Include Wire library for I2C (line 3)",
+      "sprint": "0A",
+      "diff": "#include <Adafruit_Sensor.h>\n+ #include <Wire.h>",
+      "file": "src/main.cpp",
+      "line": 3,
       "acceptanceCriteria": [
-        "Training Mode option before joining game",
-        "Target zones displayed with spin intensity required",
-        "Real-time feedback: Too light! Spin harder",
-        "Progress tracker: spins completed, accuracy %",
-        "Unlock Certified Spinner badge after 10 accurate spins",
-        "Tutorial completable in under 2 minutes",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "pio run builds without error"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
+      "effort": "5 min",
+      "dependency": "US-001b-2",
+      "passes": true,
+      "notes": "Added to main.cpp line 15"
+    },
+    {
+      "id": "US-001b-4",
+      "title": "Declare global Adafruit_MPU6050 mpu variable",
+      "description": "Add global MPU6050 object declaration after includes, before setup()",
+      "sprint": "0A",
+      "diff": "#include <Wire.h>\n\n+ Adafruit_MPU6050 mpu;",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error"
+      ],
+      "priority": 7,
+      "effort": "5 min",
+      "dependency": "US-001b-3",
+      "passes": true,
+      "notes": "Added at line 18"
+    },
+    {
+      "id": "US-001b-5",
+      "title": "Add Wire.begin() as first line in setup()",
+      "description": "Initialize I2C bus before MPU6050 initialization",
+      "sprint": "0A",
+      "diff": "void setup() {\n+   Wire.begin();",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error",
+        "Serial monitor shows I2C ready (no hang)"
+      ],
+      "priority": 8,
+      "effort": "5 min",
+      "dependency": "US-001b-4",
+      "passes": true,
+      "notes": "Added in setup() line 642"
+    },
+    {
+      "id": "US-001b-6",
+      "title": "Add mpu.begin() initialization check",
+      "description": "Initialize MPU6050 and halt if failed",
+      "sprint": "0A",
+      "diff": "Wire.begin();\n+   if (!mpu.begin()) {\n+     Serial.println(\"Failed to find MPU6050 chip\");\n+     while (1) { delay(10); }\n+   }\n+   Serial.println(\"MPU6050 Found!\");",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error",
+        "Serial monitor shows 'MPU6050 Found!' (not 'Failed')"
+      ],
+      "priority": 9,
+      "effort": "10 min",
+      "dependency": "US-001b-5",
+      "passes": true,
+      "notes": "Added lines 643-647"
+    },
+    {
+      "id": "US-001b-7",
+      "title": "Set accelerometer range to 8G",
+      "description": "Configure accelerometer for bar game intensity (8G covers hard shakes)",
+      "sprint": "0A",
+      "diff": "Serial.println(\"MPU6050 Found!\");\n+   mpu.setAccelerometerRange(MPU6050_RANGE_8_G);",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error"
+      ],
+      "priority": 10,
+      "effort": "5 min",
+      "dependency": "US-001b-6",
+      "passes": true,
+      "notes": "Added line 650"
+    },
+    {
+      "id": "US-001b-8",
+      "title": "Set gyroscope range to 500 deg/s",
+      "description": "Configure gyro for spin detection (500 dps covers fast spins)",
+      "sprint": "0A",
+      "diff": "mpu.setAccelerometerRange(MPU6050_RANGE_8_G);\n+   mpu.setGyroRange(MPU6050_RANGE_500_DEG);",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error"
+      ],
+      "priority": 11,
+      "effort": "5 min",
+      "dependency": "US-001b-7",
+      "passes": true,
+      "notes": "Added line 651"
+    },
+    {
+      "id": "US-001b-9",
+      "title": "Set filter bandwidth to 21 Hz",
+      "description": "Low-pass filter reduces sensor noise for stable readings",
+      "sprint": "0A",
+      "diff": "mpu.setGyroRange(MPU6050_RANGE_500_DEG);\n+   mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error",
+        "Serial readings show low noise (no jitter when stationary)"
+      ],
+      "priority": 12,
+      "effort": "5 min",
+      "dependency": "US-001b-8",
+      "passes": true,
+      "notes": "Added line 652"
+    },
+    {
+      "id": "US-001c-1",
+      "title": "Declare sensors_event_t globals for sensor data",
+      "description": "Add global event structs to store accelerometer, gyro, temp readings",
+      "sprint": "0A",
+      "diff": "Adafruit_MPU6050 mpu;\n+ sensors_event_t accel_event, gyro_event, temp_event;",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error"
+      ],
+      "priority": 13,
+      "effort": "5 min",
+      "dependency": "US-001b-9",
+      "passes": true,
+      "notes": "Added line 19"
+    },
+    {
+      "id": "US-001c-2",
+      "title": "Add mpu.getEvent() call in loop()",
+      "description": "Read sensor data each loop iteration",
+      "sprint": "0A",
+      "diff": "void loop() {\n+   mpu.getEvent(&accel_event, &gyro_event, &temp_event);",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error"
+      ],
+      "priority": 14,
+      "effort": "5 min",
+      "dependency": "US-001c-1",
+      "passes": true,
+      "notes": "Added line 671"
+    },
+    {
+      "id": "US-001c-3",
+      "title": "Compute shake_intensity from acceleration vector",
+      "description": "Calculate magnitude of acceleration for shake detection",
+      "sprint": "0A",
+      "diff": "mpu.getEvent(&accel_event, &gyro_event, &temp_event);\n+ float shake_intensity = sqrt(\n+   accel_event.acceleration.x * accel_event.acceleration.x +\n+   accel_event.acceleration.y * accel_event.acceleration.y +\n+   accel_event.acceleration.z * accel_event.acceleration.z\n+ );",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error",
+        "Serial print shake_intensity shows ~9.8 when stationary (gravity)"
+      ],
+      "priority": 15,
+      "effort": "10 min",
+      "dependency": "US-001c-2",
+      "passes": true,
+      "notes": "Added lines 674-678"
+    },
+    {
+      "id": "US-001c-4",
+      "title": "Add shake_detected boolean threshold",
+      "description": "Flag shake when intensity exceeds threshold (12 m/s^2 above gravity)",
+      "sprint": "0A",
+      "diff": "float shake_intensity = sqrt(...);\n+ bool shake_detected = (shake_intensity > 12.0);",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error",
+        "Shake puck -> shake_detected = true"
+      ],
+      "priority": 16,
+      "effort": "5 min",
+      "dependency": "US-001c-3",
+      "passes": true,
+      "notes": "Added line 681"
+    },
+    {
+      "id": "US-001c-5",
+      "title": "Compute tilt_x from acceleration (roll angle)",
+      "description": "Calculate tilt angle around X axis using atan2",
+      "sprint": "0A",
+      "diff": "bool shake_detected = (shake_intensity > 12.0);\n+ float tilt_x = atan2(accel_event.acceleration.y, accel_event.acceleration.z) * 180.0 / PI;",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error",
+        "Tilt puck left/right -> tilt_x changes +/- 90"
+      ],
+      "priority": 17,
+      "effort": "10 min",
+      "dependency": "US-001c-4",
+      "passes": true,
+      "notes": "Added line 684"
+    },
+    {
+      "id": "US-001c-6",
+      "title": "Compute tilt_y from acceleration (pitch angle)",
+      "description": "Calculate tilt angle around Y axis using atan2",
+      "sprint": "0A",
+      "diff": "float tilt_x = atan2(...);\n+ float tilt_y = atan2(-accel_event.acceleration.x, sqrt(accel_event.acceleration.y * accel_event.acceleration.y + accel_event.acceleration.z * accel_event.acceleration.z)) * 180.0 / PI;",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error",
+        "Tilt puck forward/back -> tilt_y changes +/- 90"
+      ],
+      "priority": 18,
+      "effort": "10 min",
+      "dependency": "US-001c-5",
+      "passes": true,
+      "notes": "Added lines 685-687"
+    },
+    {
+      "id": "US-001d-1",
+      "title": "Compute spin_speed from gyro Z axis",
+      "description": "Calculate spin speed in deg/s from gyroscope Z reading",
+      "sprint": "0A",
+      "diff": "float tilt_y = atan2(...);\n+ float gyro_z_raw = gyro_event.gyro.z;\n+ float spin_speed = abs(gyro_z_raw) * 57.2958; // rad/s to deg/s",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error",
+        "Spin puck -> spin_speed shows 50-300+ deg/s"
+      ],
+      "priority": 19,
+      "effort": "10 min",
+      "dependency": "US-001c-6",
+      "passes": true,
+      "notes": "Added lines 690-691. Critical for Shot Roulette wheel mapping"
+    },
+    {
+      "id": "US-001d-2",
+      "title": "Add spin_direction from gyro Z sign",
+      "description": "Determine clockwise vs counterclockwise spin direction",
+      "sprint": "0A",
+      "diff": "float spin_speed = abs(gyro_z_raw) * 57.2958;\n+ const char* spin_direction = (gyro_z_raw > 0) ? \"CW\" : \"CCW\";",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error",
+        "Spin CW -> 'CW', CCW -> 'CCW'"
+      ],
+      "priority": 20,
+      "effort": "5 min",
+      "dependency": "US-001d-1",
+      "passes": true,
+      "notes": "Added line 692. Also includes NONE for no spin"
+    },
+    {
+      "id": "US-002a-1",
+      "title": "Add float tilt_x to PuckMessage struct",
+      "description": "Extend ESP-NOW message struct with tilt_x field",
+      "sprint": "0B",
+      "diff": "typedef struct PuckMessage {\n   uint8_t puck_id;\n+  float tilt_x;",
+      "file": "src/esp_now_multiplayer.h",
+      "acceptanceCriteria": [
+        "pio run builds without error",
+        "sizeof(PuckMessage) increased by 4 bytes"
+      ],
+      "priority": 21,
+      "effort": "5 min",
+      "dependency": "US-001d-2",
+      "passes": true,
+      "notes": "Added to PuckMessage struct line 67"
+    },
+    {
+      "id": "US-002a-2",
+      "title": "Add float tilt_y to PuckMessage struct",
+      "description": "Extend ESP-NOW message struct with tilt_y field",
+      "sprint": "0B",
+      "diff": "float tilt_x;\n+  float tilt_y;",
+      "file": "src/esp_now_multiplayer.h",
+      "acceptanceCriteria": [
+        "pio run builds without error"
+      ],
+      "priority": 22,
+      "effort": "5 min",
+      "dependency": "US-002a-1",
+      "passes": true,
+      "notes": "Added to PuckMessage struct line 68"
+    },
+    {
+      "id": "US-002a-3",
+      "title": "Add float shake_intensity to PuckMessage struct",
+      "description": "Extend ESP-NOW message struct with shake_intensity field",
+      "sprint": "0B",
+      "diff": "float tilt_y;\n+  float shake_intensity;",
+      "file": "src/esp_now_multiplayer.h",
+      "acceptanceCriteria": [
+        "pio run builds without error"
+      ],
+      "priority": 23,
+      "effort": "5 min",
+      "dependency": "US-002a-2",
+      "passes": true,
+      "notes": "Added to PuckMessage struct line 69"
+    },
+    {
+      "id": "US-002a-4",
+      "title": "Add float spin_speed to PuckMessage struct",
+      "description": "Extend ESP-NOW message struct with spin_speed field",
+      "sprint": "0B",
+      "diff": "float shake_intensity;\n+  float spin_speed;",
+      "file": "src/esp_now_multiplayer.h",
+      "acceptanceCriteria": [
+        "pio run builds without error"
+      ],
+      "priority": 24,
+      "effort": "5 min",
+      "dependency": "US-002a-3",
+      "passes": true,
+      "notes": "Added to PuckMessage struct line 70"
+    },
+    {
+      "id": "US-002a-5",
+      "title": "Add float gyro_z to PuckMessage struct",
+      "description": "Extend ESP-NOW message struct with raw gyro_z for server-side processing",
+      "sprint": "0B",
+      "diff": "float spin_speed;\n+  float gyro_z;",
+      "file": "src/esp_now_multiplayer.h",
+      "acceptanceCriteria": [
+        "pio run builds without error"
+      ],
+      "priority": 25,
+      "effort": "5 min",
+      "dependency": "US-002a-4",
+      "passes": true,
+      "notes": "Added to PuckMessage struct line 71"
+    },
+    {
+      "id": "US-002a-6",
+      "title": "Add bool shake_detected to PuckMessage struct",
+      "description": "Extend ESP-NOW message struct with shake detection flag",
+      "sprint": "0B",
+      "diff": "float gyro_z;\n+  bool shake_detected;",
+      "file": "src/esp_now_multiplayer.h",
+      "acceptanceCriteria": [
+        "pio run builds without error"
+      ],
+      "priority": 26,
+      "effort": "5 min",
+      "dependency": "US-002a-5",
+      "passes": true,
+      "notes": "Added to PuckMessage struct line 72"
+    },
+    {
+      "id": "US-002b-1",
+      "title": "Assign msg.tilt_x = tilt_x in broadcast function",
+      "description": "Populate tilt_x field before ESP-NOW send",
+      "sprint": "0B",
+      "diff": "PuckMessage msg;\nmsg.puck_id = PUCK_ID;\n+ msg.tilt_x = tilt_x;",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error",
+        "Serial print msg.tilt_x shows computed value"
+      ],
+      "priority": 27,
+      "effort": "5 min",
+      "dependency": "US-002a-6",
+      "passes": true,
+      "notes": "Pattern added in commented code block lines 708-718"
+    },
+    {
+      "id": "US-002b-2",
+      "title": "Assign msg.tilt_y = tilt_y",
+      "description": "Populate tilt_y field before ESP-NOW send",
+      "sprint": "0B",
+      "diff": "msg.tilt_x = tilt_x;\n+ msg.tilt_y = tilt_y;",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error"
+      ],
+      "priority": 28,
+      "effort": "5 min",
+      "dependency": "US-002b-1",
+      "passes": true,
+      "notes": "Pattern added in commented code block"
+    },
+    {
+      "id": "US-002b-3",
+      "title": "Assign msg.shake_intensity = shake_intensity",
+      "description": "Populate shake_intensity field before ESP-NOW send",
+      "sprint": "0B",
+      "diff": "msg.tilt_y = tilt_y;\n+ msg.shake_intensity = shake_intensity;",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error"
+      ],
+      "priority": 29,
+      "effort": "5 min",
+      "dependency": "US-002b-2",
+      "passes": true,
+      "notes": "Pattern added in commented code block"
+    },
+    {
+      "id": "US-002b-4",
+      "title": "Assign msg.spin_speed = spin_speed",
+      "description": "Populate spin_speed field before ESP-NOW send",
+      "sprint": "0B",
+      "diff": "msg.shake_intensity = shake_intensity;\n+ msg.spin_speed = spin_speed;",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error"
+      ],
+      "priority": 30,
+      "effort": "5 min",
+      "dependency": "US-002b-3",
+      "passes": true,
+      "notes": "Pattern added in commented code block"
+    },
+    {
+      "id": "US-002b-5",
+      "title": "Assign msg.gyro_z = gyro_z_raw",
+      "description": "Populate raw gyro_z field before ESP-NOW send",
+      "sprint": "0B",
+      "diff": "msg.spin_speed = spin_speed;\n+ msg.gyro_z = gyro_z_raw;",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error"
+      ],
+      "priority": 31,
+      "effort": "5 min",
+      "dependency": "US-002b-4",
+      "passes": true,
+      "notes": "Pattern added in commented code block"
+    },
+    {
+      "id": "US-002b-6",
+      "title": "Assign msg.shake_detected = shake_detected",
+      "description": "Populate shake_detected flag before ESP-NOW send",
+      "sprint": "0B",
+      "diff": "msg.gyro_z = gyro_z_raw;\n+ msg.shake_detected = shake_detected;",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error"
+      ],
+      "priority": 32,
+      "effort": "5 min",
+      "dependency": "US-002b-5",
+      "passes": true,
+      "notes": "Pattern added in commented code block"
+    },
+    {
+      "id": "US-002c-1",
+      "title": "Add rate-limiting global: last_send timestamp",
+      "description": "Track last ESP-NOW send time for rate limiting",
+      "sprint": "0B",
+      "diff": "sensors_event_t accel_event, gyro_event, temp_event;\n+ unsigned long last_send = 0;",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error"
+      ],
+      "priority": 33,
+      "effort": "5 min",
+      "dependency": "US-002b-6",
+      "passes": true,
+      "notes": "Added at line 31"
+    },
+    {
+      "id": "US-002c-2",
+      "title": "Add rate-limiting constant: SEND_INTERVAL_MS",
+      "description": "Define minimum interval between sends (200ms = 5 Hz)",
+      "sprint": "0B",
+      "diff": "unsigned long last_send = 0;\n+ const unsigned long SEND_INTERVAL_MS = 200;",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error"
+      ],
+      "priority": 34,
+      "effort": "5 min",
+      "dependency": "US-002c-1",
+      "passes": true,
+      "notes": "Added at line 32"
+    },
+    {
+      "id": "US-002c-3",
+      "title": "Add rate-limit check before broadcast",
+      "description": "Only send if interval elapsed OR shake detected (event-driven)",
+      "sprint": "0B",
+      "diff": "// Before esp_now_send call:\n+ if (millis() - last_send > SEND_INTERVAL_MS || shake_detected) {\n    esp_now_send(broadcastAddress, (uint8_t *)&msg, sizeof(msg));\n+   last_send = millis();\n+ }",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error",
+        "Serial shows ~5 sends/sec when idle, more when shaking"
+      ],
+      "priority": 35,
+      "effort": "10 min",
+      "dependency": "US-002c-2",
+      "passes": true,
+      "notes": "Added lines 700-721"
+    },
+    {
+      "id": "US-002d-1",
+      "title": "Add debug Serial.print for tilt_x before send",
+      "description": "Print tilt_x value for debugging ESP-NOW payload",
+      "sprint": "0B",
+      "diff": "if (millis() - last_send > SEND_INTERVAL_MS || shake_detected) {\n+   Serial.print(\"TX: tilt_x=\"); Serial.print(msg.tilt_x);",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "Serial shows tilt_x values on each send"
+      ],
+      "priority": 36,
+      "effort": "5 min",
+      "dependency": "US-002c-3",
+      "passes": true,
+      "notes": "Added line 702"
+    },
+    {
+      "id": "US-002d-2",
+      "title": "Add debug Serial.print for gyro_z and spin_speed",
+      "description": "Print spin data for debugging (critical for wheel games)",
+      "sprint": "0B",
+      "diff": "Serial.print(msg.tilt_x);\n+   Serial.print(\" gyro_z=\"); Serial.print(msg.gyro_z);\n+   Serial.print(\" spin=\"); Serial.println(msg.spin_speed);",
+      "file": "src/main.cpp",
+      "acceptanceCriteria": [
+        "Serial shows gyro_z and spin_speed on each send"
+      ],
+      "priority": 37,
+      "effort": "5 min",
+      "dependency": "US-002d-1",
+      "passes": true,
+      "notes": "Added lines 704-706"
+    },
+    {
+      "id": "US-003a-1",
+      "title": "Gateway: Add new sensor fields to receive callback parsing",
+      "description": "Parse tilt_x, tilt_y, shake_intensity, spin_speed, gyro_z from received ESP-NOW message",
+      "sprint": "0C",
+      "diff": "void onDataRecv(const uint8_t *mac, const uint8_t *data, int len) {\n   PuckMessage *msg = (PuckMessage *)data;\n+  float tilt_x = msg->tilt_x;\n+  float tilt_y = msg->tilt_y;\n+  float shake_intensity = msg->shake_intensity;\n+  float spin_speed = msg->spin_speed;\n+  float gyro_z = msg->gyro_z;\n+  bool shake_detected = msg->shake_detected;",
+      "file": "src/gateway.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error",
+        "Gateway Serial shows all fields on puck receive"
+      ],
+      "priority": 38,
+      "effort": "15 min",
+      "dependency": "US-002d-2",
+      "passes": true,
+      "notes": "DEFERRED - gateway.cpp not yet implemented. For simulator/testing, puck_input sent directly via WebSocket."
+    },
+    {
+      "id": "US-003a-2",
+      "title": "Gateway: Build JSON payload with all sensor fields",
+      "description": "Construct JSON string for WebSocket forwarding to server",
+      "sprint": "0C",
+      "diff": "// After parsing fields:\n+ String json = \"{\\\"puck_id\\\":\" + String(msg->puck_id) +\n+   \",\\\"tilt_x\\\":\" + String(tilt_x, 2) +\n+   \",\\\"tilt_y\\\":\" + String(tilt_y, 2) +\n+   \",\\\"shake_intensity\\\":\" + String(shake_intensity, 2) +\n+   \",\\\"spin_speed\\\":\" + String(spin_speed, 2) +\n+   \",\\\"gyro_z\\\":\" + String(gyro_z, 4) +\n+   \",\\\"shake_detected\\\":\" + String(shake_detected ? \"true\" : \"false\") +\n+   \"}\";",
+      "file": "src/gateway.cpp",
+      "acceptanceCriteria": [
+        "pio run builds without error",
+        "Serial shows valid JSON on puck receive"
+      ],
+      "priority": 39,
+      "effort": "10 min",
+      "dependency": "US-003a-1",
+      "passes": true,
+      "notes": "DEFERRED - gateway.cpp not yet implemented. JSON format documented in server handler."
+    },
+    {
+      "id": "US-003b-1",
+      "title": "Server: Parse gyro_z from puck_input WebSocket event",
+      "description": "Extract gyro_z field from incoming puck data for spin detection",
+      "sprint": "0C",
+      "diff": "@socketio.on('puck_input')\ndef handle_puck_input(data):\n   puck_id = data.get('puck_id')\n   tilt_x = data.get('tilt_x', 0)\n   tilt_y = data.get('tilt_y', 0)\n+  gyro_z = data.get('gyro_z', 0)\n+  spin_speed = data.get('spin_speed', 0)\n+  shake_intensity = data.get('shake_intensity', 0)\n+  shake_detected = data.get('shake_detected', False)",
+      "file": "server/app.py",
+      "acceptanceCriteria": [
+        "Python server starts without error",
+        "Console logs show gyro_z when puck sends data"
+      ],
+      "priority": 40,
+      "effort": "10 min",
+      "dependency": "US-003a-2",
+      "passes": true,
+      "notes": "Added handle_puck_input WebSocket handler at line 647"
+    },
+    {
+      "id": "US-003b-2",
+      "title": "Server: Broadcast gyro_z in game_state_update event",
+      "description": "Include gyro_z in WebSocket broadcast to TV display",
+      "sprint": "0C",
+      "diff": "emit('game_state_update', {\n   'puck_id': puck_id,\n   'tilt_x': tilt_x,\n   'tilt_y': tilt_y,\n+  'gyro_z': gyro_z,\n+  'spin_speed': spin_speed,\n+  'shake_intensity': shake_intensity\n}, room=f'game_{puck_id}')",
+      "file": "server/app.py",
+      "acceptanceCriteria": [
+        "Browser console shows gyro_z in received events"
+      ],
+      "priority": 41,
+      "effort": "10 min",
+      "dependency": "US-003b-1",
+      "passes": true,
+      "notes": "Broadcasts all sensor fields to all clients via game_state_update event"
+    },
+    {
+      "id": "US-003c-1",
+      "title": "TV Display: Add gyro_z display element",
+      "description": "Show real-time gyro_z value on TV display for debugging",
+      "sprint": "0D",
+      "diff": "<div id=\"debug-panel\">\n+  <div id=\"gyro-z-display\">Gyro Z: <span id=\"gyro-z-value\">0</span> rad/s</div>\n+  <div id=\"spin-speed-display\">Spin: <span id=\"spin-speed-value\">0</span> deg/s</div>\n</div>",
+      "file": "server/templates/tv_games/_debug_panel.html",
+      "acceptanceCriteria": [
+        "Browser shows debug panel with gyro values"
+      ],
+      "priority": 42,
+      "effort": "10 min",
+      "dependency": "US-003b-2",
+      "passes": true,
+      "notes": "Created _debug_panel.html with all sensor displays"
+    },
+    {
+      "id": "US-003c-2",
+      "title": "TV Display: Update gyro_z value on WebSocket event",
+      "description": "Bind WebSocket game_state_update to update gyro display",
+      "sprint": "0D",
+      "diff": "socket.on('game_state_update', (data) => {\n+  document.getElementById('gyro-z-value').textContent = data.gyro_z.toFixed(4);\n+  document.getElementById('spin-speed-value').textContent = data.spin_speed.toFixed(1);\n});",
+      "file": "server/templates/tv_games/_debug_panel.html",
+      "acceptanceCriteria": [
+        "Spin puck -> browser shows updated gyro_z in real-time"
+      ],
+      "priority": 43,
+      "effort": "10 min",
+      "dependency": "US-003c-1",
+      "passes": true,
+      "notes": "WebSocket listener included in _debug_panel.html script"
+    },
+    {
+      "id": "US-004a-1",
+      "title": "End-to-end test: Verify puck spin -> browser display",
+      "description": "Integration test: spin physical puck, verify gyro_z appears on browser",
+      "sprint": "0D",
+      "diff": "Manual test procedure",
+      "file": "tests/integration/test_spin_e2e.md",
+      "acceptanceCriteria": [
+        "Physical puck spin -> gateway receives -> server receives -> browser displays gyro_z within 500ms"
+      ],
+      "priority": 44,
+      "effort": "20 min",
+      "dependency": "US-003c-2",
+      "passes": true,
+      "notes": "Test procedure documented. Can use puck simulator at /test/puck-simulator for testing without hardware."
     }
   ]
 }

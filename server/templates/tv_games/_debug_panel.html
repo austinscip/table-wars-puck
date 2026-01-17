@@ -1,0 +1,251 @@
+<!--
+  Sprint 0D: Debug Panel for Puck Sensor Data
+  Include this in any TV game template to display real-time sensor data
+
+  Usage in Jinja2 template:
+    { % include 'tv_games/_debug_panel.html' % }
+
+  Or include the script directly in your game's JavaScript:
+    <script src="/static/js/debug_panel.js"></script>
+-->
+
+<div id="debug-panel" style="
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.85);
+    color: #00ff00;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    padding: 15px;
+    border: 2px solid #00ff00;
+    border-radius: 8px;
+    z-index: 9999;
+    min-width: 220px;
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+">
+    <div style="font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #00ff00; padding-bottom: 5px;">
+        PUCK SENSOR DATA
+    </div>
+
+    <div id="gyro-z-display" style="margin: 5px 0;">
+        Gyro Z: <span id="gyro-z-value" style="color: #fff;">0.0000</span> rad/s
+    </div>
+
+    <div id="spin-speed-display" style="margin: 5px 0;">
+        Spin: <span id="spin-speed-value" style="color: #fff;">0.0</span> deg/s
+        <span id="spin-indicator" style="margin-left: 5px;"></span>
+    </div>
+
+    <div id="shake-display" style="margin: 5px 0;">
+        Shake: <span id="shake-intensity-value" style="color: #fff;">0.0</span> m/s^2
+        <span id="shake-indicator" style="margin-left: 5px;"></span>
+    </div>
+
+    <div id="tilt-display" style="margin: 5px 0;">
+        Tilt X: <span id="tilt-x-value" style="color: #fff;">0.0</span> deg
+    </div>
+
+    <div id="tilt-y-display" style="margin: 5px 0;">
+        Tilt Y: <span id="tilt-y-value" style="color: #fff;">0.0</span> deg
+    </div>
+
+    <div style="margin-top: 10px; border-top: 1px solid #00ff00; padding-top: 5px; font-size: 11px; color: #888;">
+        Puck ID: <span id="debug-puck-id">-</span>
+    </div>
+
+    <!-- Sprint 0.5: Connection Health Status -->
+    <div style="margin-top: 10px; border-top: 1px solid #00ff00; padding-top: 5px;">
+        <div style="font-weight: bold; font-size: 12px; margin-bottom: 5px;">
+            CONNECTION HEALTH
+        </div>
+        <div id="connection-status-display" style="margin: 5px 0;">
+            Status: <span id="connection-status-indicator" style="font-weight: bold;">●</span>
+            <span id="connection-status-text" style="color: #fff;">Waiting...</span>
+        </div>
+        <div id="last-update-display" style="margin: 5px 0; font-size: 11px; color: #888;">
+            Last update: <span id="last-update-timer">-</span>
+        </div>
+    </div>
+
+    <!-- Sprint 0.5: Packet Statistics -->
+    <div style="margin-top: 10px; border-top: 1px solid #00ff00; padding-top: 5px;">
+        <div style="font-weight: bold; font-size: 12px; margin-bottom: 5px;">
+            PACKET STATS
+        </div>
+        <div id="packet-total-display" style="margin: 5px 0; font-size: 11px;">
+            Total: <span id="packet-total-value" style="color: #fff;">0</span>
+        </div>
+        <div id="packet-dropped-display" style="margin: 5px 0; font-size: 11px;">
+            Dropped: <span id="packet-dropped-value" style="color: #fff;">0</span>
+        </div>
+        <div id="packet-drop-rate-display" style="margin: 5px 0; font-size: 11px;">
+            Drop Rate: <span id="packet-drop-rate-value" style="color: #fff;">0%</span>
+            <span id="drop-rate-warning" style="display: none; margin-left: 5px; color: #ff0000; font-weight: bold;">⚠️ HIGH</span>
+        </div>
+    </div>
+</div>
+
+<!-- Sprint 0.5: CSS for Connection Health Status Colors -->
+<style>
+    .status-green {
+        color: #00ff00;
+    }
+    .status-yellow {
+        color: #ffff00;
+    }
+    .status-red {
+        color: #ff0000;
+    }
+
+    /* Pulsing animation for high drop rate warning */
+    @keyframes pulse-red {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.3; }
+    }
+    .pulse-red {
+        animation: pulse-red 1s ease-in-out infinite;
+    }
+</style>
+
+<script>
+// Sprint 0D: Debug Panel WebSocket Integration
+(function() {
+    // Connect to WebSocket if not already connected
+    if (typeof socket === 'undefined') {
+        window.socket = io();
+    }
+
+    // Sprint 0.5: Connection Health Monitoring
+    let lastUpdateTime = null;
+
+    // Update connection status based on time elapsed
+    function updateConnectionStatus() {
+        const now = Date.now() / 1000;  // Convert to seconds
+        const statusIndicator = document.getElementById('connection-status-indicator');
+        const statusText = document.getElementById('connection-status-text');
+        const timerDisplay = document.getElementById('last-update-timer');
+
+        if (lastUpdateTime === null) {
+            statusIndicator.className = 'status-yellow';
+            statusText.textContent = 'Waiting...';
+            statusText.style.color = '#ffff00';
+            timerDisplay.textContent = '-';
+            return;
+        }
+
+        const elapsedSeconds = now - lastUpdateTime;
+
+        // Update timer display
+        if (elapsedSeconds < 1) {
+            timerDisplay.textContent = 'Just now';
+        } else if (elapsedSeconds < 60) {
+            timerDisplay.textContent = elapsedSeconds.toFixed(1) + 's ago';
+        } else {
+            timerDisplay.textContent = Math.floor(elapsedSeconds / 60) + 'm ago';
+        }
+
+        // Update status indicator based on thresholds
+        if (elapsedSeconds < 1) {
+            // Green: <1s
+            statusIndicator.className = 'status-green';
+            statusText.textContent = 'Connected';
+            statusText.style.color = '#00ff00';
+        } else if (elapsedSeconds < 5) {
+            // Yellow: 1-5s
+            statusIndicator.className = 'status-yellow';
+            statusText.textContent = 'Slow';
+            statusText.style.color = '#ffff00';
+        } else {
+            // Red: >5s
+            statusIndicator.className = 'status-red';
+            statusText.textContent = 'Stale';
+            statusText.style.color = '#ff0000';
+        }
+    }
+
+    // Update status every second
+    setInterval(updateConnectionStatus, 1000);
+
+    // Sprint 0.5: Poll /api/health for packet statistics
+    function updatePacketStats() {
+        fetch('/api/health')
+            .then(response => response.json())
+            .then(data => {
+                // Update packet statistics display
+                document.getElementById('packet-total-value').textContent = data.total_packets;
+                document.getElementById('packet-dropped-value').textContent = data.dropped_packets;
+                document.getElementById('packet-drop-rate-value').textContent = data.drop_rate.toFixed(2) + '%';
+
+                // Show warning if drop rate > 10%
+                const warningElement = document.getElementById('drop-rate-warning');
+                if (data.drop_rate > 10) {
+                    warningElement.style.display = 'inline';
+                    warningElement.className = 'pulse-red';
+                } else {
+                    warningElement.style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching health stats:', error);
+            });
+    }
+
+    // Poll every 2 seconds
+    setInterval(updatePacketStats, 2000);
+    // Initial call
+    updatePacketStats();
+
+    // Listen for sensor_data_update events (separate from game state)
+    socket.on('sensor_data_update', function(data) {
+        // Sprint 0.5: Update last update time
+        if (data.timestamp) {
+            lastUpdateTime = data.timestamp;
+        }
+
+        // Update Gyro Z
+        const gyroZ = data.gyro_z || 0;
+        document.getElementById('gyro-z-value').textContent = gyroZ.toFixed(4);
+
+        // Update Spin Speed with indicator
+        const spinSpeed = data.spin_speed || 0;
+        document.getElementById('spin-speed-value').textContent = spinSpeed.toFixed(1);
+
+        const spinIndicator = document.getElementById('spin-indicator');
+        if (spinSpeed > 100) {
+            spinIndicator.textContent = 'FAST';
+            spinIndicator.style.color = '#ff0000';
+        } else if (spinSpeed > 50) {
+            spinIndicator.textContent = 'MED';
+            spinIndicator.style.color = '#ffff00';
+        } else if (spinSpeed > 10) {
+            spinIndicator.textContent = 'SLOW';
+            spinIndicator.style.color = '#00ff00';
+        } else {
+            spinIndicator.textContent = '';
+        }
+
+        // Update Shake Intensity with indicator
+        const shakeIntensity = data.shake_intensity || 0;
+        const shakeDetected = data.shake_detected || false;
+        document.getElementById('shake-intensity-value').textContent = shakeIntensity.toFixed(1);
+
+        const shakeIndicator = document.getElementById('shake-indicator');
+        if (shakeDetected) {
+            shakeIndicator.textContent = 'SHAKING!';
+            shakeIndicator.style.color = '#ff0000';
+        } else {
+            shakeIndicator.textContent = '';
+        }
+
+        // Update Tilt
+        document.getElementById('tilt-x-value').textContent = (data.tilt_x || 0).toFixed(1);
+        document.getElementById('tilt-y-value').textContent = (data.tilt_y || 0).toFixed(1);
+
+        // Update Puck ID
+        document.getElementById('debug-puck-id').textContent = data.puck_id || '-';
+    });
+
+    console.log('Debug panel initialized - listening for sensor_data_update events');
+})();
+</script>

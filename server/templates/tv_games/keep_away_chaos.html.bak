@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🏃 KEEP AWAY CHAOS - Table Wars</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #000;
+            font-family: 'Arial Black', sans-serif;
+            overflow: hidden;
+        }
+        #gameCanvas {
+            display: block;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        }
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 28px;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.8);
+            z-index: 100;
+        }
+        .timer {
+            font-size: 48px;
+            color: #FFD700;
+            text-align: center;
+            margin: 15px 0;
+        }
+        .timer.urgent { color: #FF0000; animation: pulse 0.5s infinite; }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        #playerList {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.7);
+            padding: 20px;
+            border-radius: 15px;
+            color: white;
+            min-width: 250px;
+        }
+        .player-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 8px;
+            font-size: 18px;
+        }
+        .player-item.is-it {
+            background: rgba(255,0,0,0.3);
+            border: 2px solid #FF0000;
+            animation: glow 1s infinite;
+        }
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 10px #FF0000; }
+            50% { box-shadow: 0 0 30px #FF0000; }
+        }
+        .player-color {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 2px solid white;
+            margin-right: 10px;
+        }
+        .it-badge {
+            background: #FF0000;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            animation: shake 0.3s infinite;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-3px); }
+            75% { transform: translateX(3px); }
+        }
+        .game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.95);
+            padding: 60px;
+            border-radius: 30px;
+            text-align: center;
+            display: none;
+            border: 4px solid #FFD700;
+        }
+        .game-over h1 {
+            color: #FFD700;
+            font-size: 72px;
+            margin-bottom: 30px;
+            text-shadow: 0 0 20px #FFD700;
+        }
+        .game-over .winner {
+            color: white;
+            font-size: 48px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="hud">
+        <div>🏃 KEEP AWAY CHAOS</div>
+        <div class="timer" id="timer">1:30</div>
+    </div>
+
+    <div id="playerList"></div>
+
+    <div class="game-over" id="gameOver">
+        <h1>🏆 WINNER!</h1>
+        <div class="winner" id="winnerName"></div>
+        <p style="color: white; font-size: 24px; margin-top: 20px;">
+            Fewest times tagged!
+        </p>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const socket = io();
+        let gameState = null;
+
+        // Arena bounds
+        const arenaX = canvas.width * 0.1;
+        const arenaY = canvas.height * 0.1;
+        const arenaWidth = canvas.width * 0.6;
+        const arenaHeight = canvas.height * 0.8;
+
+        // Connect to game
+        socket.on('connect', () => {
+            socket.emit('join_game_room', { game_id: 70 });
+            socket.emit('request_game_state', { game_id: 70 });
+        });
+
+        socket.on('game_state_update', (state) => {
+            gameState = state;
+            updateUI(state);
+        });
+
+        socket.on('game_over', (data) => {
+            document.getElementById('gameOver').style.display = 'block';
+            document.getElementById('winnerName').textContent = data.state.winner;
+        });
+
+        function updateUI(state) {
+            // Update timer
+            const timerEl = document.getElementById('timer');
+            const minutes = Math.floor(state.time_remaining / 60);
+            const seconds = state.time_remaining % 60;
+            timerEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            timerEl.className = state.time_remaining < 10 ? 'timer urgent' : 'timer';
+
+            // Update player list
+            const playerListEl = document.getElementById('playerList');
+            playerListEl.innerHTML = '<h3 style="margin-bottom: 15px;">PLAYERS</h3>';
+
+            state.players.forEach(player => {
+                const div = document.createElement('div');
+                div.className = player.is_it ? 'player-item is-it' : 'player-item';
+                div.innerHTML = `
+                    <div style="display: flex; align-items: center;">
+                        <div class="player-color" style="background: ${player.color}"></div>
+                        <span>${player.name}</span>
+                    </div>
+                    <div>
+                        ${player.is_it ? '<span class="it-badge">IT!</span>' : `<span style="color: #888;">Tagged: ${player.times_tagged}</span>`}
+                    </div>
+                `;
+                playerListEl.appendChild(div);
+            });
+        }
+
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            if (!gameState) return;
+
+            // Draw arena
+            ctx.strokeStyle = '#00FF88';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(arenaX, arenaY, arenaWidth, arenaHeight);
+
+            // Draw grid
+            ctx.strokeStyle = 'rgba(0, 255, 136, 0.1)';
+            ctx.lineWidth = 1;
+            for (let i = 1; i < 10; i++) {
+                const x = arenaX + (arenaWidth / 10) * i;
+                const y = arenaY + (arenaHeight / 10) * i;
+                ctx.beginPath();
+                ctx.moveTo(x, arenaY);
+                ctx.lineTo(x, arenaY + arenaHeight);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(arenaX, y);
+                ctx.lineTo(arenaX + arenaWidth, y);
+                ctx.stroke();
+            }
+
+            // Draw players
+            gameState.players.forEach(player => {
+                const x = arenaX + (player.x / 100) * arenaWidth;
+                const y = arenaY + (player.y / 100) * arenaHeight;
+
+                // Draw danger zone if IT
+                if (player.is_it) {
+                    const gradient = ctx.createRadialGradient(x, y, 0, x, y, 80);
+                    gradient.addColorStop(0, 'rgba(255, 0, 0, 0.3)');
+                    gradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(x - 80, y - 80, 160, 160);
+
+                    // Pulsing ring
+                    const pulse = Math.sin(Date.now() / 200) * 10 + 60;
+                    ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(x, y, pulse, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+
+                // Draw player circle
+                ctx.fillStyle = player.color;
+                ctx.beginPath();
+                ctx.arc(x, y, player.is_it ? 25 : 20, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Draw border
+                ctx.strokeStyle = player.is_it ? '#FFFFFF' : player.color;
+                ctx.lineWidth = player.is_it ? 4 : 2;
+                ctx.stroke();
+
+                // Draw IT label
+                if (player.is_it) {
+                    ctx.fillStyle = '#FF0000';
+                    ctx.font = 'bold 16px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('IT!', x, y - 35);
+                }
+
+                // Draw motion trail
+                ctx.globalAlpha = 0.3;
+                ctx.fillStyle = player.color;
+                for (let i = 1; i <= 3; i++) {
+                    ctx.beginPath();
+                    ctx.arc(x, y, (player.is_it ? 25 : 20) - i * 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.globalAlpha = 1.0;
+            });
+
+            requestAnimationFrame(draw);
+        }
+
+        draw();
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+    </script>
+</body>
+</html>

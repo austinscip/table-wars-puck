@@ -62,6 +62,14 @@ struct PuckMessage {
     int16_t value2;        // Payload data
     uint32_t timestamp;    // When sent
     char text[32];         // Optional text message
+
+    // Sprint 0B: Sensor data fields
+    float tilt_x;          // Roll angle from accelerometer (deg)
+    float tilt_y;          // Pitch angle from accelerometer (deg)
+    float shake_intensity; // Acceleration magnitude (m/s^2)
+    float spin_speed;      // Spin speed from gyro Z (deg/s)
+    float gyro_z;          // Raw gyro Z value (rad/s)
+    bool shake_detected;   // True if shaking above threshold
 };
 
 // Puck info
