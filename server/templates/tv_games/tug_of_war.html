@@ -202,20 +202,41 @@
         });
 
         function updateDisplay(state) {
+            // Sprint 1D: Validate state properties to prevent crashes
+            if (!state || typeof state.team1_score === 'undefined' || typeof state.team2_score === 'undefined') {
+                console.warn('Invalid state received:', state);
+                return;
+            }
+
             // Update scores
             document.getElementById('team1Score').textContent = state.team1_score;
             document.getElementById('team2Score').textContent = state.team2_score;
 
-            // Update rope position
+            // Update rope position - Sprint 1D: Added null/zero checks
             const flag = document.getElementById('flag');
             const ropeContainer = document.getElementById('ropeContainer');
+
+            if (!flag || !ropeContainer) {
+                console.warn('Flag or rope container element not found');
+                return;
+            }
+
             const containerWidth = ropeContainer.offsetWidth;
-            const flagPosition = (state.rope_position / 100) * containerWidth - 30;
+
+            // Sprint 1D: Prevent NaN from divide-by-zero
+            if (containerWidth <= 0) {
+                console.warn('Container width is zero, skipping rope position update');
+                return;
+            }
+
+            // Clamp rope_position to valid range (0-100)
+            const ropePosition = Math.max(0, Math.min(100, state.rope_position || 50));
+            const flagPosition = (ropePosition / 100) * containerWidth - 30;
             flag.style.left = flagPosition + 'px';
 
             // Animate meters (fake shake intensity for visual)
-            const shakePower1 = Math.abs(50 - state.rope_position) * 2;
-            const shakePower2 = Math.abs(state.rope_position - 50) * 2;
+            const shakePower1 = Math.abs(50 - ropePosition) * 2;
+            const shakePower2 = Math.abs(ropePosition - 50) * 2;
             document.getElementById('team1Meter').style.width = Math.min(100, shakePower1) + '%';
             document.getElementById('team2Meter').style.width = Math.min(100, shakePower2) + '%';
         }

@@ -143,10 +143,14 @@
         const arenaWidth = canvas.width * 0.6;
         const arenaHeight = canvas.height * 0.8;
 
+        // Sprint 1D: Get game_id from URL params instead of hardcoding
+        const urlParams = new URLSearchParams(window.location.search);
+        const gameId = parseInt(urlParams.get('game_id')) || 70;  // Default to 70 if not provided
+
         // Connect to game
         socket.on('connect', () => {
-            socket.emit('join_game_room', { game_id: 70 });
-            socket.emit('request_game_state', { game_id: 70 });
+            socket.emit('join_game_room', { game_id: gameId });
+            socket.emit('request_game_state', { game_id: gameId });
         });
 
         socket.on('game_state_update', (state) => {

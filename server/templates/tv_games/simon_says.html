@@ -124,18 +124,28 @@
         });
 
         function updateDisplay(state) {
+            // Sprint 1D: Validate state to prevent crashes
+            if (!state) {
+                console.warn('Invalid state received');
+                return;
+            }
+
             // Update command
             if (state.current_command) {
                 document.getElementById('command').textContent = commandIcons[state.current_command] || '❓';
                 document.getElementById('commandText').textContent = commandTexts[state.current_command] || 'READY';
-                document.getElementById('timer').textContent = state.time_remaining.toFixed(1) + 's';
+
+                // Sprint 1D: Null check for time_remaining
+                const timeRemaining = (typeof state.time_remaining === 'number') ? state.time_remaining : 0;
+                document.getElementById('timer').textContent = timeRemaining.toFixed(1) + 's';
             }
 
-            // Update players
+            // Update players - Sprint 1D: Validate players array
             const playersEl = document.getElementById('players');
             playersEl.innerHTML = '';
 
-            state.players.forEach(player => {
+            if (Array.isArray(state.players)) {
+                state.players.forEach(player => {
                 const card = document.createElement('div');
                 card.className = 'player-card';
                 if (!player.active) card.classList.add('eliminated');
@@ -148,7 +158,8 @@
                     <div class="status-icon">${statusIcon}</div>
                 `;
                 playersEl.appendChild(card);
-            });
+                });
+            } // Sprint 1D: Close Array.isArray check
         }
     </script>
     <!-- Sprint 0.5: Connection Health Monitoring -->
