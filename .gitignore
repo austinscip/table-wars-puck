@@ -29,3 +29,31 @@ tests/playwright-report/
 playwright-report/
 test-results/
 playwright/.cache/
+
+# Sprint 1E: Production deployment files
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite
+*.sqlite3
+nginx/ssl/*.pem
+nginx/ssl/*.key
+nginx/ssl/*.crt
+backups/
+logs/
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+.venv
+
+# Docker
+docker-compose.override.yml

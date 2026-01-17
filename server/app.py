@@ -11,6 +11,11 @@ from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 from datetime import datetime
 import json
+import os
+
+# Sprint 1E: Load environment variables from .env file (if present)
+from dotenv import load_dotenv
+load_dotenv()
 
 # Import database abstraction layer
 from database import (
@@ -40,7 +45,9 @@ from firmware_routes import init_firmware_routes
 from analytics_routes import init_analytics_routes
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'tablewars_secret_2024'
+
+# Sprint 1E: Use environment variables for production configuration
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'tablewars_secret_2024_dev')
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
@@ -690,7 +697,12 @@ if __name__ == '__main__':
     print("📈 Analytics: http://localhost:5001/admin/analytics/<bar-slug>")  # NEW
     print("\n⏸️  Press Ctrl+C to stop\n")
 
-    socketio.run(app, host='0.0.0.0', port=5001, debug=True, allow_unsafe_werkzeug=True)
+    # Sprint 1E: Use environment variables for production configuration
+    host = os.environ.get('HOST', '0.0.0.0')
+    port = int(os.environ.get('PORT', 5001))
+    debug = os.environ.get('DEBUG', 'True').lower() == 'true'
+
+    socketio.run(app, host=host, port=port, debug=debug, allow_unsafe_werkzeug=True)
 
 # Game gallery route
 @app.route('/games')

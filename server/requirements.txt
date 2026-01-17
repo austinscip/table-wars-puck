@@ -10,3 +10,7 @@ eventlet==0.33.3
 qrcode==7.4.2
 Pillow>=10.2.0
 psycopg[binary]>=3.1.0  # PostgreSQL adapter (psycopg3 - Python 3.14 compatible)
+
+# Sprint 1E: Production deployment dependencies
+python-dotenv==1.0.0  # Environment variable management
+gunicorn==21.2.0  # Production WSGI server

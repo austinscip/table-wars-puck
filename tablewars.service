@@ -1,0 +1,60 @@
+# TABLE WARS - Systemd Service File
+# For non-Docker deployments
+#
+# Installation:
+#   sudo cp tablewars.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable tablewars
+#   sudo systemctl start tablewars
+#
+# Management:
+#   sudo systemctl status tablewars
+#   sudo systemctl restart tablewars
+#   sudo systemctl stop tablewars
+#   sudo journalctl -u tablewars -f
+
+[Unit]
+Description=Table Wars WebSocket Server
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=tablewars
+Group=tablewars
+WorkingDirectory=/opt/table-wars-puck/server
+
+# Environment
+EnvironmentFile=/opt/table-wars-puck/.env
+
+# Start command using gunicorn with eventlet worker
+ExecStart=/opt/table-wars-puck/server/venv/bin/gunicorn \
+    --worker-class eventlet \
+    --workers 1 \
+    --bind 0.0.0.0:5001 \
+    --timeout 120 \
+    --access-logfile /var/log/tablewars/access.log \
+    --error-logfile /var/log/tablewars/error.log \
+    --log-level info \
+    --chdir /opt/table-wars-puck/server \
+    app:app
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitBurst=3
+StartLimitInterval=60
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/tablewars /opt/table-wars-puck/server/data
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=512
+
+[Install]
+WantedBy=multi-user.target

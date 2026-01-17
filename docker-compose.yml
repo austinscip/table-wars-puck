@@ -1,0 +1,97 @@
+# TABLE WARS - Docker Compose Production Configuration
+# Deploy with: docker-compose up -d
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: tablewars-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tablewars_prod
+      POSTGRES_USER: tablewars_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change_me_in_production}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tablewars_user -d tablewars_prod"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tablewars
+
+  # Table Wars Application Server
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tablewars-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Database
+      DATABASE_URL: postgresql://tablewars_user:${DB_PASSWORD:-change_me_in_production}@postgres:5432/tablewars_prod
+
+      # Flask configuration
+      SECRET_KEY: ${SECRET_KEY:-change_this_secret_key_in_production}
+      DEBUG: "False"
+      HOST: "0.0.0.0"
+      PORT: "5001"
+
+      # Production settings
+      FLASK_ENV: production
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - app_data:/app/data
+      - app_logs:/app/logs
+      # Mount firmware directory for OTA updates
+      - ./firmware:/app/firmware:ro
+    ports:
+      - "5001:5001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/api/stats').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - tablewars
+
+  # Nginx Reverse Proxy (SSL termination)
+  nginx:
+    image: nginx:alpine
+    container_name: tablewars-nginx
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    networks:
+      - tablewars
+
+volumes:
+  postgres_data:
+    driver: local
+  app_data:
+    driver: local
+  app_logs:
+    driver: local
+  nginx_logs:
+    driver: local
+
+networks:
+  tablewars:
+    driver: bridge
