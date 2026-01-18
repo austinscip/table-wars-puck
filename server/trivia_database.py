@@ -15,12 +15,12 @@ def init_trivia_database():
     # ========================================
     execute_query('''
         CREATE TABLE IF NOT EXISTS trivia_categories (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT NOT NULL UNIQUE,
             emoji TEXT,
             description TEXT,
             difficulty TEXT CHECK(difficulty IN ('easy', 'medium', 'hard')),
-            is_active BOOLEAN DEFAULT 1,
+            is_active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -30,7 +30,7 @@ def init_trivia_database():
     # ========================================
     execute_query('''
         CREATE TABLE IF NOT EXISTS trivia_questions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             category_id INTEGER NOT NULL,
             question_text TEXT NOT NULL,
             setup_text TEXT,
@@ -44,7 +44,7 @@ def init_trivia_database():
             host_commentary_wrong TEXT,
             difficulty TEXT CHECK(difficulty IN ('easy', 'medium', 'hard')),
             time_limit INTEGER DEFAULT 15,
-            is_active BOOLEAN DEFAULT 1,
+            is_active BOOLEAN DEFAULT TRUE,
             times_played INTEGER DEFAULT 0,
             times_correct INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -57,7 +57,7 @@ def init_trivia_database():
     # ========================================
     execute_query('''
         CREATE TABLE IF NOT EXISTS trivia_game_types (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             name TEXT NOT NULL UNIQUE,
             display_name TEXT NOT NULL,
             description TEXT,
@@ -65,7 +65,7 @@ def init_trivia_database():
             min_players INTEGER DEFAULT 1,
             max_players INTEGER DEFAULT 4,
             duration_seconds INTEGER DEFAULT 300,
-            is_active BOOLEAN DEFAULT 1,
+            is_active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -75,7 +75,7 @@ def init_trivia_database():
     # ========================================
     execute_query('''
         CREATE TABLE IF NOT EXISTS trivia_sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             bar_id INTEGER,
             table_number INTEGER,
             game_type_id INTEGER,
@@ -96,7 +96,7 @@ def init_trivia_database():
     # ========================================
     execute_query('''
         CREATE TABLE IF NOT EXISTS trivia_session_players (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             session_id INTEGER NOT NULL,
             puck_id INTEGER NOT NULL,
             player_name TEXT,
@@ -104,7 +104,7 @@ def init_trivia_database():
             multiplier REAL DEFAULT 1.0,
             powers_earned INTEGER DEFAULT 0,
             power_active TEXT,
-            is_saboteur BOOLEAN DEFAULT 0,
+            is_saboteur BOOLEAN DEFAULT FALSE,
             joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (session_id) REFERENCES trivia_sessions(id),
             FOREIGN KEY (puck_id) REFERENCES pucks(id)
@@ -116,7 +116,7 @@ def init_trivia_database():
     # ========================================
     execute_query('''
         CREATE TABLE IF NOT EXISTS trivia_answers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             session_id INTEGER NOT NULL,
             question_id INTEGER NOT NULL,
             puck_id INTEGER NOT NULL,
@@ -125,7 +125,7 @@ def init_trivia_database():
             response_time_ms INTEGER,
             points_earned INTEGER DEFAULT 0,
             multiplier_used REAL DEFAULT 1.0,
-            was_screwed BOOLEAN DEFAULT 0,
+            was_screwed BOOLEAN DEFAULT FALSE,
             screwed_by_puck_id INTEGER,
             answered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (session_id) REFERENCES trivia_sessions(id),
@@ -139,7 +139,7 @@ def init_trivia_database():
     # ========================================
     execute_query('''
         CREATE TABLE IF NOT EXISTS trivia_skill_breaks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             session_id INTEGER NOT NULL,
             round_number INTEGER NOT NULL,
             skill_game_id INTEGER NOT NULL,

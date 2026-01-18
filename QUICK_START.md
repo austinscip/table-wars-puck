@@ -1,224 +1,146 @@
-# Quick Start Guide
+# TABLE WARS - Quick Start Guide
 
-## Create New Project (30 seconds)
+## 🎮 What You Have Now
 
+Your TABLE WARS system is **fully deployed** and running locally:
+
+- ✅ Docker containers running (app, database, nginx)
+- ✅ Database initialized with all tables
+- ✅ WebSocket support working
+- ✅ All 10+ game modes functional
+- ✅ Backup system configured
+
+## 🌐 Access Points
+
+**Local Development:**
+- Main site: https://localhost
+- Game gallery: https://localhost/games
+- Puck simulator: https://localhost/test/puck-simulator
+- API stats: https://localhost/api/stats
+
+## 🎯 Common Commands
+
+### Start/Stop/Restart
 ```bash
-cd ~/Projects/.hardware_project_template/tools/scripts
-./new_project.sh
+# Start all services
+docker-compose up -d
+
+# Stop all services
+docker-compose stop
+
+# Restart a specific service
+docker-compose restart app
+
+# View logs
+docker-compose logs -f app
+
+# Check container status
+docker-compose ps
 ```
 
-Follow prompts, done!
-
-## Key Files to Update First
-
-1. **`.claude.md`** ← AI memory (update as you work!)
-2. **`README.md`** ← Project overview
-3. **`CHANGELOG.md`** ← Version history
-
-## Folder Structure Cheat Sheet
-
-```
-hardware/
-  ├── altium/         ← Your PCB design files here
-  ├── manufacturing/
-  │   ├── gerbers/    ← Export Gerbers here
-  │   ├── bom/        ← Export BOM.csv here
-  │   ├── cpl/        ← Export pick-and-place here
-  │   ├── drill/      ← Export drill files here
-  │   └── outputs/    ← Zipped files appear here
-  └── datasheets/     ← Save PDFs here
-
-mechanical/
-  └── stl/            ← 3D print files here
-
-firmware/             ← Your code here
-
-docs/
-  ├── decisions/      ← Why you chose X over Y
-  ├── specs/          ← Requirements
-  └── cost_tracking.md ← Budget tracking
-
-orders/
-  ├── quotes/         ← Save quote PDFs here
-  └── tracking/       ← Order numbers, shipping info
-
-testing/
-  └── procedures/     ← Test checklists
-```
-
-## Common Workflows
-
-### Workflow 1: Ready to Order PCBs
-
+### Database Backups
 ```bash
-# 1. Export files from Altium/KiCad to manufacturing folders
-# 2. Run preparation script
-cd tools/scripts
-./prepare_manufacturing.sh
+# Create backup (automated script)
+./scripts/backup_database.sh
 
-# 3. Files are zipped in hardware/manufacturing/outputs/
-# 4. Upload to JLCPCB/PCBWay
+# Restore from backup
+./scripts/restore_database.sh /path/to/backup.sql.gz
+
+# Manual backup
+docker exec tablewars-db pg_dump -U tablewars_user tablewars_prod > backup.sql
 ```
 
-### Workflow 2: Track Costs
-
+### Database Access
 ```bash
-# Edit docs/cost_tracking.md
-# Add quotes to orders/quotes/
-# Update budget as you go
+# Connect to PostgreSQL
+docker exec -it tablewars-db psql -U tablewars_user -d tablewars_prod
+
+# View tables
+docker exec tablewars-db psql -U tablewars_user -d tablewars_prod -c "\dt"
+
+# Count games played
+docker exec tablewars-db psql -U tablewars_user -d tablewars_prod -c "SELECT COUNT(*) FROM games;"
 ```
 
-### Workflow 3: Version Bump
-
+### Troubleshooting
 ```bash
-cd tools/scripts
-./version_bump.sh patch  # Bug fix (1.0.0 → 1.0.1)
-./version_bump.sh minor  # New feature (1.0.0 → 1.1.0)
-./version_bump.sh major  # New PCB (1.0.0 → 2.0.0)
+# Rebuild containers after code changes
+docker-compose down
+docker-compose build
+docker-compose up -d
+
+# Reset database (WARNING: deletes all data)
+docker-compose down -v
+docker-compose up -d
+
+# Check container health
+docker-compose ps
+docker inspect tablewars-app | grep -A10 Health
 ```
 
-### Workflow 4: Backup Project
+## 📦 What's Next?
 
-```bash
-cd tools/scripts
-./backup_project.sh
-# Saves to ~/Projects/backups/
-```
+You have 3 main paths forward:
 
-### Workflow 5: Check Before Manufacturing
+### Option 1: Keep Testing Locally
+**Current state is perfect for:**
+- Testing all game modes
+- Developing new features
+- Prototyping with pucks
+- Demo to investors/partners
 
-```bash
-cd tools/scripts
-./check_files.sh
-# Verifies all files present
-```
+**No additional setup needed!**
 
-## Git Commands Quick Reference
+### Option 2: Deploy to Cloud (Internet Access)
+**Choose this if you need:**
+- Access from anywhere
+- Multiple locations
+- Professional domain (tablewars.com)
+- Scalability
 
-```bash
-# Daily commits
-git add .
-git commit -m "Describe what changed"
+**Next steps:**
+1. Register domain name (~$10-15/year)
+2. Choose cloud provider (DigitalOcean, AWS, etc.)
+3. Deploy Docker setup to server
+4. Configure Let's Encrypt SSL
+5. Point domain DNS to server
 
-# Tag a version
-git tag -a v1.0.0 -m "First production version"
+**See:** DEPLOYMENT_GUIDE.md for detailed instructions
 
-# View history
-git log --oneline
+### Option 3: Deploy Locally at Bar
+**Choose this if you need:**
+- Single location deployment
+- Offline operation
+- No monthly costs
+- Physical hardware control
 
-# See what changed
-git diff
-```
+**Next steps:**
+1. Get Raspberry Pi 4 (4GB+) or dedicated PC
+2. Install Ubuntu Server
+3. Clone repository to device
+4. Run Docker deployment
+5. Configure static IP on network
 
-## Manufacturing Checklist
+**See:** DEPLOYMENT_GUIDE.md for detailed instructions
 
-Before ordering:
+## 🆘 Getting Help
 
-- [ ] Run `./check_files.sh` - all green?
-- [ ] Gerbers exported (12-25 files expected)
-- [ ] Drill files exported (.drl files)
-- [ ] BOM as CSV with part numbers
-- [ ] CPL (pick-and-place) exported
-- [ ] STL files for enclosure (if needed)
-- [ ] Run `./prepare_manufacturing.sh`
-- [ ] Check component availability on LCSC
-- [ ] Updated cost tracking
-- [ ] Git commit + version tag
+**Logs to check:**
+1. Application: docker-compose logs app
+2. Database: docker-compose logs postgres
+3. Nginx: docker-compose logs nginx
+4. Docker: docker ps -a
 
-## Helper Scripts Reference
+**Common issues:**
+- Port conflicts: Change ports in docker-compose.yml
+- Database errors: Check PostgreSQL logs
+- WebSocket issues: Verify nginx proxy settings
+- SSL warnings: Normal for self-signed certificates
 
-| Script | What it does |
-|--------|-------------|
-| `new_project.sh` | Create project from template |
-| `prepare_manufacturing.sh` | Zip all files for upload |
-| `backup_project.sh` | Backup entire project |
-| `check_files.sh` | Verify all files present |
-| `version_bump.sh` | Increment version numbers |
+## 🎉 You're All Set!
 
-All scripts in: `tools/scripts/`
+Your TABLE WARS deployment is production-ready locally. When you're ready to deploy to production, refer to DEPLOYMENT_GUIDE.md for your chosen deployment method.
 
-## Cost Tracking Quick Tips
+**Current test URL:** https://localhost/games
 
-| What | Where to track |
-|------|---------------|
-| Component prices | `docs/cost_tracking.md` |
-| PCB quotes | `orders/quotes/` + cost_tracking.md |
-| Budget status | cost_tracking.md |
-| Vendor comparison | cost_tracking.md |
-
-## Working with Claude Code
-
-### Update .claude.md after:
-- Choosing components
-- Making design decisions
-- Receiving quotes
-- Testing boards
-- Each work session
-
-### Session log template:
-```markdown
-### 2026-01-03: [What you did today]
-**What was done:**
-1. Thing 1
-2. Thing 2
-
-**Decisions:**
-- Chose X because Y
-
-**Next:**
-- [ ] Task 1
-```
-
-## Common Issues & Fixes
-
-### "Script won't run"
-```bash
-chmod +x tools/scripts/*.sh
-```
-
-### "Missing drill files"
-Export from CAD: File → Fabrication Outputs → NC Drill
-
-### "BOM not CSV"
-Export from CAD: Reports → BOM → Export CSV
-
-### "Git tracking too much"
-Check `.gitignore` includes your CAD backup files
-
-## Upload to Manufacturer
-
-### JLCPCB
-1. Go to jlcpcb.com
-2. Upload `gerbers_TIMESTAMP.zip`
-3. Review specs (layers, thickness, color)
-4. Add SMT Assembly (if needed)
-5. Upload BOM.csv and CPL.csv
-6. Review component availability
-7. Get quote
-8. Order
-
-### PCBWay
-Similar process, or upload Altium project directly
-
-## Need Help?
-
-1. Check `HOW_TO_USE_TEMPLATE.md` for detailed guide
-2. Check `docs/` folder for templates
-3. Ask Claude Code - it reads `.claude.md` for context
-
----
-
-**Pro Tips:**
-
-1. Update `.claude.md` constantly - it's your AI's memory
-2. Use scripts - they prevent errors
-3. Commit to git frequently
-4. Document decisions in `docs/decisions/`
-5. Track costs early to avoid surprises
-6. Order 5-10 units first, not 100
-7. Keep datasheets in `docs/datasheets/`
-
----
-
-**Template Version:** 1.0
-**Created with Claude Code**
+Enjoy building the future of interactive bar gaming! 🍻🎮

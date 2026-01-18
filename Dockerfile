@@ -1,7 +1,7 @@
 # TABLE WARS - Production Dockerfile
 # Multi-stage build for optimized production image
 
-FROM python:3.11-slim as base
+FROM python:3.12-slim as base
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -23,7 +23,7 @@ COPY server/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
 # Production stage
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y \
@@ -38,7 +38,7 @@ RUN useradd -m -u 1000 tablewars && \
 WORKDIR /app
 
 # Copy Python packages from builder
-COPY --from=base /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=base /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=base /usr/local/bin/gunicorn /usr/local/bin/gunicorn
 
 # Copy application code
@@ -55,8 +55,9 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5001/api/stats').read()" || exit 1
 
 # Run with gunicorn for production
+# Using geventwebsocket.gunicorn.workers.GeventWebSocketWorker for WebSocket support
 CMD ["gunicorn", \
-     "--worker-class", "eventlet", \
+     "--worker-class", "geventwebsocket.gunicorn.workers.GeventWebSocketWorker", \
      "--workers", "1", \
      "--bind", "0.0.0.0:5001", \
      "--timeout", "120", \

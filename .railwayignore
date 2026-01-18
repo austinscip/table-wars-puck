@@ -1,0 +1,16 @@
+.git
+.gitignore
+node_modules
+venv
+__pycache__
+*.pyc
+.env
+.env.local
+backups/
+*.log
+.DS_Store
+nginx/
+docker-compose.yml
+scripts/
+*.md
+!README.md

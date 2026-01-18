@@ -51,6 +51,8 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'tablewars_secret_2024_d
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
+# Sprint 1E: Database and route initialization moved to bottom of file (after function definitions)
+
 # ============================================================================
 # DATABASE HELPERS
 # ============================================================================
@@ -666,6 +668,26 @@ def sensor_validation():
 # MAIN
 # ============================================================================
 
+# Sprint 1E: Initialize database and routes at module level (for gunicorn)
+# This code runs when the module is imported, ensuring everything is ready for gunicorn workers
+init_database()
+init_trivia_database()
+seed_trivia_data()
+
+# Check if we need to seed questions
+question_count = execute_query('SELECT COUNT(*) as count FROM trivia_questions', fetch_one=True)
+if question_count and question_count['count'] == 0:
+    from trivia_questions_seed import seed_questions
+    seed_questions()
+
+# Initialize all route handlers
+register_core_socketio_handlers(socketio)
+init_trivia_routes(app, socketio)
+init_tv_game_routes(app, socketio)
+init_multiplayer_routes(app, socketio)
+init_firmware_routes(app)
+init_analytics_routes(app)
+
 if __name__ == '__main__':
     print("╔═══════════════════════════════════════════╗")
     print("║   TABLE WARS - Scoreboard Server v1.0    ║")
@@ -703,8 +725,3 @@ if __name__ == '__main__':
     debug = os.environ.get('DEBUG', 'True').lower() == 'true'
 
     socketio.run(app, host=host, port=port, debug=debug, allow_unsafe_werkzeug=True)
-
-# Game gallery route
-@app.route('/games')
-def game_gallery():
-    return render_template('game_gallery.html')

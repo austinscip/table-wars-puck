@@ -95,6 +95,15 @@
             background: #FF6B6B;
             color: white;
         }
+        .game-status.trivia {
+            background: #9B59B6;
+            color: white;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
     </style>
 </head>
 <body>
@@ -210,6 +219,107 @@
                 3D race track with 6 animated greyhounds. Odds-based betting (2:1 to 10:1). 5 races to multiply your winnings!
             </div>
             <div class="game-status new">NEW!</div>
+        </div>
+
+        <!-- TRIVIA GAMES SECTION -->
+        <div class="game-card" onclick="location.href='/trivia/shake-attack/1'">
+            <div class="game-icon">🎯</div>
+            <div class="game-title">SHAKE ATTACK</div>
+            <div class="game-desc">
+                Rapid-fire category matching. SHAKE when you see matches - speed matters!
+                Fast-paced multiplayer trivia showdown. First to shake wins the question!
+            </div>
+            <div class="game-status trivia">TRIVIA</div>
+        </div>
+
+        <div class="game-card" onclick="location.href='/trivia/category-royale/1'">
+            <div class="game-icon">👑</div>
+            <div class="game-title">CATEGORY ROYALE</div>
+            <div class="game-desc">
+                Pick your category wisely! SHAKE to claim category - first shake wins.
+                Strategic trivia where knowledge AND speed both matter.
+            </div>
+            <div class="game-status trivia">TRIVIA</div>
+        </div>
+
+        <div class="game-card" onclick="location.href='/trivia/multiplier-madness/1'">
+            <div class="game-icon">🎰</div>
+            <div class="game-title">MULTIPLIER MADNESS</div>
+            <div class="game-desc">
+                SPIN before each question for risk/reward. Fast spin = high risk, high reward!
+                Gambling meets trivia - will you risk it all?
+            </div>
+            <div class="game-status trivia">TRIVIA</div>
+        </div>
+
+        <div class="game-card" onclick="location.href='/trivia/screw-neighbor/1'">
+            <div class="game-icon">😈</div>
+            <div class="game-title">SCREW YOUR NEIGHBOR</div>
+            <div class="game-desc">
+                SHAKE + HOLD to sabotage opponents! Force them to answer your question.
+                Betrayal-based trivia with nasty mechanics. Costs points but worth it!
+            </div>
+            <div class="game-status trivia">TRIVIA</div>
+        </div>
+
+        <div class="game-card" onclick="location.href='/trivia/fact-or-crap/1'">
+            <div class="game-icon">💩</div>
+            <div class="game-title">FACT OR CRAP</div>
+            <div class="game-desc">
+                TILT LEFT = Fact, TILT RIGHT = Crap. HOLD button to double down for 2x points!
+                Absurd statements - you decide what's real. Confidence pays!
+            </div>
+            <div class="game-status trivia">TRIVIA</div>
+        </div>
+
+        <div class="game-card" onclick="location.href='/trivia/hostage-trivia/1'">
+            <div class="game-icon">🔒</div>
+            <div class="game-title">HOSTAGE TRIVIA</div>
+            <div class="game-desc">
+                Random player is hostage. Everyone else answers together.
+                Reversed incentives! Teammates want you to fail. 3-4 players required.
+            </div>
+            <div class="game-status trivia">TRIVIA</div>
+        </div>
+
+        <div class="game-card" onclick="location.href='/trivia/speed-pyramid/1'">
+            <div class="game-icon">⚡</div>
+            <div class="game-title">SPEED PYRAMID</div>
+            <div class="game-desc">
+                Speed determines value: 0-3 sec = GOLD, 4-6 sec = SILVER, 7-10 sec = BRONZE.
+                Answer fast for maximum points! Every millisecond counts.
+            </div>
+            <div class="game-status trivia">TRIVIA</div>
+        </div>
+
+        <div class="game-card" onclick="location.href='/trivia/gauntlet/1'">
+            <div class="game-icon">💀</div>
+            <div class="game-title">TRIVIA GAUNTLET</div>
+            <div class="game-desc">
+                Elimination survival mode. 3 wrong answers = ELIMINATED!
+                Last puck standing wins. No second chances, no mercy.
+            </div>
+            <div class="game-status trivia">TRIVIA</div>
+        </div>
+
+        <div class="game-card" onclick="location.href='/trivia/chaos-round/1'">
+            <div class="game-icon">🎲</div>
+            <div class="game-title">CHAOS ROUND</div>
+            <div class="game-desc">
+                Random modifiers every round: Opposite Day, Team Swap, Mystery Multiplier!
+                Pure chaos - adapt or die. No strategy survives contact.
+            </div>
+            <div class="game-status trivia">TRIVIA</div>
+        </div>
+
+        <div class="game-card" onclick="location.href='/trivia/all-or-nothing/1'">
+            <div class="game-icon">💸</div>
+            <div class="game-title">ALL OR NOTHING</div>
+            <div class="game-desc">
+                Bet HALF your points on one final absurd question!
+                High-stakes finale. Double your score or lose everything.
+            </div>
+            <div class="game-status trivia">TRIVIA</div>
         </div>
     </div>
 
