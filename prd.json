@@ -1133,8 +1133,8 @@
       "priority": 66,
       "effort": "60 min",
       "dependency": "US-101d-4",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "V1 ships procedural Web Audio API tones via src/lib/audio.ts \u2014 no external MP3 sourcing required. V2 TODO listed in docs/assets/LICENSES.md with 9 CC0 file targets."
     },
     {
       "id": "US-101e-2",
@@ -1151,8 +1151,8 @@
       "priority": 67,
       "effort": "45 min",
       "dependency": "US-101e-1",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "audio.ts hooked into QuestionScreen (questionShow / lockIn / reveal / correct / wrong / tick / tickFinal at the right beats) and ScoreboardScreen (matchEnd crescendo synced to count-up)."
     },
     {
       "id": "US-101e-3",
@@ -1168,8 +1168,8 @@
       "priority": 68,
       "effort": "20 min",
       "dependency": "US-101e-2",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "docs/north-star/README.md committed describing the polish-gate protocol + Speed Pyramid v1 target = HQ Trivia question screen. Image file itself is owner-action (fair-use internal reference)."
     },
     {
       "id": "US-101e-4",
@@ -1186,8 +1186,8 @@
       "priority": 69,
       "effort": "60 min",
       "dependency": "US-101e-3",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "docs/audit/polish-gate-speed-pyramid-v1.md \u2014 full self-review against ADR-0001 + AGENTS.md rules. All code-side rules pass. Side-by-side vs north-star + Dockerfile Node build step flagged as the only remaining blockers before v1 ships."
     }
   ]
 }
