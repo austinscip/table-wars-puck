@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
+import { audio } from '../lib/audio'
 
 export default function TitleScreen() {
   const navigate = useNavigate()
@@ -29,7 +30,14 @@ export default function TitleScreen() {
           Real bar deployments ignore this and use the puck flow. */}
       <motion.button
         type="button"
-        onClick={() => navigate('/pair?puck_id=99&demo=1')}
+        onClick={() => {
+          // Prime the AudioContext on this real user gesture so the
+          // procedural Web Audio tones (question_show / lockIn / etc.)
+          // play through the rest of the match. Browsers will not start
+          // audio from a Socket.IO event handler alone.
+          audio.unlock()
+          navigate('/pair?puck_id=99&demo=1')
+        }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.6, delay: 1.2 }}

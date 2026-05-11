@@ -14,20 +14,23 @@
  */
 
 let _ctx: AudioContext | null = null
+let _unlocked = false
+
+function _create(): AudioContext {
+  if (_ctx) return _ctx
+  const W = window as unknown as {
+    AudioContext: typeof AudioContext
+    webkitAudioContext: typeof AudioContext
+  }
+  const Ctor = W.AudioContext || W.webkitAudioContext
+  _ctx = new Ctor()
+  return _ctx
+}
 
 function ctx(): AudioContext {
-  if (!_ctx) {
-    const W = window as unknown as {
-      AudioContext: typeof AudioContext
-      webkitAudioContext: typeof AudioContext
-    }
-    const Ctor = W.AudioContext || W.webkitAudioContext
-    _ctx = new Ctor()
-  }
-  if (_ctx.state === 'suspended') {
-    void _ctx.resume()
-  }
-  return _ctx
+  const c = _create()
+  if (c.state === 'suspended') void c.resume()
+  return c
 }
 
 interface ToneOptions {
@@ -74,6 +77,25 @@ function tone({
 }
 
 export const audio = {
+  /**
+   * MUST be called from a real user-gesture handler (click / touch).
+   * Browsers refuse to start an AudioContext otherwise — calling tone()
+   * from a Socket.IO event handler creates the context but leaves it
+   * 'suspended' silently. Hook this to the first button the user
+   * touches (e.g. the demo button or the puck pairing entry).
+   */
+  unlock() {
+    if (_unlocked) return
+    const c = _create()
+    // resume() returns a Promise — fire-and-forget.
+    void c.resume().then(() => {
+      _unlocked = true
+      // Briefly fire a near-silent tone so iOS / Safari fully unlocks the
+      // context (some browsers require an actual audio event during the
+      // gesture, not just a resume()).
+      tone({ freq: 1, durationMs: 30, gain: 0.0001 })
+    })
+  },
   /** Soft 800Hz tick — countdown clock in the last 3s. */
   tick() {
     tone({ freq: 880, durationMs: 90, gain: 0.12, type: 'sine' })
