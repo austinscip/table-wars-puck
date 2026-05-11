@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getSocket } from '../lib/socket'
 import { api, type SpeedPyramidQuestion } from '../lib/api'
@@ -54,6 +54,11 @@ const REVEAL_HOLD_MS = 2500
 export default function QuestionScreen() {
   const navigate = useNavigate()
   const { sessionCode } = useParams<{ sessionCode: string }>()
+  const [params] = useSearchParams()
+  const isDemo = params.get('demo') === '1'
+  // Demo-mode: simulate a puck answering after a randomized delay so
+  // the match plays through end-to-end on a laptop without firmware.
+  const puckId = Number(params.get('puck_id') ?? '99')
 
   const [question, setQuestion] = useState<SpeedPyramidQuestion | null>(null)
   const [round, setRound] = useState<number>(0)
@@ -65,6 +70,9 @@ export default function QuestionScreen() {
   // Track which tick boundaries we've already played so the countdown
   // tone fires exactly once per second in the last 3s.
   const lastTickRef = useRef<number>(-1)
+  // Demo-mode: track which questions we've auto-answered so we don't
+  // double-submit if React re-renders the same question.
+  const demoAnsweredRef = useRef<Set<number>>(new Set())
 
   useEffect(() => {
     if (!sessionCode) return
@@ -82,6 +90,32 @@ export default function QuestionScreen() {
       setReveal(null)
       lastTickRef.current = -1
       audio.questionShow()
+
+      // Demo-mode autoplay: randomly pick A/B/C/D after a 1.2-3.0s delay
+      // and POST /api/trivia/answer so the match advances without a puck.
+      // Roughly 70% correct so the scoreboard looks interesting.
+      if (isDemo && !demoAnsweredRef.current.has(p.question.id)) {
+        demoAnsweredRef.current.add(p.question.id)
+        const letters = ['A', 'B', 'C', 'D'] as const
+        const delay = 1200 + Math.random() * 1800
+        window.setTimeout(() => {
+          // We don't know the correct answer client-side without a DB
+          // peek, so we just pick uniformly and let the server score.
+          const answer = letters[Math.floor(Math.random() * 4)]
+          const elapsedMs = Date.now() - p.started_at * 1000
+          void fetch('/api/trivia/answer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              session_code: sessionCode,
+              puck_id: puckId,
+              question_id: p.question.id,
+              answer,
+              response_time_ms: Math.max(0, Math.round(elapsedMs)),
+            }),
+          })
+        }, delay)
+      }
     }
     function onAnswerLocked(p: AnswerLockedEvent) {
       if (p.session_code !== sessionCode) return

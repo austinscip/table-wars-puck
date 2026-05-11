@@ -1,6 +1,9 @@
 import { motion } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 
 export default function TitleScreen() {
+  const navigate = useNavigate()
+
   return (
     <main className="flex h-full w-full flex-col items-center justify-center px-8 py-16">
       <motion.h1
@@ -20,6 +23,20 @@ export default function TitleScreen() {
       >
         Hold the puck button to pair.
       </motion.p>
+
+      {/* Demo-mode click-through. Lets a laptop run the full match
+          without a real puck — useful for previews and visual review.
+          Real bar deployments ignore this and use the puck flow. */}
+      <motion.button
+        type="button"
+        onClick={() => navigate('/pair?puck_id=99&demo=1')}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.6, delay: 1.2 }}
+        className="mt-16 cursor-pointer rounded-2xl border-2 border-primary/40 px-8 py-4 font-body text-xl font-medium text-primary transition hover:border-primary hover:bg-primary/10"
+      >
+        Demo mode — no puck
+      </motion.button>
     </main>
   )
 }

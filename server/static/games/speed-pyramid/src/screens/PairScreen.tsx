@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { api } from '../lib/api'
@@ -31,12 +31,14 @@ export default function PairScreen() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const puckId = Number(params.get('puck_id') ?? '1')
+  const isDemo = params.get('demo') === '1'
 
   const [code, setCode] = useState<string | null>(null)
   const [progress, setProgress] = useState<(number | null)[]>(
     () => Array(6).fill(null) as (number | null)[],
   )
   const [error, setError] = useState<string | null>(null)
+  const demoStartedRef = useRef(false)
 
   useEffect(() => {
     let active = true
@@ -61,7 +63,8 @@ export default function PairScreen() {
     }
     function onPaired(payload: PairedEvent) {
       if (payload.puck_id !== puckId) return
-      navigate(`/countdown/${payload.session_code}`)
+      const qs = isDemo ? `?demo=1&puck_id=${puckId}` : ''
+      navigate(`/countdown/${payload.session_code}${qs}`)
     }
 
     socket.on('pair_dial_progress', onProgress)
@@ -79,6 +82,43 @@ export default function PairScreen() {
     // re-run the whole start() on every code update.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [puckId, navigate])
+
+  // Demo-mode: auto-dial the code shown on the TV. Lets a laptop run
+  // the full match without a real puck. Triggered once per session.
+  useEffect(() => {
+    if (!isDemo || !code || demoStartedRef.current) return
+    demoStartedRef.current = true
+    let cancelled = false
+
+    async function autoDial(c: string) {
+      // Small lead-in so the user sees the code render before slots
+      // start filling.
+      await new Promise((r) => window.setTimeout(r, 700))
+      for (let i = 0; i < 6; i++) {
+        if (cancelled) return
+        const digit = Number(c[i])
+        try {
+          await api.pair.dial(puckId, i, digit)
+        } catch {
+          /* live mirror is best-effort; server still validates on confirm */
+        }
+        await new Promise((r) => window.setTimeout(r, 900))
+      }
+      if (cancelled) return
+      try {
+        await api.pair.confirm(puckId, c)
+        // 'paired' socket event handles the navigation.
+      } catch (e) {
+        setError((e as Error).message)
+      }
+    }
+
+    void autoDial(code)
+
+    return () => {
+      cancelled = true
+    }
+  }, [isDemo, code, puckId])
 
   return (
     <main className="flex h-full w-full flex-col items-center justify-center gap-12 px-8 py-16">
