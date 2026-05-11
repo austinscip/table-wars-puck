@@ -836,8 +836,8 @@
       "priority": 50,
       "effort": "20 min",
       "dependency": "US-101a-5",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "pair_routes.py /api/pair/request. 6-digit decimal code, 10min TTL, reused: true if same puck within TTL. Verified via curl."
     },
     {
       "id": "US-101b-2",
@@ -854,8 +854,8 @@
       "priority": 51,
       "effort": "15 min",
       "dependency": "US-101b-1",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "pair_routes.py /api/pair/dial. Validates puck has pending code, records digit, emits pair_dial_progress to socket room=pair_code. Verified."
     },
     {
       "id": "US-101b-3",
@@ -872,8 +872,8 @@
       "priority": 52,
       "effort": "25 min",
       "dependency": "US-101b-2",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "pair_routes.py /api/pair/confirm. Validates code matches pending, looks up speed_pyramid game_type_id, creates trivia session via create_trivia_session, emits paired to TV. Verified: returns session_code."
     },
     {
       "id": "US-101b-4",
@@ -890,8 +890,8 @@
       "priority": 53,
       "effort": "60 min",
       "dependency": "US-101b-3",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "React PairScreen + PairCodeDisplay + lib/api + lib/socket. /pair?puck_id=N. Subscribes via join_pair_room. Mirrors dial_progress with Framer Motion overshoot. Navigates to /countdown/:session_code on paired."
     },
     {
       "id": "US-101b-5",
@@ -908,8 +908,8 @@
       "priority": 54,
       "effort": "60 min",
       "dependency": "US-101a-5",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "src/hal/sp_pins.h sp_button.h sp_imu.h sp_led.h sp_feedback.h sp_net.h. Rev A default pins, Rev B via PUCK_REV_B flag. Named-palette LED API only - no raw RGB in game code."
     },
     {
       "id": "US-101b-6",
@@ -927,8 +927,8 @@
       "priority": 55,
       "effort": "90 min",
       "dependency": "US-101b-5",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "src/games/g_speed_pyramid.h pair_mode_loop. State machine IDLE->REQUESTING->DIALING->CONFIRMING->PAIRED. Tilt-up/down dials digit, tap locks+POSTs, 6th tap auto-submits. HOLD_3S cancels. Build SUCCESS via pio run -e puck1_speed_pyramid: RAM 14.7%, Flash 74.9%, 22.7s."
     },
     {
       "id": "US-101c-1",
