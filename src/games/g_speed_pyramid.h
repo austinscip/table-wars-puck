@@ -34,6 +34,7 @@ enum class State : uint8_t {
   IN_GAME_IDLE,       // session bound, no question active yet
   IN_GAME_ANSWERING,  // question active, tilt-aim + tap
   IN_GAME_LOCKED,     // tap fired, awaiting server reveal
+  MATCH_ENDED,        // all 7 rounds done — TAP=PlayAgain, HOLD_3S=NewPlayer
 };
 
 inline State _state = State::IDLE;
@@ -131,6 +132,32 @@ inline bool _extract_bool(const String& json, const char* key, bool* out) {
   if (json.substring(i, i + 4) == "true") { *out = true; return true; }
   if (json.substring(i, i + 5) == "false") { *out = false; return true; }
   return false;
+}
+
+// GET /api/sp/match-state/<session_code>. Returns total round count
+// so the puck can know when the match is done (round >= total).
+inline bool _poll_match_state(int* round_out, int* total_out) {
+  if (_session_code.length() == 0) return false;
+  HTTPClient http;
+  http.begin(String(SPEED_PYRAMID_SERVER_URL) + "/api/sp/match-state/" + _session_code);
+  const int code = http.GET();
+  if (code != 200) { http.end(); return false; }
+  const String body = http.getString();
+  http.end();
+  int r = 0, t = 7;
+  if (!_extract_int(body, "round", &r)) return false;
+  _extract_int(body, "total_rounds", &t);
+  if (round_out) *round_out = r;
+  if (total_out) *total_out = t;
+  return true;
+}
+
+// POST /api/sp/reset/<session_code>. Clears the round counter for a
+// Play Again. Returns true on 200.
+inline bool _post_reset() {
+  if (_session_code.length() == 0) return false;
+  String path = "/api/sp/reset/" + _session_code;
+  return sp_net::post_json(path.c_str(), "{}", nullptr) == 200;
 }
 
 // GET /api/sp/current-question/<session_code>. Returns true if an active
@@ -294,12 +321,19 @@ inline bool pair_mode_loop() {
       _state == State::IN_GAME_ANSWERING ||
       _state == State::IN_GAME_LOCKED) {
 
-    // Poll for active question every 500ms while idle / locked.
+    // Poll for active question every 500ms while idle / locked. Also
+    // check match-state to detect end-of-match.
     const uint32_t now = millis();
     if ((_state == State::IN_GAME_IDLE || _state == State::IN_GAME_LOCKED) &&
         now - _last_poll_ms > 500) {
       _last_poll_ms = now;
-      if (_poll_current_question()) {
+
+      int r = 0, t = 7;
+      if (_poll_match_state(&r, &t) && r >= t && t > 0) {
+        _state = State::MATCH_ENDED;
+        sp_led::victory_sweep(1500);
+        sp_feedback::victory();
+      } else if (_poll_current_question()) {
         _state = State::IN_GAME_ANSWERING;
       }
     }
@@ -361,6 +395,33 @@ inline bool pair_mode_loop() {
       _show_pair_mode_glow();
     }
 
+    return true;
+  }
+
+  // -----------------------------
+  // Match ended — Play Again / New Player
+  // -----------------------------
+  if (_state == State::MATCH_ENDED) {
+    _show_pair_mode_glow();
+    if (be == SpButtonEvent::TAP) {
+      // Play Again — reset server-side counter, re-arm in-game loop.
+      sp_feedback::lock_in();
+      if (_post_reset()) {
+        _state = State::IN_GAME_IDLE;
+        _current_question_id = -1;
+        _last_poll_ms = 0;
+      } else {
+        sp_led::flash(sp_led::color_wrong(), 200);
+      }
+    }
+    if (be == SpButtonEvent::HOLD_3S) {
+      // New Player — drop back to pair mode (fresh code, fresh session).
+      _state = State::IDLE;
+      _session_code = "";
+      _current_question_id = -1;
+      _dial_pos = 0;
+      sp_led::clear();
+    }
     return true;
   }
 

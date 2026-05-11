@@ -330,6 +330,85 @@ def sp_match_state(session_code: str):
     )
 
 
+@sp_bp.route("/final-results/<session_code>", methods=["GET"])
+def sp_final_results(session_code: str):
+    """Final scoreboard data after match_ended. Sums points_earned across
+    all answers in this session, grouped by puck_id. Returns per-puck
+    totals + a derived 'tier' label based on average per-question."""
+    ph = get_placeholder()
+    session = execute_query(
+        f"SELECT id FROM trivia_sessions WHERE session_code = {ph}",
+        (session_code,),
+        fetch_one=True,
+    )
+    if not session:
+        return jsonify({"error": "session not found"}), 404
+
+    rows = execute_query(
+        f"""SELECT puck_id,
+                   COALESCE(SUM(points_earned), 0) AS total,
+                   COUNT(*) AS answered,
+                   SUM(CASE WHEN is_correct THEN 1 ELSE 0 END) AS correct
+              FROM trivia_answers
+             WHERE session_id = {ph}
+             GROUP BY puck_id""",
+        (session["id"],),
+        fetch_all=True,
+    ) or []
+
+    def derive_tier(total: int, answered: int) -> str:
+        if answered == 0:
+            return "NONE"
+        avg = total / answered
+        if avg >= 700:
+            return "LEGENDARY"
+        if avg >= 400:
+            return "EXPERT"
+        if avg >= 150:
+            return "AVERAGE"
+        return "TIMEOUT"
+
+    state = _SP_STATE.get(session_code, {})
+    return jsonify(
+        {
+            "session_code": session_code,
+            "round": state.get("round", SP_TOTAL_ROUNDS),
+            "total_rounds": SP_TOTAL_ROUNDS,
+            "players": [
+                {
+                    "puck_id": r["puck_id"],
+                    "total": int(r["total"] or 0),
+                    "answered": int(r["answered"] or 0),
+                    "correct": int(r["correct"] or 0),
+                    "tier": derive_tier(int(r["total"] or 0), int(r["answered"] or 0)),
+                }
+                for r in rows
+            ],
+        }
+    )
+
+
+@sp_bp.route("/reset/<session_code>", methods=["POST"])
+def sp_reset(session_code: str):
+    """Play Again — clear the round counter + asked-question set for this
+    session so /load-question starts at Round 1 again. The trivia
+    session itself stays the same, so we get a fresh leaderboard but the
+    same puck<>TV binding."""
+    _SP_STATE[session_code] = {"round": 0, "asked_ids": set()}
+    try:
+        import trivia_routes
+        trivia_routes._question_start_times.pop(session_code, None)
+    except Exception:
+        pass
+    if _socketio is not None:
+        _socketio.emit(
+            "match_reset",
+            {"session_code": session_code},
+            room=session_code,
+        )
+    return jsonify({"ok": True, "session_code": session_code})
+
+
 @sp_bp.route("/current-question/<session_code>", methods=["GET"])
 def sp_current_question(session_code: str):
     """Polled by the puck firmware to know which question is active +

@@ -70,5 +70,30 @@ export const api = {
         `/api/sp/load-question/${session_code}`,
         {},
       ),
+    finalResults: async (session_code: string): Promise<FinalResults> => {
+      const res = await fetch(`/api/sp/final-results/${session_code}`)
+      if (!res.ok) throw new Error(`final-results ${res.status}`)
+      return res.json() as Promise<FinalResults>
+    },
+    reset: (session_code: string) =>
+      postJson<{ ok: boolean; session_code: string }>(
+        `/api/sp/reset/${session_code}`,
+        {},
+      ),
   },
+}
+
+export interface FinalResultsPlayer {
+  puck_id: number
+  total: number
+  answered: number
+  correct: number
+  tier: string
+}
+
+export interface FinalResults {
+  session_code: string
+  round: number
+  total_rounds: number
+  players: FinalResultsPlayer[]
 }
