@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getSocket } from '../lib/socket'
 import { api, type SpeedPyramidQuestion } from '../lib/api'
+import { audio } from '../lib/audio'
 import AnswerPill from '../components/AnswerPill'
 import TimerBar from '../components/TimerBar'
 import TierBadge from '../components/TierBadge'
@@ -61,6 +62,9 @@ export default function QuestionScreen() {
   const [phase, setPhase] = useState<Phase>('awaiting_question')
   const [lockedAnswer, setLockedAnswer] = useState<'A' | 'B' | 'C' | 'D' | null>(null)
   const [reveal, setReveal] = useState<RevealEvent | null>(null)
+  // Track which tick boundaries we've already played so the countdown
+  // tone fires exactly once per second in the last 3s.
+  const lastTickRef = useRef<number>(-1)
 
   useEffect(() => {
     if (!sessionCode) return
@@ -76,16 +80,24 @@ export default function QuestionScreen() {
       setPhase('answering')
       setLockedAnswer(null)
       setReveal(null)
+      lastTickRef.current = -1
+      audio.questionShow()
     }
     function onAnswerLocked(p: AnswerLockedEvent) {
       if (p.session_code !== sessionCode) return
       setLockedAnswer(p.answer)
       setPhase('locked')
+      audio.lockIn()
     }
     function onReveal(p: RevealEvent) {
       if (p.session_code !== sessionCode) return
       setReveal(p)
       setPhase('reveal')
+      audio.reveal()
+      window.setTimeout(() => {
+        if (p.is_correct) audio.correct()
+        else audio.wrong()
+      }, 120)
       // Auto-advance to next question (or end of match) after the hold.
       setTimeout(() => {
         api.sp
@@ -114,6 +126,21 @@ export default function QuestionScreen() {
       socket.off('match_ended', onMatchEnded)
     }
   }, [sessionCode, navigate])
+
+  // Drive countdown ticks during the last 3s of the answering phase.
+  useEffect(() => {
+    if (phase !== 'answering' || !question) return
+    const id = window.setInterval(() => {
+      const elapsedMs = Date.now() - startedAt * 1000
+      const remainingSec = Math.max(0, Math.ceil((question.time_limit * 1000 - elapsedMs) / 1000))
+      if (remainingSec <= 3 && remainingSec > 0 && remainingSec !== lastTickRef.current) {
+        lastTickRef.current = remainingSec
+        if (remainingSec === 1) audio.tickFinal()
+        else audio.tick()
+      }
+    }, 100)
+    return () => window.clearInterval(id)
+  }, [phase, question, startedAt])
 
   if (!question) {
     return (

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { api, type FinalResults } from '../lib/api'
 import { getSocket } from '../lib/socket'
+import { audio } from '../lib/audio'
 import CountUpScore from '../components/CountUpScore'
 
 const TIER_COLOR: Record<string, string> = {
@@ -33,7 +34,11 @@ export default function ScoreboardScreen() {
 
     api.sp
       .finalResults(sessionCode)
-      .then(setResults)
+      .then((r) => {
+        setResults(r)
+        // Match-end crescendo plays in sync with the count-up entrance.
+        window.setTimeout(() => audio.matchEnd(), 250)
+      })
       .catch((e) => setError((e as Error).message))
 
     function onReset() {
