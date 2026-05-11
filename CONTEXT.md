@@ -42,3 +42,31 @@ Domain glossary for Table Wars. One sentence per term. The `_Avoid_:` lines list
 - **Visual Token** — A semantic name for a color, font size, motion duration, or LED palette. Lives in `tokens.json` (web) and `hal/led.h` palettes (firmware). _Avoid_: theme variable, design var.
 - **LED Palette** — A named set of CRGB values + transition curve consumed by `hal/led.h` (e.g. `PALETTE_TRIVIA_CORRECT`, `PALETTE_VICTORY`). _Avoid_: color scheme, color set.
 - **North Star Frame** — A reference screenshot from a real product (Jackbox, HQ Trivia, Bar Rescue) committed to `docs/north-star/`. Every TV game must hold up beside its assigned North Star Frame. _Avoid_: mockup, reference image.
+
+## Locked brand tokens (web)
+
+Authoritative source-of-truth for color, type, and motion across all TV games. Lives in `tokens.json` + `tailwind.config.js`. Aesthetic direction: HQ Trivia / Jackbox.
+
+**Palette:**
+- `--bg`: `#0A0E1A` (near-black, slight blue undertone) — game canvas background
+- `--primary`: `#3B82F6` (electric blue) — primary action color, selected-answer highlight
+- `--accent`: `#EC4899` (hot pink) — secondary accent, attention beats
+- `--correct`: `#FBBF24` (sunny gold) — correct answer, victory states
+- `--wrong`: `#EF4444` (red) — wrong answer, elimination states
+- `--text`: `#F8FAFC` (off-white) — primary text on `--bg`
+
+**Type:**
+- Display: **Anton** (Google Fonts, free) — question text, big numerals, game titles
+- Body: **Inter** (Google Fonts, free) — UI copy, instructions
+- Score numerals: **JetBrains Mono** (Google Fonts, free) — points / timers / counters
+
+**Motion:**
+- Default ease (reveal, overshoot energy): `cubic-bezier(0.34, 1.56, 0.64, 1)`
+- Reveal duration: **400ms**
+- Snap / hover duration: **150ms**
+- Score count-up: **800ms** with stagger
+
+## Sprint vocabulary
+
+- **Speed Pyramid** — A YDKJ-style trivia game with speed-tiered scoring: gold 0-3s = 1000pts, silver 3-6s = 500pts, bronze 6-10s = 200pts. Player tilts puck for A/B/C/D, taps to lock in. First sprint target. _Avoid_: Trivia Pyramid (the show), Trivia Speed Round.
+- **State Authority** — The single process that owns the canonical state machine for a Match. For Table Wars: always the Flask server. Pucks and TV Views are dumb clients. _Avoid_: source of truth (used informally elsewhere), master.
