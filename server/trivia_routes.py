@@ -19,6 +19,31 @@ trivia_bp = Blueprint('trivia', __name__)
 # Store active game sessions in memory
 active_sessions = {}
 
+# Module-level reference to socketio so route handlers can emit. Set by
+# init_trivia_routes(). Speed Pyramid v1 needs question_show /
+# answer_locked / reveal events emitted from inside REST handlers, not
+# just from @socketio.on() handlers.
+_socketio = None
+
+# Track when each session's current question started, server-side, so
+# reveal events can include the authoritative response_time. Keyed by
+# session_code. {session_code: {"question_id": int, "started_at": float}}
+_question_start_times: dict = {}
+
+
+def _get_session_game_type_name(session_code: str):
+    """Look up the game_type name for an active session (e.g.
+    'speed_pyramid'). Returns None on miss."""
+    ph = get_placeholder()
+    row = execute_query(
+        f'''SELECT t.name FROM trivia_sessions s
+            JOIN trivia_game_types t ON s.game_type_id = t.id
+            WHERE s.session_code = {ph}''',
+        (session_code,),
+        fetch_one=True,
+    )
+    return row['name'] if row else None
+
 
 # ========================================
 # WEB PAGES
@@ -187,23 +212,42 @@ def api_load_question(session_code):
             fetch_one=True
         )
 
+        import time as _time
+        _question_start_times[session_code] = {
+            'question_id': question['id'],
+            'started_at': _time.time(),
+        }
+
+        payload_question = {
+            'id': question['id'],
+            'setup': question['setup_text'],
+            'question': question['question_text'],
+            'answers': {
+                'A': question['answer_a'],
+                'B': question['answer_b'],
+                'C': question['answer_c'],
+                'D': question['answer_d']
+            },
+            'difficulty': question['difficulty'],
+            'time_limit': question['time_limit'],
+            'category': category['name'],
+            'category_emoji': category['emoji']
+        }
+
+        # Slice 1C: emit question_show so the TV view animates the
+        # question card and starts its timer in sync with the server.
+        if _socketio is not None:
+            _socketio.emit('question_show', {
+                'session_code': session_code,
+                'question': payload_question,
+                'round': state['round'],
+                'question_number': (state['questions_completed'] % 5) + 1,
+                'started_at': _question_start_times[session_code]['started_at'],
+            }, room=session_code)
+
         return jsonify({
             'success': True,
-            'question': {
-                'id': question['id'],
-                'setup': question['setup_text'],
-                'question': question['question_text'],
-                'answers': {
-                    'A': question['answer_a'],
-                    'B': question['answer_b'],
-                    'C': question['answer_c'],
-                    'D': question['answer_d']
-                },
-                'difficulty': question['difficulty'],
-                'time_limit': question['time_limit'],
-                'category': category['name'],
-                'category_emoji': category['emoji']
-            },
+            'question': payload_question,
             'round': state['round'],
             'question_number': (state['questions_completed'] % 5) + 1
         })
@@ -248,9 +292,36 @@ def api_submit_answer():
         # Check if correct
         is_correct = (answer == question['correct_answer'])
 
-        # Calculate points (basic: 1000 for correct, 0 for wrong)
-        # Could be enhanced with time-based scoring
-        points = 1000 if is_correct else 0
+        # Slice 1C: emit answer_locked the moment we receive the POST so
+        # the TV view can highlight the locked answer pill before the
+        # reveal beat plays out.
+        if _socketio is not None:
+            _socketio.emit('answer_locked', {
+                'session_code': session_code,
+                'puck_id': puck_id,
+                'answer': answer,
+                'question_id': question_id,
+            }, room=session_code)
+
+        # Authoritative response_time: prefer the server-tracked window
+        # over the puck-reported one (clock skew, lag tolerance).
+        server_response_time_ms = response_time_ms
+        sst = _question_start_times.get(session_code)
+        if sst and sst.get('question_id') == question_id:
+            import time as _time
+            server_response_time_ms = int((_time.time() - sst['started_at']) * 1000)
+
+        # Tier-based scoring for Speed Pyramid (and the engine's default
+        # for everything else). The engine is the single source of truth
+        # for points + tier — never duplicate the table here.
+        game_type_name = _get_session_game_type_name(session_code) or 'speed_pyramid'
+        engine = create_game_engine(game_type_name, None, [{'puck_id': puck_id, 'multiplier': 1.0}])
+        points = engine.calculate_points(puck_id, is_correct, server_response_time_ms)
+        tier = None
+        try:
+            tier = engine.tier_for(server_response_time_ms) if is_correct else 'WRONG'
+        except AttributeError:
+            tier = None  # non-Speed-Pyramid engines don't expose tier_for
 
         # Get session ID
         session = execute_query(
@@ -267,7 +338,7 @@ def api_submit_answer():
             puck_id,
             answer,
             is_correct,
-            response_time_ms,
+            server_response_time_ms,
             points
         )
 
@@ -278,13 +349,31 @@ def api_submit_answer():
         # Get commentary
         commentary = question['host_commentary_correct'] if is_correct else question['host_commentary_wrong']
 
+        # Slice 1C: emit reveal so the TV view shows the correct answer,
+        # the tier badge, and the new score.
+        if _socketio is not None:
+            _socketio.emit('reveal', {
+                'session_code': session_code,
+                'puck_id': puck_id,
+                'question_id': question_id,
+                'is_correct': is_correct,
+                'correct_answer': question['correct_answer'],
+                'submitted_answer': answer,
+                'points': points,
+                'tier': tier,
+                'response_time_ms': server_response_time_ms,
+                'commentary': commentary,
+            }, room=session_code)
+
         return jsonify({
             'success': True,
             'is_correct': is_correct,
             'points': points,
+            'tier': tier,
             'explanation': question['explanation'],
             'commentary': commentary,
             'correct_answer': question['correct_answer'],
+            'response_time_ms': server_response_time_ms,
             'next_phase': status['status']
         })
     except Exception as e:
@@ -620,6 +709,8 @@ def register_trivia_socketio_events(socketio):
 # Export blueprint
 def init_trivia_routes(app, socketio=None):
     """Initialize trivia routes"""
+    global _socketio
+    _socketio = socketio  # Stash so REST handlers can emit (Slice 1C+)
     app.register_blueprint(trivia_bp)
 
     if socketio:

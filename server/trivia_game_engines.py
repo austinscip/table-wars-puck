@@ -297,34 +297,48 @@ class ScrewNeighborGame(TriviaGameEngine):
 # GAME TYPE 4: Speed Pyramid
 # ========================================
 class SpeedPyramidGame(TriviaGameEngine):
-    """Points based on answer speed"""
+    """Points based on answer speed. v1 (Sprint 1) scoring:
+    4 tiers, 0-floor (no negative points). See PRD
+    docs/sprints/2026-05-speed-pyramid-v1.md and ADR 0001.
+    """
+
+    def __init__(self, session_id, players):
+        # Other subclasses hardcode their game_type_name when calling
+        # super().__init__; SpeedPyramidGame was missing this override,
+        # which broke create_game_engine() in trivia_game_engines.py:477
+        # (calls engine_class(session_id, players) for known subclasses).
+        super().__init__(session_id, players, 'speed_pyramid')
 
     def calculate_points(self, puck_id, is_correct, response_time_ms):
-        """Points determined by speed tiers"""
+        """Points determined by speed tiers (4-tier 0-floor)."""
         if not is_correct:
             return 0
 
         player = next((p for p in self.players if p['puck_id'] == puck_id), None)
         multiplier = player['multiplier'] if player else 1.0
 
-        # Speed tiers
-        if response_time_ms < 3000:  # 0-3 seconds
-            tier = 'LEGENDARY'
-            points = 1000
-        elif response_time_ms < 6000:  # 4-6 seconds
-            tier = 'EXPERT'
-            points = 500
-        elif response_time_ms < 10000:  # 7-10 seconds
-            tier = 'AVERAGE'
-            points = 200
-        elif response_time_ms < 15000:  # 11-15 seconds
-            tier = 'ROOKIE'
-            points = 50
-        else:  # 15+ seconds
-            tier = 'CLUELESS'
-            points = -100
+        # Speed tiers — exposed to clients as the `tier` field on /reveal.
+        if response_time_ms < 3000:       # 0-3 seconds
+            points = 1000                  # LEGENDARY
+        elif response_time_ms < 6000:     # 3-6 seconds
+            points = 500                   # EXPERT
+        elif response_time_ms < 10000:    # 6-10 seconds
+            points = 200                   # AVERAGE
+        else:                              # 10s+ / timeout
+            points = 0                     # TIMEOUT
 
         return int(points * multiplier)
+
+    @staticmethod
+    def tier_for(response_time_ms: int) -> str:
+        """Human-readable tier label matched to calculate_points."""
+        if response_time_ms < 3000:
+            return 'LEGENDARY'
+        if response_time_ms < 6000:
+            return 'EXPERT'
+        if response_time_ms < 10000:
+            return 'AVERAGE'
+        return 'TIMEOUT'
 
 
 # ========================================

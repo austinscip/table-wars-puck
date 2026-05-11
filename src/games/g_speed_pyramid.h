@@ -30,13 +30,23 @@ enum class State : uint8_t {
   PAIR_REQUESTING,
   PAIR_DIALING,
   PAIR_CONFIRMING,
-  PAIRED,  // hand-off to in-game state once slice 1C lands
+  PAIRED,             // brief celebration before dropping to IN_GAME
+  IN_GAME_IDLE,       // session bound, no question active yet
+  IN_GAME_ANSWERING,  // question active, tilt-aim + tap
+  IN_GAME_LOCKED,     // tap fired, awaiting server reveal
 };
 
 inline State _state = State::IDLE;
 inline uint8_t _dial_digits[6] = {0, 0, 0, 0, 0, 0};
 inline uint8_t _dial_pos = 0;     // 0..5
 inline uint8_t _current_digit = 0;
+
+// Session + question tracking (set after PAIR_CONFIRMING succeeds).
+inline String _session_code = "";
+inline int _current_question_id = -1;
+inline uint32_t _question_started_at_ms = 0;  // millis() when puck saw it
+inline uint32_t _question_time_limit_ms = 10000;
+inline uint32_t _last_poll_ms = 0;
 
 inline void _show_pair_mode_glow() {
   // Soft rotating dot in --host palette so the player knows they're
@@ -94,6 +104,98 @@ inline bool _post_confirm(String* session_code_out) {
   if (end < 0) return false;
   *session_code_out = resp.substring(start, end);
   return true;
+}
+
+// Extract an integer JSON field (very small parser — works for fields
+// shaped like "<key>":<int>).
+inline bool _extract_int(const String& json, const char* key, int* out) {
+  String needle = String("\"") + key + "\":";
+  int i = json.indexOf(needle);
+  if (i < 0) return false;
+  i += needle.length();
+  while (i < (int)json.length() && (json[i] == ' ' || json[i] == '\t')) i++;
+  int start = i;
+  if (i < (int)json.length() && (json[i] == '-' || json[i] == '+')) i++;
+  while (i < (int)json.length() && isDigit(json[i])) i++;
+  if (i == start) return false;
+  *out = json.substring(start, i).toInt();
+  return true;
+}
+
+inline bool _extract_bool(const String& json, const char* key, bool* out) {
+  String needle = String("\"") + key + "\":";
+  int i = json.indexOf(needle);
+  if (i < 0) return false;
+  i += needle.length();
+  while (i < (int)json.length() && (json[i] == ' ' || json[i] == '\t')) i++;
+  if (json.substring(i, i + 4) == "true") { *out = true; return true; }
+  if (json.substring(i, i + 5) == "false") { *out = false; return true; }
+  return false;
+}
+
+// GET /api/sp/current-question/<session_code>. Returns true if an active
+// question was found and populates _current_question_id / time tracking.
+inline bool _poll_current_question() {
+  if (_session_code.length() == 0) return false;
+  HTTPClient http;
+  http.begin(String(SPEED_PYRAMID_SERVER_URL) + "/api/sp/current-question/" + _session_code);
+  const int code = http.GET();
+  if (code != 200) { http.end(); return false; }
+  const String body = http.getString();
+  http.end();
+
+  bool active = false;
+  if (!_extract_bool(body, "active", &active) || !active) return false;
+
+  int qid = -1, time_limit_s = 10;
+  if (!_extract_int(body, "question_id", &qid)) return false;
+  _extract_int(body, "time_limit", &time_limit_s);
+
+  if (qid != _current_question_id) {
+    _current_question_id = qid;
+    _question_started_at_ms = millis();
+    _question_time_limit_ms = (uint32_t)time_limit_s * 1000;
+    return true;
+  }
+  return false;
+}
+
+// POST /api/trivia/answer. Returns true on 200, populates is_correct.
+inline bool _post_answer(char letter, uint32_t response_time_ms, bool* is_correct_out) {
+  String body =
+      "{\"session_code\":\"" + _session_code + "\"" +
+      ",\"puck_id\":" + String(PUCK_ID) +
+      ",\"question_id\":" + String(_current_question_id) +
+      ",\"answer\":\"" + String(letter) + "\"" +
+      ",\"response_time_ms\":" + String(response_time_ms) + "}";
+  String resp;
+  const int code = sp_net::post_json("/api/trivia/answer", body, &resp);
+  if (code != 200) return false;
+  bool ok = false;
+  _extract_bool(resp, "is_correct", &ok);
+  if (is_correct_out) *is_correct_out = ok;
+  return true;
+}
+
+// Map sp_imu::SpQuadrant -> A/B/C/D letter. UP=A, RIGHT=B, DOWN=C, LEFT=D.
+inline char _quadrant_to_letter(SpQuadrant q) {
+  switch (q) {
+    case SpQuadrant::UP:    return 'A';
+    case SpQuadrant::RIGHT: return 'B';
+    case SpQuadrant::DOWN:  return 'C';
+    case SpQuadrant::LEFT:  return 'D';
+    default:                return 0;
+  }
+}
+
+inline int8_t _quadrant_to_ring(SpQuadrant q) {
+  switch (q) {
+    case SpQuadrant::UP:    return 0;
+    case SpQuadrant::RIGHT: return 1;
+    case SpQuadrant::DOWN:  return 2;
+    case SpQuadrant::LEFT:  return 3;
+    default:                return -1;
+  }
 }
 
 inline void begin() {
@@ -179,8 +281,86 @@ inline bool pair_mode_loop() {
   }
 
   if (_state == State::PAIRED) {
-    // Slice 1C wires in_game_loop() here. For 1B, stay quiet.
-    _show_pair_mode_glow();
+    // Hand off to in-game state machine.
+    _state = State::IN_GAME_IDLE;
+    _current_question_id = -1;
+    return true;
+  }
+
+  // -----------------------------
+  // In-game state machine (slice 1C)
+  // -----------------------------
+  if (_state == State::IN_GAME_IDLE ||
+      _state == State::IN_GAME_ANSWERING ||
+      _state == State::IN_GAME_LOCKED) {
+
+    // Poll for active question every 500ms while idle / locked.
+    const uint32_t now = millis();
+    if ((_state == State::IN_GAME_IDLE || _state == State::IN_GAME_LOCKED) &&
+        now - _last_poll_ms > 500) {
+      _last_poll_ms = now;
+      if (_poll_current_question()) {
+        _state = State::IN_GAME_ANSWERING;
+      }
+    }
+
+    if (_state == State::IN_GAME_ANSWERING) {
+      // Render: 4 LEDs lit in current tilt quadrant; remaining LEDs
+      // around the ring show the timer depletion in accent pink.
+      const SpQuadrant q = sp_imu::read_quadrant();
+      const int8_t ring_q = _quadrant_to_ring(q);
+
+      const uint32_t elapsed = now - _question_started_at_ms;
+      const uint32_t remaining = (elapsed >= _question_time_limit_ms)
+                                     ? 0
+                                     : _question_time_limit_ms - elapsed;
+
+      // Show timer ring first, then overlay quadrant.
+      sp_led::show_timer(remaining, _question_time_limit_ms, sp_led::color_accent());
+      if (ring_q >= 0) {
+        // Re-tint the quadrant LEDs with primary blue. show_quadrant
+        // clears first, so we have to redo the timer fill manually.
+        sp_led::show_quadrant(ring_q, sp_led::color_primary());
+      }
+
+      // Timeout: lock no answer, server will mark TIMEOUT on next reveal
+      // when the puck sends an empty answer. For v1 we simply hold the
+      // ring dark until the next question arrives.
+      if (remaining == 0) {
+        _state = State::IN_GAME_LOCKED;
+        sp_led::clear();
+        return true;
+      }
+
+      if (be == SpButtonEvent::TAP) {
+        const char letter = _quadrant_to_letter(q);
+        if (letter == 0) {
+          // No commitable tilt -- short reject buzz.
+          sp_feedback::beep(400, 60);
+        } else {
+          sp_feedback::lock_in();
+          bool is_correct = false;
+          if (_post_answer(letter, elapsed, &is_correct)) {
+            if (is_correct) {
+              sp_led::flash(sp_led::color_correct(), 500);
+              sp_feedback::correct();
+            } else {
+              sp_led::flash(sp_led::color_wrong(), 400);
+              sp_feedback::wrong();
+            }
+          } else {
+            // Transport error — visible but non-fatal.
+            sp_led::flash(sp_led::color_wrong(), 200);
+          }
+          _state = State::IN_GAME_LOCKED;
+        }
+      }
+    } else {
+      // Idle / locked between questions — soft host-mode glow so the
+      // puck still feels alive.
+      _show_pair_mode_glow();
+    }
+
     return true;
   }
 

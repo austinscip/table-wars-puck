@@ -25,10 +25,15 @@ import time
 from typing import Optional
 
 from flask import Blueprint, jsonify, request
-from trivia_database import create_trivia_session, add_player_to_session
+from trivia_database import (
+    create_trivia_session,
+    add_player_to_session,
+    get_random_question,
+)
 from database import execute_query, get_placeholder
 
 pair_bp = Blueprint("pair", __name__, url_prefix="/api/pair")
+sp_bp = Blueprint("sp", __name__, url_prefix="/api/sp")
 
 # Set by init_pair_routes(). Module-level so route handlers can access it
 # without a Flask current_app extension dance.
@@ -190,8 +195,180 @@ def confirm_code():
     return jsonify({"session_code": session_code, "puck_id": puck_id})
 
 
+# ============================================================================
+# Speed Pyramid v1 — match flow helpers
+# ============================================================================
+# These live alongside pair_bp because they're scoped to Speed Pyramid v1's
+# sprint and we don't want to dilute trivia_routes.py with v1-specific
+# round-counter logic. When more games adopt the same flow, lift these into
+# a shared module.
+
+# In-memory round counter per session_code.
+# {session_code: {"round": int, "asked_ids": set[int]}}
+_SP_STATE: dict[str, dict] = {}
+
+SP_TOTAL_ROUNDS = 7
+
+
+def _difficulty_for_round(r: int) -> str:
+    """Q1-Q2 easy, Q3-Q5 medium, Q6-Q7 hard."""
+    if r <= 2:
+        return "easy"
+    if r <= 5:
+        return "medium"
+    return "hard"
+
+
+@sp_bp.route("/load-question/<session_code>", methods=["POST"])
+def sp_load_question(session_code: str):
+    """Load the next Speed Pyramid question for this session.
+
+    Picks a random unused question at the difficulty matching the next
+    round. Increments the round counter. Emits 'question_show' to room=
+    session_code. Returns the question payload + round metadata.
+    """
+    state = _SP_STATE.setdefault(
+        session_code, {"round": 0, "asked_ids": set()}
+    )
+
+    if state["round"] >= SP_TOTAL_ROUNDS:
+        if _socketio is not None:
+            _socketio.emit(
+                "match_ended",
+                {"session_code": session_code, "rounds": SP_TOTAL_ROUNDS},
+                room=session_code,
+            )
+        return jsonify(
+            {"error": "match_complete", "rounds": SP_TOTAL_ROUNDS}
+        ), 409
+
+    next_round = state["round"] + 1
+    difficulty = _difficulty_for_round(next_round)
+    exclude = list(state["asked_ids"]) or None
+    q = get_random_question(difficulty=difficulty, exclude_ids=exclude)
+    if not q:
+        # Fall back to any difficulty if the bucket is dry.
+        q = get_random_question(exclude_ids=exclude)
+    if not q:
+        return jsonify({"error": "no questions available"}), 404
+
+    state["round"] = next_round
+    state["asked_ids"].add(q["id"])
+
+    # Resolve category for display.
+    ph = get_placeholder()
+    cat = execute_query(
+        f"SELECT name, emoji FROM trivia_categories WHERE id = {ph}",
+        (q["category_id"],),
+        fetch_one=True,
+    )
+
+    payload_question = {
+        "id": q["id"],
+        "setup": q["setup_text"],
+        "question": q["question_text"],
+        "answers": {
+            "A": q["answer_a"],
+            "B": q["answer_b"],
+            "C": q["answer_c"],
+            "D": q["answer_d"],
+        },
+        "difficulty": q["difficulty"],
+        "time_limit": q["time_limit"] or 10,
+        "category": cat["name"] if cat else "",
+        "category_emoji": cat["emoji"] if cat else "",
+    }
+
+    started_at = _now()
+    if _socketio is not None:
+        _socketio.emit(
+            "question_show",
+            {
+                "session_code": session_code,
+                "question": payload_question,
+                "round": next_round,
+                "total_rounds": SP_TOTAL_ROUNDS,
+                "started_at": started_at,
+            },
+            room=session_code,
+        )
+
+    # Stash question_started_at in trivia_routes' tracker so its
+    # /api/trivia/answer handler computes the authoritative response_time.
+    try:
+        import trivia_routes
+        trivia_routes._question_start_times[session_code] = {
+            "question_id": q["id"],
+            "started_at": started_at,
+        }
+    except Exception:
+        pass
+
+    return jsonify(
+        {
+            "question": payload_question,
+            "round": next_round,
+            "total_rounds": SP_TOTAL_ROUNDS,
+            "started_at": started_at,
+        }
+    )
+
+
+@sp_bp.route("/match-state/<session_code>", methods=["GET"])
+def sp_match_state(session_code: str):
+    """Lightweight match progress lookup for the TV (mostly for debugging
+    and for slice 1D's scoreboard query)."""
+    state = _SP_STATE.get(session_code)
+    if not state:
+        return jsonify({"round": 0, "total_rounds": SP_TOTAL_ROUNDS})
+    return jsonify(
+        {
+            "round": state["round"],
+            "total_rounds": SP_TOTAL_ROUNDS,
+            "questions_asked": len(state["asked_ids"]),
+        }
+    )
+
+
+@sp_bp.route("/current-question/<session_code>", methods=["GET"])
+def sp_current_question(session_code: str):
+    """Polled by the puck firmware to know which question is active +
+    when it started + how much time is left. Cheap GET — no DB hit
+    beyond what trivia_routes already tracks."""
+    try:
+        import trivia_routes
+        sst = trivia_routes._question_start_times.get(session_code)
+    except Exception:
+        sst = None
+    if not sst:
+        return jsonify({"active": False})
+
+    ph = get_placeholder()
+    q = execute_query(
+        f"SELECT id, time_limit FROM trivia_questions WHERE id = {ph}",
+        (sst["question_id"],),
+        fetch_one=True,
+    )
+    if not q:
+        return jsonify({"active": False})
+
+    time_limit = q["time_limit"] or 10
+    elapsed = _now() - sst["started_at"]
+    remaining = max(0.0, time_limit - elapsed)
+    return jsonify(
+        {
+            "active": True,
+            "question_id": q["id"],
+            "time_limit": time_limit,
+            "started_at": sst["started_at"],
+            "remaining_sec": remaining,
+        }
+    )
+
+
 def init_pair_routes(app, socketio):
-    """Wire pair_bp into the Flask app and stash socketio for emits."""
+    """Wire pair_bp + sp_bp into the Flask app and stash socketio for emits."""
     global _socketio
     _socketio = socketio
     app.register_blueprint(pair_bp)
+    app.register_blueprint(sp_bp)

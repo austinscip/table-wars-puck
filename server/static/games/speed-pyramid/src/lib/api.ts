@@ -32,6 +32,24 @@ export interface PairConfirmResponse {
   session_code: string
 }
 
+export interface SpeedPyramidQuestion {
+  id: number
+  setup: string
+  question: string
+  answers: { A: string; B: string; C: string; D: string }
+  difficulty: string
+  time_limit: number
+  category: string
+  category_emoji: string
+}
+
+export interface LoadQuestionResponse {
+  question: SpeedPyramidQuestion
+  round: number
+  total_rounds: number
+  started_at: number
+}
+
 export const api = {
   pair: {
     request: (puck_id: number) =>
@@ -45,5 +63,12 @@ export const api = {
 
     confirm: (puck_id: number, code: string) =>
       postJson<PairConfirmResponse>('/api/pair/confirm', { puck_id, code }),
+  },
+  sp: {
+    loadQuestion: (session_code: string) =>
+      postJson<LoadQuestionResponse>(
+        `/api/sp/load-question/${session_code}`,
+        {},
+      ),
   },
 }
