@@ -1059,8 +1059,8 @@
       "priority": 62,
       "effort": "30 min",
       "dependency": "US-101c-6",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "/api/sp/load-question emits match_ended on round 8 (HTTP 409). Difficulty curve verified: R1-R2 easy, R3-R5 medium, R6-R7 hard via curl loop."
     },
     {
       "id": "US-101d-2",
@@ -1078,8 +1078,8 @@
       "priority": 63,
       "effort": "45 min",
       "dependency": "US-101d-1",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "ScoreboardScreen.tsx + CountUpScore.tsx. Loads /api/sp/final-results, sorts by total, staggered count-up (200ms per player), tier badge in brand color, Play Again / New Player hint fades in at 2.5s."
     },
     {
       "id": "US-101d-3",
@@ -1096,8 +1096,8 @@
       "priority": 64,
       "effort": "45 min",
       "dependency": "US-101d-2",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Firmware MATCH_ENDED state. Victory feedback on entry. TAP -> POST /api/sp/reset + back to IN_GAME_IDLE. HOLD_3S -> back to IDLE (full pair restart). Build SUCCESS Flash 75.1%."
     },
     {
       "id": "US-101d-4",
@@ -1115,8 +1115,8 @@
       "priority": 65,
       "effort": "30 min",
       "dependency": "US-101d-3",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "curl simulation: 7 rounds played, 8th load returns 409 match_complete. final-results: answered=7 correct=5 tier=LEGENDARY total=5000."
     },
     {
       "id": "US-101e-1",
