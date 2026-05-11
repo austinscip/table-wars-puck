@@ -29,6 +29,7 @@ from database import (
 
 # Import trivia routes and database
 from trivia_routes import init_trivia_routes
+from pair_routes import init_pair_routes
 from trivia_database import init_trivia_database, seed_trivia_data
 from trivia_questions_seed import seed_questions
 
@@ -642,6 +643,33 @@ def api_tournaments():
 def register_core_socketio_handlers(sio):
     """Register core WebSocket handlers - called from main"""
     # Note: puck_input handler is in tv_game_routes.py to avoid conflicts
+    from flask_socketio import join_room, leave_room
+
+    @sio.on("join_pair_room")
+    def _on_join_pair_room(data):
+        """TV view subscribes to a pair_code room to mirror dial progress
+        and receive the 'paired' event when the puck confirms."""
+        code = (data or {}).get("pair_code")
+        if isinstance(code, str) and len(code) == 6 and code.isdigit():
+            join_room(code)
+            sio.emit("joined_pair_room", {"pair_code": code}, room=code)
+
+    @sio.on("leave_pair_room")
+    def _on_leave_pair_room(data):
+        code = (data or {}).get("pair_code")
+        if isinstance(code, str):
+            leave_room(code)
+
+    @sio.on("join_session_room")
+    def _on_join_session_room(data):
+        """TV view re-subscribes to a session_code room after pairing,
+        so it receives question_show / answer_locked / reveal /
+        match_ended events emitted from trivia_routes."""
+        code = (data or {}).get("session_code")
+        if isinstance(code, str) and code:
+            join_room(code)
+            sio.emit("joined_session_room", {"session_code": code}, room=code)
+
     print("✅ Core WebSocket handlers registered")
 
 # ============================================================================
@@ -717,6 +745,7 @@ init_tv_game_routes(app, socketio)
 init_multiplayer_routes(app, socketio)
 init_firmware_routes(app)
 init_analytics_routes(app)
+init_pair_routes(app, socketio)  # Speed Pyramid v1 — pair-code flow
 
 if __name__ == '__main__':
     print("╔═══════════════════════════════════════════╗")

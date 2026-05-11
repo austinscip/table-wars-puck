@@ -1,12 +1,16 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import TitleScreen from './screens/TitleScreen'
+import PairScreen from './screens/PairScreen'
+import CountdownScreen from './screens/CountdownScreen'
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/tv/speed-pyramid">
       <Routes>
         <Route path="/" element={<TitleScreen />} />
-        {/* Routes added in later slices: /pair, /countdown/:code, /question/:code, /scoreboard/:code */}
+        <Route path="/pair" element={<PairScreen />} />
+        <Route path="/countdown/:sessionCode" element={<CountdownScreen />} />
+        {/* /question/:code (1C), /scoreboard/:code (1D) land later */}
         <Route path="*" element={<TitleScreen />} />
       </Routes>
     </BrowserRouter>
