@@ -728,6 +728,466 @@
       "dependency": "US-003c-2",
       "passes": true,
       "notes": "Test procedure documented. Can use puck simulator at /test/puck-simulator for testing without hardware."
+    },
+    {
+      "id": "US-101a-1",
+      "title": "Scaffold Vite + React + TS at server/static/games/speed-pyramid/",
+      "description": "Create the project directory and bootstrap a Vite + React + TypeScript app. Verify `npm run build` succeeds and produces dist/.",
+      "sprint": "1A",
+      "diff": "mkdir -p server/static/games/speed-pyramid && cd server/static/games/speed-pyramid && npm create vite@latest . -- --template react-ts --yes && npm install",
+      "file": "server/static/games/speed-pyramid/package.json",
+      "acceptanceCriteria": [
+        "Directory server/static/games/speed-pyramid/ exists with package.json",
+        "`npm run build` produces dist/index.html + dist/assets/",
+        "tsconfig.json exists"
+      ],
+      "priority": 45,
+      "effort": "20 min",
+      "dependency": null,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101a-2",
+      "title": "Install brand stack: Tailwind + shadcn/ui + Framer Motion + socket.io-client",
+      "description": "Add the locked tech stack dependencies to the Vite project. Initialize Tailwind config + PostCSS. Initialize shadcn/ui with sensible defaults.",
+      "sprint": "1A",
+      "diff": "cd server/static/games/speed-pyramid && npm install -D tailwindcss postcss autoprefixer && npm install framer-motion socket.io-client react-router-dom && npx tailwindcss init -p && npx shadcn@latest init -y",
+      "file": "server/static/games/speed-pyramid/tailwind.config.js",
+      "acceptanceCriteria": [
+        "tailwind.config.js exists",
+        "postcss.config.js exists",
+        "components.json exists (shadcn init artifact)",
+        "package.json includes framer-motion, socket.io-client, react-router-dom"
+      ],
+      "priority": 46,
+      "effort": "15 min",
+      "dependency": "US-101a-1",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101a-3",
+      "title": "Create tokens.json + wire to tailwind.config.js + load Google Fonts",
+      "description": "Author tokens.json with the locked palette/fonts/motion values from CONTEXT.md. Update tailwind.config.js theme.extend to read from it. Add Google Fonts links for Anton, Inter, JetBrains Mono.",
+      "sprint": "1A",
+      "diff": "Create tokens.json: {colors:{bg:'#0A0E1A',primary:'#3B82F6',accent:'#EC4899',correct:'#FBBF24',wrong:'#EF4444',text:'#F8FAFC'},fonts:{display:'Anton',body:'Inter',mono:'JetBrains Mono'},motion:{ease:'cubic-bezier(0.34,1.56,0.64,1)',reveal:400,snap:150}}. Edit tailwind.config.js to import and spread into theme.extend.colors and theme.extend.fontFamily. Edit index.html to add <link> for Google Fonts.",
+      "file": "server/static/games/speed-pyramid/tokens.json",
+      "acceptanceCriteria": [
+        "tokens.json exists with the locked values",
+        "tailwind.config.js consumes tokens.json",
+        "index.html includes Google Fonts <link> for Anton, Inter, JetBrains Mono",
+        "A test class like `bg-bg text-text font-display` renders with correct values"
+      ],
+      "priority": 47,
+      "effort": "20 min",
+      "dependency": "US-101a-2",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101a-4",
+      "title": "TitleScreen.tsx renders 'SPEED PYRAMID' in Anton on locked bg",
+      "description": "Create src/screens/TitleScreen.tsx. Wire as default route via react-router-dom. Page should fill viewport with bg-bg, centered 'SPEED PYRAMID' in font-display + text-text, large size (~10rem). Include a placeholder 'Hold puck button to pair' line in font-body.",
+      "sprint": "1A",
+      "diff": "New file src/screens/TitleScreen.tsx exporting a default React component. Update src/App.tsx to use BrowserRouter + Routes with '/' -> TitleScreen.",
+      "file": "server/static/games/speed-pyramid/src/screens/TitleScreen.tsx",
+      "acceptanceCriteria": [
+        "src/screens/TitleScreen.tsx exists and exports a component",
+        "src/App.tsx renders TitleScreen at '/'",
+        "`npm run dev` shows brand-correct title at localhost:5173"
+      ],
+      "priority": 48,
+      "effort": "20 min",
+      "dependency": "US-101a-3",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101a-5",
+      "title": "Flask route /tv/speed-pyramid serves the built Vite bundle",
+      "description": "Add a Flask blueprint or route that serves server/static/games/speed-pyramid/dist/index.html with proper static_url_path so /assets/* resolves correctly. Should also serve the index for any sub-route (SPA fallback).",
+      "sprint": "1A",
+      "diff": "In server/app.py (or a new server/speed_pyramid_routes.py blueprint), add:\n\n@app.route('/tv/speed-pyramid')\n@app.route('/tv/speed-pyramid/<path:subpath>')\ndef speed_pyramid_app(subpath=None):\n    return send_from_directory('static/games/speed-pyramid/dist', 'index.html')\n\nEnsure dist/assets/* is reachable via existing /static route or add a dedicated route.",
+      "file": "server/app.py",
+      "acceptanceCriteria": [
+        "GET http://localhost:5001/tv/speed-pyramid returns the built index.html",
+        "Static assets (CSS/JS) load correctly with no 404s",
+        "Screenshot of the title screen committed to docs/sprints/screenshots/slice-1a.png"
+      ],
+      "priority": 49,
+      "effort": "15 min",
+      "dependency": "US-101a-4",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101b-1",
+      "title": "Create server/pair_routes.py with /api/pair/request endpoint",
+      "description": "New blueprint. Generates random 6-digit code, stores in module-level dict keyed by puck_id with TTL (10 min). Returns {pair_code, expires_at}. Use secrets.randbelow for code generation.",
+      "sprint": "1B",
+      "diff": "New file server/pair_routes.py exporting pair_bp = Blueprint('pair', __name__, url_prefix='/api/pair'). Register in server/app.py with app.register_blueprint(pair_bp). Module-level _pending: dict[int, dict] = {} keyed by puck_id with {'code': str, 'expires_at': float}.",
+      "file": "server/pair_routes.py",
+      "acceptanceCriteria": [
+        "server/pair_routes.py exists",
+        "POST /api/pair/request with {puck_id: 1} returns valid JSON with 6-digit pair_code and expires_at",
+        "Second request for same puck_id returns the same code while not expired"
+      ],
+      "priority": 50,
+      "effort": "20 min",
+      "dependency": "US-101a-5",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101b-2",
+      "title": "Add /api/pair/dial endpoint + Flask-SocketIO emit",
+      "description": "Endpoint accepts {puck_id, digit_index, digit}. Validates puck has a pending code. Emits 'pair_dial_progress' to room=pair_code with {digit_index, digit, puck_id}. Returns {accepted: bool}.",
+      "sprint": "1B",
+      "diff": "Add @pair_bp.route('/dial', methods=['POST']) to pair_routes.py. Use socketio.emit('pair_dial_progress', payload, room=pair_code).",
+      "file": "server/pair_routes.py",
+      "acceptanceCriteria": [
+        "POST /api/pair/dial with valid {puck_id, digit_index, digit} returns {accepted: true}",
+        "WebSocket client subscribed to room=pair_code receives 'pair_dial_progress' event",
+        "Invalid puck_id returns 400"
+      ],
+      "priority": 51,
+      "effort": "15 min",
+      "dependency": "US-101b-1",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101b-3",
+      "title": "Add /api/pair/confirm endpoint + create trivia session + emit 'paired'",
+      "description": "Endpoint accepts {puck_id, code}. Validates code matches pending. Creates a trivia session via trivia_database.create_trivia_session(bar_id=1, table_number=1, game_type_id=<speed_pyramid>). Emits 'paired' to room=pair_code with {session_code}. Returns {session_code}.",
+      "sprint": "1B",
+      "diff": "Add @pair_bp.route('/confirm', methods=['POST']). Look up game_type_id for 'speed_pyramid' from trivia_game_types table. Call create_trivia_session and add_player_to_session.",
+      "file": "server/pair_routes.py",
+      "acceptanceCriteria": [
+        "POST /api/pair/confirm with valid {puck_id, code} returns {session_code}",
+        "Subscribed TV WS receives 'paired' event with session_code",
+        "trivia_sessions row exists in DB for that session_code"
+      ],
+      "priority": 52,
+      "effort": "25 min",
+      "dependency": "US-101b-2",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101b-4",
+      "title": "React PairScreen.tsx fetches code + subscribes to WS + renders DigitDial",
+      "description": "New screen at /pair?puck_id=N. On mount: POST /api/pair/request for that puck_id, get code, subscribe Socket.IO to room=code. Renders 6 digit slots (JetBrains Mono, large) initially showing '_'. Updates each slot on 'pair_dial_progress'. On 'paired', navigates to /countdown/<session_code>.",
+      "sprint": "1B",
+      "diff": "New files: src/screens/PairScreen.tsx, src/components/PairCodeDisplay.tsx (renders 6 slots), src/lib/api.ts (POST helpers), src/lib/socket.ts (Socket.IO client wrapper). Register route '/pair' in src/App.tsx.",
+      "file": "server/static/games/speed-pyramid/src/screens/PairScreen.tsx",
+      "acceptanceCriteria": [
+        "Opening /tv/speed-pyramid/pair?puck_id=1 displays a 6-digit code from the server",
+        "POSTing /api/pair/dial fills the corresponding digit slot in real time",
+        "POSTing /api/pair/confirm navigates the browser to /countdown/<session_code>"
+      ],
+      "priority": 53,
+      "effort": "60 min",
+      "dependency": "US-101b-3",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101b-5",
+      "title": "Firmware HAL: button.h (tap, hold-1s) + imu.h (tilt-up/down events)",
+      "description": "Extract minimal HAL wrappers from existing main_tablewars.h. button.h exposes button_init(), button_event_t button_poll() returning NONE/TAP/HOLD_1S. imu.h exposes imu_init(), imu_event_t imu_poll() returning NONE/TILT_UP/TILT_DOWN with deadzone.",
+      "sprint": "1B",
+      "diff": "New files src/hal/button.h and src/hal/imu.h. Each is header-only (.h with inline definitions or a paired .cpp). Wire into existing setup() and loop() in src/main.cpp behind a feature flag #ifdef SPEED_PYRAMID_BUILD.",
+      "file": "src/hal/button.h",
+      "acceptanceCriteria": [
+        "src/hal/button.h and src/hal/imu.h exist",
+        "pio run -e puck1 compiles cleanly with the new headers included",
+        "Serial monitor shows 'TAP' on button press, 'HOLD_1S' on long press, 'TILT_UP'/'TILT_DOWN' on tilts"
+      ],
+      "priority": 54,
+      "effort": "60 min",
+      "dependency": "US-101a-5",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101b-6",
+      "title": "Firmware g_speed_pyramid.h pair_mode: dial digits, POST /api/pair/dial + /confirm",
+      "description": "New file src/games/g_speed_pyramid.h. Function pair_mode_loop() entered on HOLD_1S. LED ring shows current digit position (1 LED among 10) using a digit-display palette. TILT_UP/DOWN changes digit. TAP locks current digit, POSTs /api/pair/dial, advances. After 6th digit, POSTs /api/pair/confirm, flashes confirmation palette + motor pulse.",
+      "sprint": "1B",
+      "diff": "New file src/games/g_speed_pyramid.h with void pair_mode_loop(uint8_t puck_id, const char* server_url). Uses HTTPClient for POSTs. Define LED palette inline for digit display (single bright LED on dim ring).",
+      "file": "src/games/g_speed_pyramid.h",
+      "acceptanceCriteria": [
+        "Holding puck button 1s enters pair mode (LED indicates)",
+        "Tilt-up/down changes the displayed digit",
+        "Tap advances to next digit and POST hits /api/pair/dial",
+        "After 6 digits, /api/pair/confirm hits and puck flashes confirm + motor pulse"
+      ],
+      "priority": 55,
+      "effort": "90 min",
+      "dependency": "US-101b-5",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101c-1",
+      "title": "Update SpeedPyramidGame.calculate_points to 4-tier 0-floor",
+      "description": "Edit server/trivia_game_engines.py:299-327. New tiers: 0-3000ms = 1000 (LEGENDARY), 3000-6000ms = 500 (EXPERT), 6000-10000ms = 200 (AVERAGE), else 0 (TIMEOUT). Wrong answer always returns 0. Remove the -100 CLUELESS branch.",
+      "sprint": "1C",
+      "diff": "Edit class SpeedPyramidGame's calculate_points method. Replace 5-branch tier check with 4-branch, removing the negative tier.",
+      "file": "server/trivia_game_engines.py",
+      "line": 302,
+      "acceptanceCriteria": [
+        "calculate_points returns 1000/500/200/0 for matching response time bands",
+        "Wrong answer returns 0",
+        "Existing unit tests (if any) for SpeedPyramidGame still pass"
+      ],
+      "priority": 56,
+      "effort": "15 min",
+      "dependency": "US-101b-6",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101c-2",
+      "title": "Add socketio emits for question_show, answer_locked, reveal",
+      "description": "In trivia_routes.py, after /api/trivia/question/<session_code> loads a question, emit 'question_show' to room=session_code with the question payload + a server-side question_started_at timestamp. After /api/trivia/answer processes an answer, emit 'answer_locked' with {puck_id, answer}. After a short server-side delay (or on /api/trivia/next-round), emit 'reveal' with correct_answer + points + tier.",
+      "sprint": "1C",
+      "diff": "Edit trivia_routes.py api_load_question + api_submit_answer to emit via socketio.emit(..., room=session_code).",
+      "file": "server/trivia_routes.py",
+      "acceptanceCriteria": [
+        "WS client subscribed to session_code room receives 'question_show' with question data",
+        "POST /api/trivia/answer triggers 'answer_locked' broadcast",
+        "Reveal event carries correct_answer + the answering puck's points + tier"
+      ],
+      "priority": 57,
+      "effort": "30 min",
+      "dependency": "US-101c-1",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101c-3",
+      "title": "React QuestionScreen.tsx with QuestionCard + AnswerPill + TimerBar",
+      "description": "Screen at /question/:session_code. Subscribes to socket room. On 'question_show': renders <QuestionCard> with motion-typed entry, 4 <AnswerPill> components in 2x2 grid (A/B/C/D), <TimerBar> counting down from time_limit. On 'answer_locked': highlights the locked pill in --primary. On 'reveal': highlights correct in --correct, wrong locked pill in --wrong; shows tier badge; waits 2s; navigates to next question or scoreboard.",
+      "sprint": "1C",
+      "diff": "New files: src/screens/QuestionScreen.tsx, src/components/QuestionCard.tsx, src/components/AnswerPill.tsx, src/components/TimerBar.tsx, src/components/TierBadge.tsx. Register route /question/:sessionCode in App.tsx.",
+      "file": "server/static/games/speed-pyramid/src/screens/QuestionScreen.tsx",
+      "acceptanceCriteria": [
+        "Question text + 4 answers render in correct brand styling on bg-bg",
+        "Receiving 'question_show' triggers motion-typed entry",
+        "Receiving 'answer_locked' highlights the answered pill",
+        "Receiving 'reveal' shows tier badge + correct/wrong highlight"
+      ],
+      "priority": 58,
+      "effort": "75 min",
+      "dependency": "US-101c-2",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101c-4",
+      "title": "Firmware in_game_loop: tilt-aim quadrant + tap to lock + POST /api/trivia/answer",
+      "description": "In g_speed_pyramid.h, function in_game_loop(session_code). Maps current tilt (4 quadrants A/B/C/D) to an answer. LED ring lights 4 LEDs in the current quadrant in PALETTE_PRIMARY. Tap POSTs /api/trivia/answer with {puck_id, session_code, answer, response_time_ms}. Re-tilt before tap changes selection.",
+      "sprint": "1C",
+      "diff": "Extend g_speed_pyramid.h with in_game_loop. Compute current quadrant from IMU sample. Use HTTPClient to POST answer.",
+      "file": "src/games/g_speed_pyramid.h",
+      "acceptanceCriteria": [
+        "Tilting the puck up/right/down/left highlights the matching quadrant in --primary",
+        "Tap POSTs /api/trivia/answer and the server records the answer",
+        "Server returns is_correct + points and puck records it locally"
+      ],
+      "priority": 59,
+      "effort": "60 min",
+      "dependency": "US-101c-3",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101c-5",
+      "title": "Firmware LED + buzzer + motor feedback per the event table",
+      "description": "Add named palettes PALETTE_PRIMARY, PALETTE_ACCENT, PALETTE_CORRECT, PALETTE_WRONG, PALETTE_VICTORY, PALETTE_HOST in src/hal/led.h. Add buzzer + motor wrappers. Wire in_game_loop and post-answer handler to play the correct feedback per the PRD table.",
+      "sprint": "1C",
+      "diff": "Extend src/hal/led.h with palette definitions + apply_palette(palette, transition_ms). Add src/hal/buzzer.h (beep(freq, duration), sweep(start, end, duration)). Add src/hal/motor.h (pulse(duration), pattern(on_ms, off_ms, count)). Call from g_speed_pyramid.h on each event.",
+      "file": "src/hal/led.h",
+      "acceptanceCriteria": [
+        "Tilt-aim lights correct quadrant in --primary blue",
+        "Timer LEDs deplete 16->0 over 10s in --accent pink",
+        "Lock-in flashes ring + 80ms motor pulse + 1.2kHz beep",
+        "Correct: gold pulse 600ms + 200ms motor + ding-up sweep",
+        "Wrong: red flash 400ms + 500ms motor + descending thud"
+      ],
+      "priority": 60,
+      "effort": "60 min",
+      "dependency": "US-101c-4",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101c-6",
+      "title": "Verify one question end-to-end on real puck + Flask + browser",
+      "description": "Pair the puck. Start a session. Answer one question. Confirm: question renders on TV in brand style, puck shows tilt quadrant, tap locks answer, reveal shows correct + tier, score updates in DB.",
+      "sprint": "1C",
+      "diff": "Manual test procedure. Commit a screenshot of the question screen + reveal to docs/sprints/screenshots/slice-1c.png.",
+      "file": "docs/sprints/screenshots/slice-1c.png",
+      "acceptanceCriteria": [
+        "Pair flow completes",
+        "Question screen displays correctly",
+        "Tilt-aim and tap work as designed",
+        "Score recorded in DB and reflected on TV",
+        "Screenshot committed"
+      ],
+      "priority": 61,
+      "effort": "20 min",
+      "dependency": "US-101c-5",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101d-1",
+      "title": "Server: 7-question round loop + difficulty curve + match_ended event",
+      "description": "Modify trivia session start to set total_rounds=7 and a difficulty curve (Q1-Q2 easy, Q3-Q5 medium, Q6-Q7 hard). After round_number > total_rounds, emit 'match_ended' with final scoreboard via socketio.emit.",
+      "sprint": "1D",
+      "diff": "In trivia_game_engines.py base class or SpeedPyramidGame, add total_rounds + difficulty_for(round) helpers. In trivia_routes.py /api/trivia/next-round, check round_number, emit 'match_ended' if exhausted.",
+      "file": "server/trivia_game_engines.py",
+      "acceptanceCriteria": [
+        "Questions 1-2 load with difficulty='easy', 3-5='medium', 6-7='hard'",
+        "After Q7's reveal, server emits 'match_ended' with player scores",
+        "TV's WS client receives 'match_ended'"
+      ],
+      "priority": 62,
+      "effort": "30 min",
+      "dependency": "US-101c-6",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101d-2",
+      "title": "React Scoreboard.tsx with staggered count-up + tier badge + replay prompts",
+      "description": "New screen at /scoreboard/:session_code. On 'match_ended': renders 'MATCH COMPLETE' headline, staggered count-up animation of final score (Framer Motion + react-spring numeric tween), tier badge (LEGENDARY / EXPERT / AVERAGE based on average per-question), buttons 'Play Again' (tap puck) and 'New Player' (hold puck 3s).",
+      "sprint": "1D",
+      "diff": "New file src/screens/Scoreboard.tsx + src/components/CountUpScore.tsx. Register route in App.tsx. Use Framer Motion's animate() or react-spring's useSpring for count-up.",
+      "file": "server/static/games/speed-pyramid/src/screens/Scoreboard.tsx",
+      "acceptanceCriteria": [
+        "On 'match_ended', screen transitions to scoreboard",
+        "Final score animates from 0 to total over 800ms with stagger",
+        "Tier badge renders correctly per average score",
+        "Replay prompts visible"
+      ],
+      "priority": 63,
+      "effort": "45 min",
+      "dependency": "US-101d-1",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101d-3",
+      "title": "Firmware: full match flow + 'Play Again' (tap) / 'New Player' (hold-3s)",
+      "description": "Extend g_speed_pyramid.h to loop through 7 questions then enter scoreboard state. On scoreboard, TAP resets to new session via POST /api/trivia/start, HOLD_3S returns to pair_mode. Victory feedback (rainbow sweep + 3-pulse motor + crescendo buzzer) plays on entering scoreboard.",
+      "sprint": "1D",
+      "diff": "Add scoreboard_state in g_speed_pyramid.h. Handle TAP and HOLD_3S events. Wire victory feedback.",
+      "file": "src/games/g_speed_pyramid.h",
+      "acceptanceCriteria": [
+        "After Q7 reveal, puck plays victory feedback",
+        "TAP starts a new session (next 7 questions, same puck)",
+        "HOLD_3S returns to pair mode"
+      ],
+      "priority": 64,
+      "effort": "45 min",
+      "dependency": "US-101d-2",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101d-4",
+      "title": "Verify full match end-to-end + screenshot",
+      "description": "Play a full 7-question match. Confirm scoreboard reveals with count-up. Test Play Again. Test New Player. Commit screenshots of (a) mid-match question, (b) scoreboard reveal.",
+      "sprint": "1D",
+      "diff": "Manual test. Two screenshots to docs/sprints/screenshots/slice-1d-{question,scoreboard}.png.",
+      "file": "docs/sprints/screenshots/slice-1d-scoreboard.png",
+      "acceptanceCriteria": [
+        "Full 7-question match plays without error",
+        "Scoreboard reveal animation runs",
+        "Play Again resets to Q1",
+        "New Player returns to pair flow"
+      ],
+      "priority": 65,
+      "effort": "30 min",
+      "dependency": "US-101d-3",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101e-1",
+      "title": "Source 9 CC0 audio assets + add license entries",
+      "description": "Download from Pixabay/Freesound: bed_question.mp3, bed_scoreboard.mp3, sfx_tick.mp3, sfx_tick_final.mp3, sfx_lock.mp3, sfx_correct.mp3, sfx_wrong.mp3, sfx_reveal.mp3, sfx_match_end.mp3. Place in server/static/games/speed-pyramid/audio/. Create docs/assets/LICENSES.md with source URL + license type + filename for each.",
+      "sprint": "1E",
+      "diff": "9 new files in server/static/games/speed-pyramid/audio/. New file docs/assets/LICENSES.md with markdown table.",
+      "file": "server/static/games/speed-pyramid/audio/bed_question.mp3",
+      "acceptanceCriteria": [
+        "All 9 audio files present in audio/",
+        "All 9 entries documented in docs/assets/LICENSES.md with source URL + license",
+        "No AI-generated audio (each license entry confirms CC0 or equivalent)"
+      ],
+      "priority": 66,
+      "effort": "60 min",
+      "dependency": "US-101d-4",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101e-2",
+      "title": "Wire audio playback to game events via Howler.js",
+      "description": "npm install howler @types/howler. Create src/lib/audio.ts with audioBus that preloads all 9 assets on mount. Trigger appropriate sound on each game event (question_show -> bed_question loop, tick in last 3s, lock -> sfx_lock, reveal -> sfx_correct/wrong, match_ended -> bed_scoreboard + sfx_match_end).",
+      "sprint": "1E",
+      "diff": "New file src/lib/audio.ts. Hook in QuestionScreen and Scoreboard. Update package.json deps.",
+      "file": "server/static/games/speed-pyramid/src/lib/audio.ts",
+      "acceptanceCriteria": [
+        "All 9 sounds play at the correct moments during a match",
+        "Bed loops without audible click",
+        "Audio volume normalized (no jump-scares)"
+      ],
+      "priority": 67,
+      "effort": "45 min",
+      "dependency": "US-101e-1",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101e-3",
+      "title": "Commit HQ Trivia North Star reference frame",
+      "description": "Capture or source a public HQ Trivia question screen screenshot (or close equivalent like a Jackbox trivia screen). Commit to docs/north-star/speed-pyramid-q-screen.png with a one-paragraph note in docs/north-star/README.md describing what aspects to match.",
+      "sprint": "1E",
+      "diff": "New file docs/north-star/speed-pyramid-q-screen.png + docs/north-star/README.md.",
+      "file": "docs/north-star/speed-pyramid-q-screen.png",
+      "acceptanceCriteria": [
+        "Reference frame committed",
+        "README.md notes which qualities to match (typography weight, color contrast, motion presence)"
+      ],
+      "priority": 68,
+      "effort": "20 min",
+      "dependency": "US-101e-2",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-101e-4",
+      "title": "Polish gate pass: side-by-side review + checklist + final tweaks",
+      "description": "Take a screenshot of the live question screen at same resolution as the north-star frame. Place side-by-side. Run through the polish-gate checklist from PRD: no Segoe UI/Verdana/Tahoma/Arial Black anywhere, no out-of-palette gradients, all audio CC0, motion uses Framer Motion eases, LED code uses named palettes only. Fix any failures.",
+      "sprint": "1E",
+      "diff": "Iterative polish. Result: screenshot at docs/sprints/screenshots/slice-1e-side-by-side.png passing the gate.",
+      "file": "docs/sprints/screenshots/slice-1e-side-by-side.png",
+      "acceptanceCriteria": [
+        "Side-by-side screenshot exists in docs/sprints/screenshots/",
+        "Each polish-gate item ticks pass",
+        "Sprint marked complete in progress.txt"
+      ],
+      "priority": 69,
+      "effort": "60 min",
+      "dependency": "US-101e-3",
+      "passes": false,
+      "notes": ""
     }
   ]
 }
