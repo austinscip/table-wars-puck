@@ -9,7 +9,9 @@ from contextlib import contextmanager
 
 # Determine which database to use
 DATABASE_URL = os.environ.get('DATABASE_URL')
-USE_POSTGRES = DATABASE_URL is not None
+# Empty string should NOT trigger Postgres path (allows `DATABASE_URL= python app.py`
+# to override a .env-loaded value and force local SQLite for dev).
+USE_POSTGRES = bool(DATABASE_URL and DATABASE_URL.strip())
 
 if USE_POSTGRES:
     import psycopg
