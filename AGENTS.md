@@ -136,3 +136,38 @@ cd /Users/austinscipione/table-wars-puck
 - `progress.txt` - Append learnings after each story
 - `scripts/ralph/prompt.md` - Agent instructions
 - `scripts/ralph/ralph.sh` - Execution loop (Amp CLI)
+
+---
+
+## Discipline & Guardrails (project-wide rules)
+
+This project is a commercial bar/restaurant product. The TV is the surface that sells the unit. Sloppy visuals kill perceived value. The rules below override convenience.
+
+### Visual / asset quality
+- **No AI-generated graphics, music, or SFX.** No SDXL/DALL-E sprites, no text-to-3D models, no AI-generated audio. If a polished asset is not available, source one — do not ship slop.
+- **No voxel / Minecraft / cube-block aesthetic.** Forbidden for this product.
+- **No generic CSS gradient slop.** No Segoe UI / Verdana, no generic purple linear-gradients, no rgba opacity tricks as polish. Use the locked brand kit.
+- **Approved 3D assets (CC0 / royalty-free):** Kenney.nl, Quaternius, Kay Lousberg, Synty POLYGON, Poly Pizza, Sketchfab CC0
+- **Approved 2D / UI:** Kenney UI packs, shadcn/ui, Heroicons, Phosphor Icons, LottieFiles
+- **Approved audio:** Pixabay SFX, Freesound CC0, Kenney Audio packs
+- **TV/web tech stack:** Three.js + React Three Fiber + Drei (3D), PixiJS or Phaser 3 (2D arcade), React + Tailwind + shadcn/ui + Framer Motion (game-show UI)
+- **Puck-side LEDs:** named palettes only (e.g. `PALETTE_TRIVIA_CORRECT`, `PALETTE_VICTORY`), eased transitions. No raw RGB literals in game code.
+- **Polish gate:** every TV game gets a side-by-side comparison vs. a Jackbox / HQ Trivia reference frame before it ships. If it looks worse, it doesn't ship.
+
+### Workflow discipline (Matt Pocock skills — github.com/mattpocock/skills)
+- Before any feature larger than one file, invoke `/grill-with-docs`.
+- Visual exploration goes through `/prototype` UI branch only. Prototype assets do not cross into production. Record the decision in an ADR, then delete the prototype.
+- For web app work, follow `/tdd` vertical-slice protocol. Never write more than one failing test before making it pass.
+- For bugs or perf regressions, invoke `/diagnose`. Build a deterministic feedback loop before hypothesising. Tag debug logs `[DEBUG-xxxx]` for one-grep cleanup.
+- Before editing any file >300 lines or any module untouched this session, invoke `/zoom-out`.
+- At session end, or before context approaches 70%, run `/handoff`. Reference existing artifacts, do not duplicate.
+- Every PRD has an `Out of Scope` section. Every issue is labeled HITL (human-in-the-loop) or AFK (Claude can merge unattended).
+
+### Project knowledge
+- **Domain vocabulary:** `CONTEXT.md` at repo root. One sentence per term, `_Avoid_:` aliases for words to never use as synonyms.
+- **Architectural decisions:** `docs/adr/NNNN-slug.md`. Only when the decision is (a) hard to reverse, (b) surprising without context, (c) a real trade-off.
+
+### Safety
+- Git guardrails hook is active (`.claude/hooks/block-dangerous-git.sh`). It blocks `git push`, `reset --hard`, `clean -f`, `branch -D`, `checkout .`, `restore .`, `--no-verify`, interactive rebase, `filter-branch`. Do not attempt to bypass — fix the underlying issue instead.
+- Never `--no-verify` to skip pre-commit hooks. Fix the lint/test, do not skip it.
+- New commits only. Do not amend or force-push without explicit user instruction.
