@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+/*
+ * Locked brand tokens — Table Wars / Speed Pyramid v1.
+ * Authoritative source-of-truth for color, type, and motion.
+ * See CONTEXT.md and docs/adr/0001-quality-bar-and-stack.md.
+ * Aesthetic: HQ Trivia / Jackbox.
+ */
+@theme {
+  --color-bg: #0A0E1A;
+  --color-primary: #3B82F6;
+  --color-accent: #EC4899;
+  --color-correct: #FBBF24;
+  --color-wrong: #EF4444;
+  --color-text: #F8FAFC;
+
+  --font-display: "Anton", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --ease-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+html, body, #root {
+  height: 100%;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+}

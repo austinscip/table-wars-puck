@@ -665,6 +665,36 @@ def sensor_validation():
     return render_template('test_sensor_validation.html')
 
 # ============================================================================
+# SPEED PYRAMID v1 (Vite + React + Tailwind + Framer Motion)
+# Serves the SPA bundle at server/static/games/speed-pyramid/dist/ for
+# any /tv/speed-pyramid/* path. Vite was built with base='./' so the
+# index.html references assets relatively; Flask's existing /static
+# handler picks them up via the dist/assets/ path.
+# ============================================================================
+
+import os
+from flask import send_from_directory
+
+SPEED_PYRAMID_DIST = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    'static', 'games', 'speed-pyramid', 'dist'
+)
+
+@app.route('/tv/speed-pyramid')
+@app.route('/tv/speed-pyramid/')
+@app.route('/tv/speed-pyramid/<path:subpath>')
+def speed_pyramid_app(subpath: str | None = None):
+    """Serve the Speed Pyramid v1 React SPA. SPA fallback: any unknown
+    subpath returns index.html so client-side react-router-dom can
+    resolve it. Asset requests (CSS/JS/svg/audio) hit the static file
+    branch below."""
+    if subpath and not subpath.endswith('/'):
+        candidate = os.path.join(SPEED_PYRAMID_DIST, subpath)
+        if os.path.isfile(candidate):
+            return send_from_directory(SPEED_PYRAMID_DIST, subpath)
+    return send_from_directory(SPEED_PYRAMID_DIST, 'index.html')
+
+# ============================================================================
 # MAIN
 # ============================================================================
 

@@ -744,8 +744,8 @@
       "priority": 45,
       "effort": "20 min",
       "dependency": null,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Scaffolded via npm create vite. 153 packages installed. npm run build succeeds (113ms, dist/index.html + assets/)."
     },
     {
       "id": "US-101a-2",
@@ -763,8 +763,8 @@
       "priority": 46,
       "effort": "15 min",
       "dependency": "US-101a-1",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Installed @tailwindcss/vite + framer-motion + socket.io-client + react-router-dom. Tailwind v4 uses CSS-first @theme config, not the old init command."
     },
     {
       "id": "US-101a-3",
@@ -782,8 +782,8 @@
       "priority": 47,
       "effort": "20 min",
       "dependency": "US-101a-2",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "vite.config.ts uses tailwindcss() plugin with base=\"./\". src/index.css imports tailwindcss + @theme block with all locked tokens. Google Fonts (Anton/Inter/JetBrains Mono) loaded in index.html. tokens.json committed as human-readable mirror."
     },
     {
       "id": "US-101a-4",
@@ -800,8 +800,8 @@
       "priority": 48,
       "effort": "20 min",
       "dependency": "US-101a-3",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "src/screens/TitleScreen.tsx renders SPEED PYRAMID in font-display Anton (clamp 6rem-16rem) on bg-bg with Framer Motion overshoot entrance. App.tsx wires BrowserRouter with TitleScreen at /. Vite default React/Vite scaffolding removed (logos, hero png, counter, docs section)."
     },
     {
       "id": "US-101a-5",
@@ -818,8 +818,8 @@
       "priority": 49,
       "effort": "15 min",
       "dependency": "US-101a-4",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Flask route in server/app.py lines ~668-695: three @app.route decorators (/tv/speed-pyramid, with trailing slash, and /<subpath>). SPA fallback returns index.html for unknown subpaths. py_compile passes. Visual verification still TODO: cd server/static/games/speed-pyramid && npm run build; cd ../../.. && python app.py; open localhost:5001/tv/speed-pyramid."
     },
     {
       "id": "US-101b-1",
