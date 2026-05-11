@@ -946,8 +946,8 @@
       "priority": 56,
       "effort": "15 min",
       "dependency": "US-101b-6",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "SpeedPyramidGame.calculate_points = 4-tier 0-floor. Plus tier_for() helper. Plus __init__ override fixing a pre-existing create_game_engine() bug."
     },
     {
       "id": "US-101c-2",
@@ -964,8 +964,8 @@
       "priority": 57,
       "effort": "30 min",
       "dependency": "US-101c-1",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "trivia_routes.api_load_question emits question_show. api_submit_answer emits answer_locked + reveal. Module-level _question_start_times tracks server-side response_time. Engine.calculate_points + tier_for wired into the response."
     },
     {
       "id": "US-101c-3",
@@ -983,8 +983,8 @@
       "priority": 58,
       "effort": "75 min",
       "dependency": "US-101c-2",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "QuestionScreen + QuestionCard + AnswerPill + TimerBar + TierBadge + Scoreboard placeholder. CountdownScreen 3-2-1-GO sequence. Auto-advance via /api/sp/load-question. Bundle: 408KB."
     },
     {
       "id": "US-101c-4",
@@ -1001,8 +1001,8 @@
       "priority": 59,
       "effort": "60 min",
       "dependency": "US-101c-3",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Firmware in_game_loop in g_speed_pyramid.h: poll /api/sp/current-question, render quadrant in primary blue + timer ring in accent pink, TAP locks + POSTs /api/trivia/answer with response_time_ms."
     },
     {
       "id": "US-101c-5",
@@ -1021,8 +1021,8 @@
       "priority": 60,
       "effort": "60 min",
       "dependency": "US-101c-4",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "sp_feedback.lock_in / correct / wrong wired into in_game_loop. sp_led.show_timer + show_quadrant + flash patterns per PRD table. Named palettes only."
     },
     {
       "id": "US-101c-6",
@@ -1041,8 +1041,8 @@
       "priority": 61,
       "effort": "20 min",
       "dependency": "US-101c-5",
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Curl roundtrip verified: pair -> load Q -> answer correct A -> is_correct=true points=1000 tier=LEGENDARY response_time_ms=1053. Firmware compiles SUCCESS (Flash 75.1%, 4s)."
     },
     {
       "id": "US-101d-1",
