@@ -733,12 +733,10 @@ if __name__ == '__main__':
         print("📝 Seeding sample trivia questions...")
         seed_questions()
 
-    register_core_socketio_handlers(socketio)  # Core WebSocket handlers
-    init_trivia_routes(app, socketio)
-    init_tv_game_routes(app, socketio)
-    init_multiplayer_routes(app, socketio)
-    init_firmware_routes(app)  # OTA firmware updates
-    init_analytics_routes(app)  # NEW: Analytics dashboard (Sprint 1B)
+    # Route handlers + socketio handlers are registered at module level
+    # above (lines ~714-719) so they're attached whether app.py is run
+    # directly or imported by gunicorn. The duplicate calls that used to
+    # live here caused trivia_bp ValueError on local startup.
 
     print("🚀 Starting server...")
     print("📊 Leaderboard: http://localhost:5001")
