@@ -47,6 +47,7 @@ export default function PairScreen() {
   const isDemo = params.get('demo') === '1'
 
   const [code, setCode] = useState<string | null>(null)
+  const codeRef = useRef<string | null>(null)
   const [role, setRole] = useState<'host' | 'joiner' | null>(null)
   const [progress, setProgress] = useState<(number | null)[]>(
     () => Array(6).fill(null) as (number | null)[],
@@ -68,6 +69,7 @@ export default function PairScreen() {
       try {
         const res = await api.pair.request(puckId)
         if (!active) return
+        codeRef.current = res.pair_code
         setCode(res.pair_code)
         setRole(res.role)
         socket.emit('join_pair_room', { pair_code: res.pair_code })
@@ -88,10 +90,11 @@ export default function PairScreen() {
       setPreviewDigit(payload.digit)
     }
     function onPlayerJoined(payload: PlayerJoinedEvent) {
-      // When THIS puck has joined, navigate to lobby.
-      if (payload.puck_id === puckId && code) {
+      // Read code from ref because this closure was created before setCode ran.
+      const c = codeRef.current
+      if (payload.puck_id === puckId && c) {
         const qs = isDemo ? `?demo=1&puck_id=${puckId}` : ''
-        navigate(`/lobby/${code}${qs}`)
+        navigate(`/lobby/${c}${qs}`)
       }
     }
 
