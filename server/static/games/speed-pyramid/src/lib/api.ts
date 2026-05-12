@@ -129,6 +129,32 @@ export const api = {
         `/api/sp/reset/${session_code}`,
         {},
       ),
+    answer: (
+      session_code: string,
+      puck_id: number,
+      question_id: number,
+      answer: 'A' | 'B' | 'C' | 'D',
+      response_time_ms: number,
+    ) =>
+      postJson<{
+        ok: boolean
+        is_correct: boolean
+        points: number
+        tier: string
+        response_time_ms: number
+        reveal_emitted: boolean
+      }>(`/api/sp/answer`, {
+        session_code,
+        puck_id,
+        question_id,
+        answer,
+        response_time_ms,
+      }),
+    forceReveal: (session_code: string) =>
+      postJson<{ ok: boolean; emitted: boolean }>(
+        `/api/sp/force-reveal/${session_code}`,
+        {},
+      ),
   },
 }
 
@@ -138,6 +164,8 @@ export interface FinalResultsPlayer {
   answered: number
   correct: number
   tier: string
+  color?: string
+  color_name?: string
 }
 
 export interface FinalResults {

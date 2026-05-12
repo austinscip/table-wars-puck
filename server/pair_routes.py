@@ -416,7 +416,66 @@ def clear_lobby_endpoint():
 # ============================================================================
 
 _SP_STATE: dict[str, dict] = {}
+# {
+#   "round": int,                 # round_number of the LATEST loaded Q
+#   "asked_ids": set[int],
+#   "complete": bool,
+#   "expected_pucks": set[int],   # pucks registered to this session
+#   "current_question_id": int | None,
+#   "current_round_started_at": float | None,
+#   "current_round_answers": dict[puck_id, dict],
+#     # puck_id -> {answer, is_correct, points, tier, response_time_ms, color, color_name}
+#   "cumulative_scores": dict[puck_id, int],
+#   "revealed_for_question_id": int | None,  # idempotency guard
+# }
 SP_TOTAL_ROUNDS = 7
+
+
+def _load_expected_pucks_for_session(session_code: str) -> set[int]:
+    """Read trivia_session_players to learn which pucks are in this match.
+    Cache result in _SP_STATE['expected_pucks']."""
+    ph = get_placeholder()
+    row = execute_query(
+        f"SELECT id FROM trivia_sessions WHERE session_code = {ph}",
+        (session_code,),
+        fetch_one=True,
+    )
+    if not row:
+        return set()
+    rows = execute_query(
+        f"SELECT puck_id FROM trivia_session_players WHERE session_id = {ph}",
+        (row["id"],),
+        fetch_all=True,
+    ) or []
+    return {int(r["puck_id"]) for r in rows}
+
+
+def _sp_state_for(session_code: str) -> dict:
+    """Get or initialize the per-session state, including expected_pucks
+    loaded from DB on first access."""
+    state = _SP_STATE.get(session_code)
+    if state is None:
+        state = {
+            "round": 0,
+            "asked_ids": set(),
+            "complete": False,
+            "expected_pucks": _load_expected_pucks_for_session(session_code),
+            "current_question_id": None,
+            "current_round_started_at": None,
+            "current_round_answers": {},
+            "cumulative_scores": {},
+            "revealed_for_question_id": None,
+        }
+        _SP_STATE[session_code] = state
+    elif "expected_pucks" not in state:
+        # Backfill missing fields for sessions created by earlier code paths.
+        state.setdefault("expected_pucks", _load_expected_pucks_for_session(session_code))
+        state.setdefault("current_question_id", None)
+        state.setdefault("current_round_started_at", None)
+        state.setdefault("current_round_answers", {})
+        state.setdefault("cumulative_scores", {})
+        state.setdefault("revealed_for_question_id", None)
+    return state
 
 
 def _difficulty_for_round(r: int) -> str:
@@ -429,9 +488,7 @@ def _difficulty_for_round(r: int) -> str:
 
 @sp_bp.route("/load-question/<session_code>", methods=["POST"])
 def sp_load_question(session_code: str):
-    state = _SP_STATE.setdefault(
-        session_code, {"round": 0, "asked_ids": set(), "complete": False}
-    )
+    state = _sp_state_for(session_code)
 
     if state["round"] >= SP_TOTAL_ROUNDS:
         state["complete"] = True
@@ -460,6 +517,13 @@ def sp_load_question(session_code: str):
 
     state["round"] = next_round
     state["asked_ids"].add(q["id"])
+    state["current_question_id"] = q["id"]
+    state["current_round_answers"] = {}
+    state["revealed_for_question_id"] = None
+    # If expected_pucks wasn't set yet (e.g. first load before any
+    # players registered, or DB lookup race), retry it now.
+    if not state["expected_pucks"]:
+        state["expected_pucks"] = _load_expected_pucks_for_session(session_code)
 
     ph = get_placeholder()
     cat = execute_query(
@@ -485,6 +549,7 @@ def sp_load_question(session_code: str):
     }
 
     started_at = _now()
+    state["current_round_started_at"] = started_at
     if _socketio is not None:
         _socketio.emit(
             "question_show",
@@ -494,6 +559,7 @@ def sp_load_question(session_code: str):
                 "round": next_round,
                 "total_rounds": SP_TOTAL_ROUNDS,
                 "started_at": started_at,
+                "expected_pucks": sorted(state["expected_pucks"]),
             },
             room=session_code,
         )
@@ -598,7 +664,17 @@ def sp_final_results(session_code: str):
 
 @sp_bp.route("/reset/<session_code>", methods=["POST"])
 def sp_reset(session_code: str):
-    _SP_STATE[session_code] = {"round": 0, "asked_ids": set(), "complete": False}
+    _SP_STATE[session_code] = {
+        "round": 0,
+        "asked_ids": set(),
+        "complete": False,
+        "expected_pucks": _load_expected_pucks_for_session(session_code),
+        "current_question_id": None,
+        "current_round_started_at": None,
+        "current_round_answers": {},
+        "cumulative_scores": {},
+        "revealed_for_question_id": None,
+    }
     try:
         import trivia_routes
         trivia_routes._question_start_times.pop(session_code, None)
@@ -611,6 +687,201 @@ def sp_reset(session_code: str):
             room=session_code,
         )
     return jsonify({"ok": True, "session_code": session_code})
+
+
+def _maybe_emit_reveal(session_code: str) -> bool:
+    """If every expected puck has locked an answer for the current
+    round (or if explicitly force-revealed), emit the aggregate reveal
+    event and update cumulative scores. Returns True if reveal was
+    emitted now, False if still waiting."""
+    state = _sp_state_for(session_code)
+    qid = state["current_question_id"]
+    if qid is None:
+        return False
+    if state["revealed_for_question_id"] == qid:
+        return False  # already revealed this round
+
+    expected = state["expected_pucks"] or set()
+    answers = state["current_round_answers"]
+    if expected and not all(pid in answers for pid in expected):
+        return False  # still waiting on someone
+
+    # Determine the correct answer once for this question.
+    ph = get_placeholder()
+    q = execute_query(
+        f"SELECT correct_answer FROM trivia_questions WHERE id = {ph}",
+        (qid,),
+        fetch_one=True,
+    )
+    correct_answer = q["correct_answer"] if q else None
+
+    # Fill TIMEOUT entries for any expected puck that didn't answer.
+    for pid in expected:
+        if pid not in answers:
+            color_hex, color_name = _color_for(pid)
+            answers[pid] = {
+                "answer": None,
+                "is_correct": False,
+                "points": 0,
+                "tier": "TIMEOUT",
+                "response_time_ms": None,
+                "color": color_hex,
+                "color_name": color_name,
+            }
+
+    # Update cumulative scores.
+    for pid, a in answers.items():
+        state["cumulative_scores"][pid] = state["cumulative_scores"].get(pid, 0) + int(a["points"])
+
+    results = [
+        {
+            "puck_id": pid,
+            "answer": answers[pid]["answer"],
+            "is_correct": answers[pid]["is_correct"],
+            "points": answers[pid]["points"],
+            "tier": answers[pid]["tier"],
+            "response_time_ms": answers[pid]["response_time_ms"],
+            "color": answers[pid]["color"],
+            "color_name": answers[pid]["color_name"],
+            "cumulative_total": state["cumulative_scores"][pid],
+        }
+        for pid in sorted(answers.keys())
+    ]
+
+    state["revealed_for_question_id"] = qid
+
+    if _socketio is not None:
+        _socketio.emit(
+            "reveal",
+            {
+                "session_code": session_code,
+                "question_id": qid,
+                "correct_answer": correct_answer,
+                "results": results,
+            },
+            room=session_code,
+        )
+    return True
+
+
+@sp_bp.route("/force-reveal/<session_code>", methods=["POST"])
+def sp_force_reveal(session_code: str):
+    """Called by the TV when the question timer expires. Forces the
+    aggregate reveal, marking unanswered pucks as TIMEOUT."""
+    state = _sp_state_for(session_code)
+    if state["current_question_id"] is None:
+        return jsonify({"ok": False, "reason": "no current question"}), 400
+    emitted = _maybe_emit_reveal(session_code)
+    return jsonify({"ok": True, "emitted": emitted})
+
+
+@sp_bp.route("/answer", methods=["POST"])
+def sp_answer():
+    """Speed-Pyramid-specific answer endpoint. Records the per-puck
+    answer in _SP_STATE.current_round_answers. Emits answer_locked for
+    THIS puck. If all expected pucks have answered, emits the aggregate
+    reveal."""
+    data = request.get_json(silent=True) or {}
+    session_code = data.get("session_code")
+    puck_id_raw = data.get("puck_id")
+    question_id = data.get("question_id")
+    answer = data.get("answer")
+    response_time_ms = int(data.get("response_time_ms") or 0)
+
+    if not session_code or puck_id_raw is None or question_id is None or answer is None:
+        return jsonify({"error": "session_code, puck_id, question_id, answer required"}), 400
+
+    puck_id = int(puck_id_raw)
+    state = _sp_state_for(session_code)
+    if state["current_question_id"] != int(question_id):
+        return jsonify({"error": "question_id does not match active round"}), 409
+    if puck_id in state["current_round_answers"]:
+        return jsonify({"error": "already answered"}), 409
+
+    # Score this answer using SpeedPyramidGame's tier logic.
+    ph = get_placeholder()
+    q = execute_query(
+        f"SELECT correct_answer FROM trivia_questions WHERE id = {ph}",
+        (int(question_id),),
+        fetch_one=True,
+    )
+    if not q:
+        return jsonify({"error": "question not found"}), 404
+    correct_answer = q["correct_answer"]
+    is_correct = (answer == correct_answer)
+
+    # Authoritative response_time from the server side.
+    started = state.get("current_round_started_at") or _now()
+    server_response_time_ms = int((_now() - started) * 1000)
+    # Prefer the puck-reported time if it's reasonable (within ±2s of
+    # server's measurement). Otherwise use server's.
+    if abs(server_response_time_ms - response_time_ms) > 2000:
+        response_time_ms = server_response_time_ms
+
+    from trivia_game_engines import SpeedPyramidGame
+    engine = SpeedPyramidGame(None, [{"puck_id": puck_id, "multiplier": 1.0}])
+    points = engine.calculate_points(puck_id, is_correct, response_time_ms)
+    tier = engine.tier_for(response_time_ms) if is_correct else "WRONG"
+    color_hex, color_name = _color_for(puck_id)
+
+    state["current_round_answers"][puck_id] = {
+        "answer": answer,
+        "is_correct": is_correct,
+        "points": int(points),
+        "tier": tier,
+        "response_time_ms": int(response_time_ms),
+        "color": color_hex,
+        "color_name": color_name,
+    }
+
+    # Record in DB for the final-results endpoint.
+    try:
+        from trivia_database import record_answer
+        sess = execute_query(
+            f"SELECT id FROM trivia_sessions WHERE session_code = {ph}",
+            (session_code,),
+            fetch_one=True,
+        )
+        if sess:
+            record_answer(
+                sess["id"],
+                int(question_id),
+                puck_id,
+                answer,
+                is_correct,
+                int(response_time_ms),
+                int(points),
+            )
+    except Exception as e:
+        print(f"[sp/answer] record_answer failed: {e}")
+
+    # Emit answer_locked so the TV's sidebar can highlight this row as
+    # "locked" even before the reveal fires (other players may still be
+    # thinking).
+    if _socketio is not None:
+        _socketio.emit(
+            "answer_locked",
+            {
+                "session_code": session_code,
+                "puck_id": puck_id,
+                "answer": answer,
+                "question_id": int(question_id),
+                "color": color_hex,
+            },
+            room=session_code,
+        )
+
+    # Try to emit reveal if all expected pucks have now answered.
+    emitted_reveal = _maybe_emit_reveal(session_code)
+
+    return jsonify({
+        "ok": True,
+        "is_correct": is_correct,
+        "points": int(points),
+        "tier": tier,
+        "response_time_ms": int(response_time_ms),
+        "reveal_emitted": emitted_reveal,
+    })
 
 
 @sp_bp.route("/current-question/<session_code>", methods=["GET"])

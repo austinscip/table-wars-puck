@@ -75,38 +75,58 @@ export default function ScoreboardScreen() {
             results.players
               .slice()
               .sort((a, b) => b.total - a.total)
-              .map((p, i) => (
-                <motion.div
-                  key={p.puck_id}
-                  initial={{ y: 30, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{
-                    duration: 0.45,
-                    delay: 0.15 * i,
-                    ease: [0.34, 1.56, 0.64, 1],
-                  }}
-                  className="flex items-center justify-between rounded-3xl border-2 border-text/10 bg-text/5 px-8 py-6"
-                >
-                  <div className="flex flex-col">
-                    <span
-                      className={`font-display text-[clamp(2rem,5vw,4.5rem)] leading-none ${
-                        TIER_COLOR[p.tier] ?? 'text-text'
-                      }`}
+              .map((p, i) => {
+                const isWinner = i === 0 && p.total > 0
+                return (
+                  <motion.div
+                    key={p.puck_id}
+                    initial={{ y: 30, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{
+                      duration: 0.45,
+                      delay: 0.15 * i,
+                      ease: [0.34, 1.56, 0.64, 1],
+                    }}
+                    className={`flex items-center gap-6 rounded-3xl border-2 ${
+                      isWinner ? 'border-correct' : 'border-text/10'
+                    } bg-text/5 px-8 py-6`}
+                    style={
+                      isWinner
+                        ? { boxShadow: '0 0 60px rgba(251,191,36,0.5)' }
+                        : undefined
+                    }
+                  >
+                    <div
+                      className="flex h-[clamp(4rem,7vw,7rem)] w-[clamp(4rem,7vw,7rem)] flex-none items-center justify-center rounded-full font-display text-[clamp(2rem,3.5vw,3.5rem)]"
+                      style={{
+                        backgroundColor: p.color ?? '#F8FAFC',
+                        color: '#0A0E1A',
+                      }}
                     >
-                      {p.tier}
-                    </span>
-                    <span className="font-body text-xl text-text/60">
-                      Puck #{p.puck_id} · {p.correct}/{p.answered} correct
-                    </span>
-                  </div>
-                  <CountUpScore
-                    to={p.total}
-                    durationMs={1400}
-                    delayMs={400 + i * 200}
-                    className="font-mono text-[clamp(3rem,7vw,6.5rem)] font-bold leading-none text-text"
-                  />
-                </motion.div>
-              ))
+                      {p.puck_id}
+                    </div>
+                    <div className="flex flex-1 flex-col">
+                      <span
+                        className={`font-display text-[clamp(2rem,5vw,4.5rem)] leading-none ${
+                          TIER_COLOR[p.tier] ?? 'text-text'
+                        }`}
+                      >
+                        {isWinner ? '👑 ' : ''}
+                        {p.tier}
+                      </span>
+                      <span className="font-body text-xl text-text/60">
+                        Puck #{p.puck_id} · {p.correct}/{p.answered} correct
+                      </span>
+                    </div>
+                    <CountUpScore
+                      to={p.total}
+                      durationMs={1400}
+                      delayMs={400 + i * 200}
+                      className="font-mono text-[clamp(3rem,7vw,6.5rem)] font-bold leading-none text-text"
+                    />
+                  </motion.div>
+                )
+              })
           )}
         </div>
       )}

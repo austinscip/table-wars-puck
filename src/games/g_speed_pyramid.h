@@ -247,7 +247,9 @@ inline bool _poll_current_question() {
   return false;
 }
 
-// POST /api/trivia/answer. Returns true on 200, populates is_correct.
+// POST /api/sp/answer (multi-player aware). Server records this puck's
+// answer for the round; reveal is emitted by the server only once every
+// expected puck has answered (or the puck calls force-reveal on timeout).
 inline bool _post_answer(char letter, uint32_t response_time_ms, bool* is_correct_out) {
   String body =
       "{\"session_code\":\"" + _session_code + "\"" +
@@ -256,7 +258,7 @@ inline bool _post_answer(char letter, uint32_t response_time_ms, bool* is_correc
       ",\"answer\":\"" + String(letter) + "\"" +
       ",\"response_time_ms\":" + String(response_time_ms) + "}";
   String resp;
-  const int code = sp_net::post_json("/api/trivia/answer", body, &resp);
+  const int code = sp_net::post_json("/api/sp/answer", body, &resp);
   if (code != 200) return false;
   bool ok = false;
   _extract_bool(resp, "is_correct", &ok);
