@@ -1,22 +1,28 @@
 """
-TABLE WARS - Pair Code Flow
-Adds /api/pair/{request,dial,confirm} so a Puck and a TV View can bind to
-the same Match.
+TABLE WARS - Pair Code Flow + Speed Pyramid lobby
 
-Flow:
-1. Puck POST /api/pair/request {puck_id}
-   -> server generates a 6-digit decimal code, stores in pending dict
-   -> response: {pair_code, expires_at}
-2. TV opens /tv/speed-pyramid (Flask route serves the React SPA).
-   The React app subscribes to a Socket.IO room keyed by pair_code.
-3. Puck enters digit-dial mode. For each of 6 digits:
-     POST /api/pair/dial {puck_id, digit_index, digit}
-     -> server emits 'pair_dial_progress' to room=pair_code
-4. After all 6 digits, puck POST /api/pair/confirm {puck_id, code}
-   -> server validates code matches the pending code
-   -> creates trivia session via create_trivia_session
-   -> emits 'paired' to room=pair_code with {session_code}
-   -> response: {session_code}
+v2: shared-code multiplayer lobby. Only one active lobby per server at
+a time. First puck to enter pair mode becomes host; subsequent pucks
+join by dialing the same code. Host taps to start when ready, which
+creates the underlying trivia session and lets the match begin.
+
+Single-player Speed Pyramid is the degenerate case: 1 player + host-
+tap-start. Same flow, no special-casing.
+
+Endpoints:
+- POST /api/pair/request {puck_id}         -> {pair_code, role, color, players}
+- POST /api/pair/dial    {puck_id, ...}    -> updates host's live mirror only
+- POST /api/pair/preview {puck_id, ...}    -> emits pair_dial_preview only for host
+- POST /api/pair/confirm {puck_id, code}   -> {role, color, players} (joins lobby)
+- POST /api/pair/start   {puck_id}         -> {session_code} (host only)
+- GET  /api/pair/lobby-state               -> current lobby snapshot
+
+Speed Pyramid endpoints (unchanged from v1.1):
+- POST /api/sp/load-question/<code>
+- GET  /api/sp/current-question/<code>
+- GET  /api/sp/match-state/<code>
+- GET  /api/sp/final-results/<code>
+- POST /api/sp/reset/<code>
 """
 
 import random
@@ -35,23 +41,47 @@ from database import execute_query, get_placeholder
 pair_bp = Blueprint("pair", __name__, url_prefix="/api/pair")
 sp_bp = Blueprint("sp", __name__, url_prefix="/api/sp")
 
-# Set by init_pair_routes(). Module-level so route handlers can access it
-# without a Flask current_app extension dance.
 _socketio = None
 
-# Local question tracker — keyed by session_code, value = {"question_id":
-# int, "started_at": float}. We previously tried to share trivia_routes'
-# tracker across modules, but that silently failed in some import orders.
-# Owning our own copy here is simpler and bulletproof.
+# Local question tracker (Speed Pyramid v1.1) — keyed by session_code.
 _QUESTION_TRACKER: dict[str, dict] = {}
 
-# In-memory pending codes. Keyed by puck_id.
-# {puck_id: {"code": "274591", "expires_at": 1234567890.0,
-#            "progress": [None,None,None,None,None,None]}}
-# Single-process Flask is fine for v1; move to Redis or session table
-# before multi-worker production deploy (ADR follow-up).
-_PENDING: dict[int, dict] = {}
-_TTL_SECONDS = 600  # 10 minutes
+# ============================================================================
+# Lobby model (v2)
+# ============================================================================
+# A single active lobby on the server. None when no lobby pending.
+# {
+#   "code": "274591",            # shared 6-digit pair code
+#   "host_puck_id": 1,
+#   "started": False,
+#   "session_code": None,        # set after host calls /start
+#   "players": {                 # puck_id -> {color_hex, color_name, joined_at}
+#     1: {"color": "#3B82F6", "color_name": "blue",  "joined_at": 1.0},
+#   },
+#   "dials_in_progress": {       # puck_id -> [None|digit, ...]   (host only)
+#     1: [None] * 6,
+#   },
+#   "expires_at": 1234567.0,
+# }
+_LOBBY: Optional[dict] = None
+_TTL_SECONDS = 600
+
+# Puck color palette (matches design tokens locked in src/index.css).
+# Index by puck_id, fall back to white for unknown IDs.
+PUCK_COLORS: dict[int, tuple[str, str]] = {
+    1: ("#3B82F6", "blue"),
+    2: ("#EC4899", "pink"),
+    3: ("#FBBF24", "gold"),
+    4: ("#10B981", "green"),
+    5: ("#A855F7", "purple"),
+    6: ("#F97316", "orange"),
+    7: ("#06B6D4", "cyan"),
+    8: ("#EF4444", "red"),
+}
+
+
+def _color_for(puck_id: int) -> tuple[str, str]:
+    return PUCK_COLORS.get(int(puck_id), ("#F8FAFC", "white"))
 
 
 def _now() -> float:
@@ -59,19 +89,46 @@ def _now() -> float:
 
 
 def _new_code() -> str:
-    """6-digit decimal pair code, leading zeros allowed."""
     return "".join(random.choices(string.digits, k=6))
 
 
-def _purge_expired() -> None:
-    now = _now()
-    expired = [k for k, v in _PENDING.items() if v["expires_at"] < now]
-    for k in expired:
-        _PENDING.pop(k, None)
+def _purge_lobby_if_expired() -> None:
+    global _LOBBY
+    if _LOBBY is None:
+        return
+    if _LOBBY["expires_at"] < _now() and not _LOBBY["started"]:
+        _LOBBY = None
+
+
+def _clear_lobby() -> None:
+    global _LOBBY
+    _LOBBY = None
+
+
+def _lobby_snapshot() -> dict:
+    """Serializable view of current lobby for clients / debug."""
+    if _LOBBY is None:
+        return {"active": False}
+    return {
+        "active": True,
+        "code": _LOBBY["code"],
+        "host_puck_id": _LOBBY["host_puck_id"],
+        "started": _LOBBY["started"],
+        "session_code": _LOBBY.get("session_code"),
+        "players": [
+            {
+                "puck_id": pid,
+                "color": p["color"],
+                "color_name": p["color_name"],
+                "joined_at": p["joined_at"],
+                "is_host": pid == _LOBBY["host_puck_id"],
+            }
+            for pid, p in sorted(_LOBBY["players"].items(), key=lambda kv: kv[1]["joined_at"])
+        ],
+    }
 
 
 def _resolve_speed_pyramid_type_id() -> Optional[int]:
-    """Look up game_type_id for 'speed_pyramid' in trivia_game_types."""
     ph = get_placeholder()
     row = execute_query(
         f"SELECT id FROM trivia_game_types WHERE name = {ph}",
@@ -81,147 +138,230 @@ def _resolve_speed_pyramid_type_id() -> Optional[int]:
     return row["id"] if row else None
 
 
+# ============================================================================
+# Pair endpoints
+# ============================================================================
+
 @pair_bp.route("/request", methods=["POST"])
 def request_code():
-    """Puck calls this on entering pair mode to claim a pair code."""
-    _purge_expired()
+    """First puck to call this creates the lobby and becomes the host.
+    Subsequent pucks get the existing lobby code and a 'joiner' role.
+    A puck calling /request twice is idempotent — same code returned."""
+    global _LOBBY
+    _purge_lobby_if_expired()
+
     data = request.get_json(silent=True) or {}
-    puck_id = data.get("puck_id")
-    if puck_id is None:
+    puck_id_raw = data.get("puck_id")
+    if puck_id_raw is None:
         return jsonify({"error": "puck_id required"}), 400
+    puck_id = int(puck_id_raw)
 
-    existing = _PENDING.get(puck_id)
-    if existing and existing["expires_at"] > _now():
-        # Re-emit pair_started even on reuse so a title-screen browser
-        # that loaded AFTER the puck's first POST still auto-advances.
-        if _socketio is not None:
-            _socketio.emit(
-                "pair_started",
-                {"puck_id": puck_id, "pair_code": existing["code"]},
-                room="lobby",
-            )
+    color_hex, color_name = _color_for(puck_id)
+
+    # If a lobby exists and the match has started, reject new pair attempts.
+    if _LOBBY is not None and _LOBBY["started"]:
         return jsonify(
-            {
-                "pair_code": existing["code"],
-                "expires_at": existing["expires_at"],
-                "reused": True,
-            }
-        )
+            {"error": "match_in_progress",
+             "message": "A match is already in progress. Wait for it to end."}
+        ), 409
 
-    code = _new_code()
-    _PENDING[puck_id] = {
-        "code": code,
-        "expires_at": _now() + _TTL_SECONDS,
-        "progress": [None] * 6,
-    }
-    # Broadcast to the global lobby so any title-screen-waiting browser
-    # can auto-advance to the puck's pair page.
+    if _LOBBY is None:
+        # First puck — create new lobby with this puck as host.
+        code = _new_code()
+        _LOBBY = {
+            "code": code,
+            "host_puck_id": puck_id,
+            "started": False,
+            "session_code": None,
+            "players": {},  # populated on confirm, not on request
+            "dials_in_progress": {puck_id: [None] * 6},
+            "expires_at": _now() + _TTL_SECONDS,
+        }
+        role = "host"
+        is_first = True
+    else:
+        role = "host" if _LOBBY["host_puck_id"] == puck_id else "joiner"
+        _LOBBY["dials_in_progress"].setdefault(puck_id, [None] * 6)
+        is_first = False
+
     if _socketio is not None:
+        # Title-screen browsers waiting in 'lobby' room jump to the
+        # lobby/pair page when ANY puck requests pairing.
         _socketio.emit(
             "pair_started",
-            {"puck_id": puck_id, "pair_code": code},
+            {
+                "puck_id": puck_id,
+                "pair_code": _LOBBY["code"],
+                "host_puck_id": _LOBBY["host_puck_id"],
+                "is_first_player": is_first,
+            },
             room="lobby",
         )
-    return jsonify(
-        {
-            "pair_code": code,
-            "expires_at": _PENDING[puck_id]["expires_at"],
-            "reused": False,
-        }
-    )
+
+    return jsonify({
+        "pair_code": _LOBBY["code"],
+        "role": role,
+        "color": color_hex,
+        "color_name": color_name,
+        "host_puck_id": _LOBBY["host_puck_id"],
+        "players": _lobby_snapshot()["players"],
+        "expires_at": _LOBBY["expires_at"],
+    })
 
 
 @pair_bp.route("/preview", methods=["POST"])
 def dial_preview():
-    """Real-time digit preview — the puck POSTs this on every tilt so
-    the TV can show what's currently being dialed BEFORE the user taps
-    to lock it. Does not modify pending state — just broadcasts."""
-    _purge_expired()
+    """Real-time dial preview. Only the HOST puck's preview is mirrored
+    to the TV (joiners dial blind, trusting their puck LED)."""
+    _purge_lobby_if_expired()
+    if _LOBBY is None:
+        return jsonify({"error": "no active lobby"}), 404
+
     data = request.get_json(silent=True) or {}
-    puck_id = data.get("puck_id")
+    puck_id_raw = data.get("puck_id")
     digit_index = data.get("digit_index")
     digit = data.get("digit")
-
-    if puck_id is None or digit_index is None or digit is None:
+    if puck_id_raw is None or digit_index is None or digit is None:
         return jsonify({"error": "puck_id, digit_index, digit required"}), 400
+    puck_id = int(puck_id_raw)
 
-    pending = _PENDING.get(puck_id)
-    if not pending:
-        return jsonify({"error": "no pending pair code for this puck_id"}), 404
+    if puck_id != _LOBBY["host_puck_id"]:
+        # Joiner — don't mirror to the TV. Silent success.
+        return jsonify({"ok": True, "mirrored": False})
 
     if _socketio is not None:
         _socketio.emit(
             "pair_dial_preview",
-            {
-                "puck_id": puck_id,
-                "digit_index": digit_index,
-                "digit": digit,
-            },
-            room=pending["code"],
+            {"puck_id": puck_id, "digit_index": digit_index, "digit": digit},
+            room=_LOBBY["code"],
         )
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "mirrored": True})
 
 
 @pair_bp.route("/dial", methods=["POST"])
 def dial_digit():
-    """Puck reports one digit of dial progress. TV mirrors via WS."""
-    _purge_expired()
+    """Locked-digit broadcast. Only the host's dial is mirrored on the TV;
+    joiner dials are recorded server-side but not broadcast (joiners dial
+    blind)."""
+    _purge_lobby_if_expired()
+    if _LOBBY is None:
+        return jsonify({"error": "no active lobby"}), 404
+
     data = request.get_json(silent=True) or {}
-    puck_id = data.get("puck_id")
+    puck_id_raw = data.get("puck_id")
     digit_index = data.get("digit_index")
     digit = data.get("digit")
-
-    if puck_id is None or digit_index is None or digit is None:
+    if puck_id_raw is None or digit_index is None or digit is None:
         return jsonify({"error": "puck_id, digit_index, digit required"}), 400
+    puck_id = int(puck_id_raw)
     if not isinstance(digit_index, int) or not (0 <= digit_index < 6):
         return jsonify({"error": "digit_index must be 0..5"}), 400
     if not isinstance(digit, int) or not (0 <= digit <= 9):
         return jsonify({"error": "digit must be 0..9"}), 400
 
-    pending = _PENDING.get(puck_id)
-    if not pending:
-        return jsonify({"error": "no pending pair code for this puck_id"}), 404
+    progress = _LOBBY["dials_in_progress"].setdefault(puck_id, [None] * 6)
+    progress[digit_index] = digit
 
-    pending["progress"][digit_index] = digit
-    if _socketio is not None:
+    if _socketio is not None and puck_id == _LOBBY["host_puck_id"]:
         _socketio.emit(
             "pair_dial_progress",
             {
                 "puck_id": puck_id,
                 "digit_index": digit_index,
                 "digit": digit,
-                "progress": pending["progress"],
+                "progress": progress,
             },
-            room=pending["code"],
+            room=_LOBBY["code"],
         )
-    return jsonify({"accepted": True, "progress": pending["progress"]})
+    return jsonify({"accepted": True, "progress": progress})
 
 
 @pair_bp.route("/confirm", methods=["POST"])
 def confirm_code():
-    """Puck submits the full 6-digit code. If matches its pending code,
-    server creates a trivia session and binds the puck."""
-    _purge_expired()
+    """Puck submits its 6-digit dial. Adds the puck to the lobby's
+    players. Does NOT create the trivia session yet — that happens when
+    the host calls /api/pair/start."""
+    _purge_lobby_if_expired()
+    if _LOBBY is None:
+        return jsonify({"error": "no active lobby"}), 404
+    if _LOBBY["started"]:
+        return jsonify({"error": "match_in_progress"}), 409
+
     data = request.get_json(silent=True) or {}
-    puck_id = data.get("puck_id")
+    puck_id_raw = data.get("puck_id")
     code = data.get("code")
-
-    if puck_id is None or code is None:
+    if puck_id_raw is None or code is None:
         return jsonify({"error": "puck_id and code required"}), 400
+    puck_id = int(puck_id_raw)
 
-    pending = _PENDING.get(puck_id)
-    if not pending:
-        return jsonify({"error": "no pending pair code for this puck_id"}), 404
-
-    if str(code) != pending["code"]:
+    if str(code) != _LOBBY["code"]:
         return jsonify({"error": "code does not match"}), 401
+
+    color_hex, color_name = _color_for(puck_id)
+    if puck_id not in _LOBBY["players"]:
+        _LOBBY["players"][puck_id] = {
+            "color": color_hex,
+            "color_name": color_name,
+            "joined_at": _now(),
+        }
+
+    snapshot = _lobby_snapshot()
+    role = "host" if _LOBBY["host_puck_id"] == puck_id else "joiner"
+
+    if _socketio is not None:
+        _socketio.emit(
+            "player_joined",
+            {
+                "puck_id": puck_id,
+                "color": color_hex,
+                "color_name": color_name,
+                "role": role,
+                "players": snapshot["players"],
+            },
+            room=_LOBBY["code"],
+        )
+    return jsonify({
+        "role": role,
+        "color": color_hex,
+        "color_name": color_name,
+        "players": snapshot["players"],
+        "host_puck_id": _LOBBY["host_puck_id"],
+        "lobby_code": _LOBBY["code"],
+    })
+
+
+@pair_bp.route("/start", methods=["POST"])
+def start_match():
+    """Host puck taps to start the match. Creates the underlying trivia
+    session, registers all lobby players, transitions the lobby to
+    started state."""
+    _purge_lobby_if_expired()
+    if _LOBBY is None:
+        return jsonify({"error": "no active lobby"}), 404
+    if _LOBBY["started"]:
+        # Idempotent: returning the existing session_code is fine if the
+        # host taps again.
+        return jsonify({
+            "ok": True,
+            "session_code": _LOBBY["session_code"],
+            "already_started": True,
+        })
+
+    data = request.get_json(silent=True) or {}
+    puck_id_raw = data.get("puck_id")
+    if puck_id_raw is None:
+        return jsonify({"error": "puck_id required"}), 400
+    puck_id = int(puck_id_raw)
+    if puck_id != _LOBBY["host_puck_id"]:
+        return jsonify({"error": "only host can start"}), 403
+
+    if not _LOBBY["players"]:
+        return jsonify({"error": "no players have confirmed yet"}), 400
 
     game_type_id = _resolve_speed_pyramid_type_id()
     if game_type_id is None:
         return jsonify({"error": "speed_pyramid game type not seeded"}), 500
 
-    # For v1: bar_id=1, table_number=1 placeholder. Multi-bar lands later
-    # when we add a bar-account UX.
     session_code = create_trivia_session(
         bar_id=1, table_number=1, game_type_id=game_type_id
     )
@@ -233,38 +373,53 @@ def confirm_code():
         fetch_one=True,
     )
     if session_row:
-        add_player_to_session(
-            session_id=session_row["id"], puck_id=puck_id, player_name=None
-        )
+        for pid in _LOBBY["players"]:
+            add_player_to_session(
+                session_id=session_row["id"], puck_id=pid, player_name=None
+            )
+
+    _LOBBY["started"] = True
+    _LOBBY["session_code"] = session_code
 
     if _socketio is not None:
         _socketio.emit(
-            "paired",
-            {"puck_id": puck_id, "session_code": session_code},
-            room=pending["code"],
+            "match_started",
+            {
+                "session_code": session_code,
+                "host_puck_id": _LOBBY["host_puck_id"],
+                "players": _lobby_snapshot()["players"],
+            },
+            room=_LOBBY["code"],
         )
-    _PENDING.pop(puck_id, None)
+    return jsonify({"ok": True, "session_code": session_code})
 
-    return jsonify({"session_code": session_code, "puck_id": puck_id})
+
+@pair_bp.route("/lobby-state", methods=["GET"])
+def lobby_state():
+    """Read the current lobby state. Used by both pucks (polling to
+    learn 'has the host started yet?') and any browser tab that
+    refreshes mid-lobby."""
+    _purge_lobby_if_expired()
+    return jsonify(_lobby_snapshot())
+
+
+@pair_bp.route("/clear", methods=["POST"])
+def clear_lobby_endpoint():
+    """Admin/debug: forcibly clear the active lobby. Useful between dev
+    sessions when a stale lobby is blocking new requests."""
+    _clear_lobby()
+    return jsonify({"ok": True})
 
 
 # ============================================================================
-# Speed Pyramid v1 — match flow helpers
+# Speed Pyramid v1.1 endpoints (unchanged from previous slice)
 # ============================================================================
-# These live alongside pair_bp because they're scoped to Speed Pyramid v1's
-# sprint and we don't want to dilute trivia_routes.py with v1-specific
-# round-counter logic. When more games adopt the same flow, lift these into
-# a shared module.
 
-# In-memory round counter per session_code.
-# {session_code: {"round": int, "asked_ids": set[int]}}
 _SP_STATE: dict[str, dict] = {}
-
 SP_TOTAL_ROUNDS = 7
 
 
 def _difficulty_for_round(r: int) -> str:
-    """Q1-Q2 easy, Q3-Q5 medium, Q6-Q7 hard."""
     if r <= 2:
         return "easy"
     if r <= 5:
@@ -274,20 +429,11 @@ def _difficulty_for_round(r: int) -> str:
 
 @sp_bp.route("/load-question/<session_code>", methods=["POST"])
 def sp_load_question(session_code: str):
-    """Load the next Speed Pyramid question for this session.
-
-    Picks a random unused question at the difficulty matching the next
-    round. Increments the round counter. Emits 'question_show' to room=
-    session_code. Returns the question payload + round metadata.
-    """
     state = _SP_STATE.setdefault(
         session_code, {"round": 0, "asked_ids": set(), "complete": False}
     )
 
     if state["round"] >= SP_TOTAL_ROUNDS:
-        # All rounds have already been LOADED. We won't load another.
-        # Now flip the explicit complete flag so the puck (which polls
-        # /api/sp/match-state) can see that the match is truly over.
         state["complete"] = True
         if _socketio is not None:
             _socketio.emit(
@@ -295,6 +441,10 @@ def sp_load_question(session_code: str):
                 {"session_code": session_code, "rounds": SP_TOTAL_ROUNDS},
                 room=session_code,
             )
+        # Also clear the active lobby so a new match can be started.
+        global _LOBBY
+        if _LOBBY is not None and _LOBBY.get("session_code") == session_code:
+            _clear_lobby()
         return jsonify(
             {"error": "match_complete", "rounds": SP_TOTAL_ROUNDS}
         ), 409
@@ -304,7 +454,6 @@ def sp_load_question(session_code: str):
     exclude = list(state["asked_ids"]) or None
     q = get_random_question(difficulty=difficulty, exclude_ids=exclude)
     if not q:
-        # Fall back to any difficulty if the bucket is dry.
         q = get_random_question(exclude_ids=exclude)
     if not q:
         return jsonify({"error": "no questions available"}), 404
@@ -312,7 +461,6 @@ def sp_load_question(session_code: str):
     state["round"] = next_round
     state["asked_ids"].add(q["id"])
 
-    # Resolve category for display.
     ph = get_placeholder()
     cat = execute_query(
         f"SELECT name, emoji FROM trivia_categories WHERE id = {ph}",
@@ -350,13 +498,10 @@ def sp_load_question(session_code: str):
             room=session_code,
         )
 
-    # Track question locally for /api/sp/current-question polling.
     _QUESTION_TRACKER[session_code] = {
         "question_id": q["id"],
         "started_at": started_at,
     }
-    # Also stash in trivia_routes' tracker for /api/trivia/answer's
-    # response_time accounting. Best-effort.
     try:
         import trivia_routes
         trivia_routes._question_start_times[session_code] = {
@@ -379,8 +524,6 @@ def sp_load_question(session_code: str):
 
 @sp_bp.route("/match-state/<session_code>", methods=["GET"])
 def sp_match_state(session_code: str):
-    """Lightweight match progress lookup for the TV (mostly for debugging
-    and for slice 1D's scoreboard query)."""
     state = _SP_STATE.get(session_code)
     if not state:
         return jsonify(
@@ -398,9 +541,6 @@ def sp_match_state(session_code: str):
 
 @sp_bp.route("/final-results/<session_code>", methods=["GET"])
 def sp_final_results(session_code: str):
-    """Final scoreboard data after match_ended. Sums points_earned across
-    all answers in this session, grouped by puck_id. Returns per-puck
-    totals + a derived 'tier' label based on average per-question."""
     ph = get_placeholder()
     session = execute_query(
         f"SELECT id FROM trivia_sessions WHERE session_code = {ph}",
@@ -447,6 +587,8 @@ def sp_final_results(session_code: str):
                     "answered": int(r["answered"] or 0),
                     "correct": int(r["correct"] or 0),
                     "tier": derive_tier(int(r["total"] or 0), int(r["answered"] or 0)),
+                    "color": _color_for(int(r["puck_id"]))[0],
+                    "color_name": _color_for(int(r["puck_id"]))[1],
                 }
                 for r in rows
             ],
@@ -456,10 +598,6 @@ def sp_final_results(session_code: str):
 
 @sp_bp.route("/reset/<session_code>", methods=["POST"])
 def sp_reset(session_code: str):
-    """Play Again — clear the round counter + asked-question set for this
-    session so /load-question starts at Round 1 again. The trivia
-    session itself stays the same, so we get a fresh leaderboard but the
-    same puck<>TV binding."""
     _SP_STATE[session_code] = {"round": 0, "asked_ids": set(), "complete": False}
     try:
         import trivia_routes
@@ -477,9 +615,6 @@ def sp_reset(session_code: str):
 
 @sp_bp.route("/current-question/<session_code>", methods=["GET"])
 def sp_current_question(session_code: str):
-    """Polled by the puck firmware to know which question is active +
-    when it started + how much time is left. Cheap GET — no DB hit
-    beyond what we already track."""
     sst = _QUESTION_TRACKER.get(session_code)
     if not sst:
         return jsonify({"active": False})
