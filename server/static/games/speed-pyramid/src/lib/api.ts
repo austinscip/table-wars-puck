@@ -21,15 +21,48 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>
 }
 
+export type PuckRole = 'host' | 'joiner'
+
+export interface LobbyPlayer {
+  puck_id: number
+  color: string
+  color_name: string
+  joined_at: number
+  is_host: boolean
+}
+
 export interface PairRequestResponse {
   pair_code: string
+  role: PuckRole
+  color: string
+  color_name: string
+  host_puck_id: number
+  players: LobbyPlayer[]
   expires_at: number
-  reused: boolean
 }
 
 export interface PairConfirmResponse {
-  puck_id: number
+  role: PuckRole
+  color: string
+  color_name: string
+  players: LobbyPlayer[]
+  host_puck_id: number
+  lobby_code: string
+}
+
+export interface PairStartResponse {
+  ok: boolean
   session_code: string
+  already_started?: boolean
+}
+
+export interface LobbyStateResponse {
+  active: boolean
+  code?: string
+  host_puck_id?: number
+  started?: boolean
+  session_code?: string | null
+  players?: LobbyPlayer[]
 }
 
 export interface SpeedPyramidQuestion {
@@ -70,6 +103,15 @@ export const api = {
 
     confirm: (puck_id: number, code: string) =>
       postJson<PairConfirmResponse>('/api/pair/confirm', { puck_id, code }),
+
+    start: (puck_id: number) =>
+      postJson<PairStartResponse>('/api/pair/start', { puck_id }),
+
+    lobbyState: async (): Promise<LobbyStateResponse> => {
+      const res = await fetch('/api/pair/lobby-state')
+      if (!res.ok) throw new Error(`lobby-state ${res.status}`)
+      return res.json() as Promise<LobbyStateResponse>
+    },
   },
   sp: {
     loadQuestion: (session_code: string) =>

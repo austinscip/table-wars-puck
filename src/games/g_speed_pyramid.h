@@ -30,7 +30,8 @@ enum class State : uint8_t {
   PAIR_REQUESTING,
   PAIR_DIALING,
   PAIR_CONFIRMING,
-  PAIRED,             // brief celebration before dropping to IN_GAME
+  PAIRED,             // brief celebration before dropping to LOBBY_WAITING
+  LOBBY_WAITING,      // v2: joined lobby, waiting for host to start
   IN_GAME_IDLE,       // session bound, no question active yet
   IN_GAME_ANSWERING,  // question active, tilt-aim + tap
   IN_GAME_LOCKED,     // tap fired, awaiting server reveal
@@ -42,8 +43,14 @@ inline uint8_t _dial_digits[6] = {0, 0, 0, 0, 0, 0};
 inline uint8_t _dial_pos = 0;     // 0..5
 inline uint8_t _current_digit = 0;
 
-// Session + question tracking (set after PAIR_CONFIRMING succeeds).
+// Lobby + session tracking. lobby_code is set after PAIR_CONFIRMING;
+// session_code is set after host taps start (or polling sees the
+// lobby's started=true with a session_code).
+inline String _lobby_code = "";
 inline String _session_code = "";
+inline bool _is_host = false;
+inline uint32_t _last_lobby_poll_ms = 0;
+
 inline int _current_question_id = -1;
 inline uint32_t _question_started_at_ms = 0;  // millis() when puck saw it
 inline uint32_t _question_time_limit_ms = 10000;
@@ -102,7 +109,22 @@ inline void _post_preview(uint8_t index, uint8_t digit) {
   sp_net::post_json("/api/pair/preview", body, nullptr);
 }
 
-inline bool _post_confirm(String* session_code_out) {
+// Extract a quoted-string JSON field. Returns true if found, writes to
+// `out`. Crude but works for the small response shapes we use.
+inline bool _extract_string(const String& json, const char* key, String* out) {
+  String needle = String("\"") + key + "\":\"";
+  int i = json.indexOf(needle);
+  if (i < 0) return false;
+  i += needle.length();
+  int end = json.indexOf("\"", i);
+  if (end < 0) return false;
+  *out = json.substring(i, end);
+  return true;
+}
+
+// v2 /api/pair/confirm response shape: {role, color, color_name,
+// players, host_puck_id, lobby_code}. We need lobby_code + role.
+inline bool _post_confirm_v2(String* lobby_code_out, bool* is_host_out) {
   String code_str = "";
   for (uint8_t i = 0; i < 6; ++i) code_str += String(_dial_digits[i]);
   String body =
@@ -111,15 +133,33 @@ inline bool _post_confirm(String* session_code_out) {
   String resp;
   const int code = sp_net::post_json("/api/pair/confirm", body, &resp);
   if (code != 200) return false;
-  // Crude JSON parse — extract "session_code":"XXXXXX". For v1 this is
-  // fine; we move to ArduinoJson if we ever read more fields.
-  const int idx = resp.indexOf("\"session_code\":\"");
-  if (idx < 0) return false;
-  const int start = idx + strlen("\"session_code\":\"");
-  const int end = resp.indexOf("\"", start);
-  if (end < 0) return false;
-  *session_code_out = resp.substring(start, end);
+
+  String role;
+  if (!_extract_string(resp, "lobby_code", lobby_code_out)) return false;
+  if (!_extract_string(resp, "role", &role)) return false;
+  *is_host_out = (role == "host");
   return true;
+}
+
+// v2 /api/pair/start — host-only. Server creates trivia session and
+// emits match_started. We don't read the response; we'll learn the
+// session_code from the next /api/pair/lobby-state poll.
+inline bool _post_start() {
+  String body = "{\"puck_id\":" + String(PUCK_ID) + "}";
+  return sp_net::post_json("/api/pair/start", body, nullptr) == 200;
+}
+
+// Poll /api/pair/lobby-state. Returns true if the match has started and
+// writes the session_code to the out param.
+inline bool _poll_lobby_state(String* session_code_out) {
+  String body;
+  const int code = sp_net::get_json("/api/pair/lobby-state", &body);
+  if (code != 200) return false;
+  // Inline bool check rather than calling _extract_bool, which is
+  // defined later in this header (forward-reference problem).
+  if (body.indexOf("\"started\":true") < 0) return false;
+  if (!_extract_string(body, "session_code", session_code_out)) return false;
+  return session_code_out->length() > 0;
 }
 
 // Extract an integer JSON field (very small parser — works for fields
@@ -328,15 +368,16 @@ inline bool pair_mode_loop() {
       _current_digit = 0;
       if (_dial_pos >= 6) {
         _state = State::PAIR_CONFIRMING;
-        String session_code;
-        const bool ok = _post_confirm(&session_code);
+        String lobby_code;
+        bool is_host = false;
+        const bool ok = _post_confirm_v2(&lobby_code, &is_host);
         if (ok) {
-          // FIX: persist the session_code so /api/sp/current-question
-          // polling works after PAIRED -> IN_GAME_IDLE. Without this
-          // _session_code stays "" and the polling short-circuits.
-          _session_code = session_code;
-          Serial.printf("[PAIR] session=%s\n", _session_code.c_str());
-          _state = State::PAIRED;
+          _lobby_code = lobby_code;
+          _is_host = is_host;
+          Serial.printf("[PAIR] joined lobby=%s as %s\n",
+                        _lobby_code.c_str(), is_host ? "HOST" : "joiner");
+          _state = State::LOBBY_WAITING;
+          _last_lobby_poll_ms = 0;
           sp_led::flash(sp_led::color_correct(), 400);
           sp_feedback::pair_confirmed();
         } else {
@@ -358,11 +399,45 @@ inline bool pair_mode_loop() {
   }
 
   if (_state == State::PAIRED) {
-    // Hand off to in-game state machine.
-    Serial.println("[STATE] PAIRED -> IN_GAME_IDLE");
-    _state = State::IN_GAME_IDLE;
-    _current_question_id = -1;
-    _last_poll_ms = 0;  // poll immediately
+    // v2: hand off to LOBBY_WAITING (not directly to IN_GAME_IDLE) —
+    // we don't know the session_code until the host starts.
+    Serial.println("[STATE] PAIRED -> LOBBY_WAITING");
+    _state = State::LOBBY_WAITING;
+    _last_lobby_poll_ms = 0;
+    return true;
+  }
+
+  // -----------------------------
+  // LOBBY_WAITING state (v2)
+  // -----------------------------
+  if (_state == State::LOBBY_WAITING) {
+    // Host: tap-to-start.
+    if (_is_host && be == SpButtonEvent::TAP) {
+      Serial.println("[LOBBY] host TAP -> /api/pair/start");
+      sp_feedback::lock_in();
+      if (!_post_start()) {
+        Serial.println("[LOBBY] start POST failed");
+      }
+    }
+
+    // Poll every 1s for match_started.
+    const uint32_t now = millis();
+    if (now - _last_lobby_poll_ms > 1000) {
+      _last_lobby_poll_ms = now;
+      String session_code;
+      if (_poll_lobby_state(&session_code)) {
+        _session_code = session_code;
+        Serial.printf("[LOBBY] match started! session=%s\n",
+                      _session_code.c_str());
+        _state = State::IN_GAME_IDLE;
+        _current_question_id = -1;
+        _last_poll_ms = 0;
+      }
+    }
+
+    // Visual: gentle rotating glow in this puck's role color. Host gets
+    // a slightly brighter pulse so the human can see "I am the host".
+    _show_pair_mode_glow();
     return true;
   }
 

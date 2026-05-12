@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import TitleScreen from './screens/TitleScreen'
 import PairScreen from './screens/PairScreen'
+import LobbyScreen from './screens/LobbyScreen'
 import CountdownScreen from './screens/CountdownScreen'
 import QuestionScreen from './screens/QuestionScreen'
 import ScoreboardScreen from './screens/ScoreboardScreen'
@@ -57,6 +58,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<TitleScreen />} />
         <Route path="/pair" element={<PairScreen />} />
+        <Route path="/lobby/:lobbyCode" element={<LobbyScreen />} />
         <Route path="/countdown/:sessionCode" element={<CountdownScreen />} />
         <Route path="/question/:sessionCode" element={<QuestionScreen />} />
         <Route path="/scoreboard/:sessionCode" element={<ScoreboardScreen />} />
