@@ -50,7 +50,18 @@ app = Flask(__name__)
 # Sprint 1E: Use environment variables for production configuration
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'tablewars_secret_2024_dev')
 CORS(app)
-socketio = SocketIO(app, cors_allowed_origins="*")
+# async_mode='threading' avoids the werkzeug websocket-upgrade quirk
+# on Python 3.14 dev server ("write() before start_response"). It also
+# eliminates the noisy 500 in logs when the client opens a websocket.
+# Production should still run under gunicorn + eventlet.
+# logger=False/engineio_logger=False mute the warning chatter.
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode="threading",
+    logger=False,
+    engineio_logger=False,
+)
 
 # Sprint 1E: Database and route initialization moved to bottom of file (after function definitions)
 

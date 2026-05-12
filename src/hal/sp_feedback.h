@@ -13,10 +13,17 @@
 namespace sp_feedback {
 
 inline void begin() {
-  pinMode(SP_PIN_BUZZER, OUTPUT);
   pinMode(SP_PIN_MOTOR, OUTPUT);
-  digitalWrite(SP_PIN_BUZZER, LOW);
   digitalWrite(SP_PIN_MOTOR, LOW);
+
+  // Pre-attach a LEDC channel to the buzzer pin so the FIRST tone()
+  // call doesn't trigger the "ledc_get_duty: LEDC is not initialized"
+  // warning. Arduino-ESP32's tone() reads duty before configuring
+  // the channel; doing it here once at boot silences that log.
+  // Channel 0, 8-bit resolution, initial freq 1000 Hz.
+  ledcSetup(0, 1000, 8);
+  ledcAttachPin(SP_PIN_BUZZER, 0);
+  ledcWrite(0, 0);  // start silent
 }
 
 inline void beep(uint16_t freq_hz, uint16_t duration_ms) {

@@ -260,14 +260,31 @@ export default function QuestionScreen() {
   }
 
   return (
-    <main className="flex h-full w-full flex-col gap-8 px-12 py-10">
-      <header className="flex items-baseline justify-between">
+    <main className="relative flex h-full w-full flex-col gap-8 px-12 py-10">
+      <header className="flex items-center justify-between">
         <span className="font-display text-3xl tracking-wide text-text/70">
-          {question.category_emoji} {question.category}
+          {question.category}
         </span>
-        <span className="font-mono text-2xl text-text/60">
-          Q{round} / {totalRounds}
-        </span>
+        {/* Round dot strip — 7 dots, current one filled in primary,
+            completed ones in correct-gold, future ones dim. */}
+        <div className="flex items-center gap-3">
+          {Array.from({ length: totalRounds }).map((_, i) => {
+            const done = i + 1 < round
+            const active = i + 1 === round
+            return (
+              <span
+                key={i}
+                className={`h-3 w-3 rounded-full transition-colors duration-300 ${
+                  done
+                    ? 'bg-correct'
+                    : active
+                    ? 'bg-primary'
+                    : 'bg-text/15'
+                } ${active ? 'ring-2 ring-primary/40 ring-offset-2 ring-offset-bg' : ''}`}
+              />
+            )
+          })}
+        </div>
       </header>
 
       <TimerBar
@@ -309,12 +326,28 @@ export default function QuestionScreen() {
         {phase === 'reveal' && reveal ? (
           <motion.div
             key="tier"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 flex items-center justify-center bg-bg/85 backdrop-blur-sm"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.05 }}
+            transition={{ duration: 0.35, ease: 'easeOut' }}
+            className="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-bg/90 backdrop-blur-md"
           >
             <TierBadge tier={reveal.tier} points={reveal.points} />
+            {/* Show the correct answer text on reveal so the player
+                learns even when they guessed wrong. */}
+            {!reveal.is_correct && question ? (
+              <motion.p
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.35, delay: 0.25 }}
+                className="font-body text-2xl text-text/70"
+              >
+                Correct answer:{' '}
+                <span className="font-display text-3xl text-correct">
+                  {reveal.correct_answer} · {question.answers[reveal.correct_answer]}
+                </span>
+              </motion.p>
+            ) : null}
           </motion.div>
         ) : null}
       </AnimatePresence>
