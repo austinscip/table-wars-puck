@@ -34,6 +34,9 @@ read -r -p "Server URL [${default_url}]: " server
 server="${server:-$default_url}"
 read -r -p "Puck ID [1]: " puck_id
 puck_id="${puck_id:-1}"
+read -r -p "Hardware revision (a/b) [b]: " rev
+rev="${rev:-b}"
+rev="$(echo "$rev" | tr '[:upper:]' '[:lower:]')"
 
 # Escape any double-quotes the user typed.
 esc() { printf '%s' "$1" | sed 's/"/\\"/g'; }
@@ -43,9 +46,9 @@ server_esc="$(esc "$server")"
 
 # Use a Python helper for the in-place rewrite — bash sed is fragile
 # across BSD/GNU and we want to scope the edit to the right [env:] block.
-python3 - "$PIO_INI" "$puck_id" "$ssid_esc" "$pass_esc" "$server_esc" <<'PY'
+python3 - "$PIO_INI" "$puck_id" "$ssid_esc" "$pass_esc" "$server_esc" "$rev" <<'PY'
 import sys, re
-path, puck_id, ssid, pwd, url = sys.argv[1:]
+path, puck_id, ssid, pwd, url, rev = sys.argv[1:]
 with open(path) as f:
     src = f.read()
 
@@ -55,8 +58,10 @@ section_re = re.compile(
     re.MULTILINE,
 )
 
+rev_line = "\n    -D PUCK_REV_B" if rev.startswith("b") else ""
 new_flags = (
     f"\n    -D PUCK_ID={puck_id}"
+    f"{rev_line}"
     f"\n    -D SPEED_PYRAMID_SERVER_URL=\\\"{url}\\\""
     f"\n    -D SPEED_PYRAMID_WIFI_SSID=\\\"{ssid}\\\""
     f"\n    -D SPEED_PYRAMID_WIFI_PASS=\\\"{pwd}\\\"\n"
@@ -70,7 +75,7 @@ if not m:
 src = src[:m.start(2)] + new_flags + src[m.end(2):]
 with open(path, "w") as f:
     f.write(src)
-print(f"updated {path}: PUCK_ID={puck_id}, server={url}, ssid={ssid}")
+print(f"updated {path}: PUCK_ID={puck_id}, rev={rev}, server={url}, ssid={ssid}")
 PY
 
 echo

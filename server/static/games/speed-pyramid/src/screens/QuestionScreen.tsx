@@ -25,6 +25,12 @@ interface AnswerLockedEvent {
   question_id: number
 }
 
+interface AnswerPreviewEvent {
+  session_code: string
+  puck_id: number
+  answer: 'A' | 'B' | 'C' | 'D' | null
+}
+
 interface RevealEvent {
   session_code: string
   puck_id: number
@@ -66,6 +72,7 @@ export default function QuestionScreen() {
   const [startedAt, setStartedAt] = useState<number>(0)
   const [phase, setPhase] = useState<Phase>('awaiting_question')
   const [lockedAnswer, setLockedAnswer] = useState<'A' | 'B' | 'C' | 'D' | null>(null)
+  const [previewAnswer, setPreviewAnswer] = useState<'A' | 'B' | 'C' | 'D' | null>(null)
   const [reveal, setReveal] = useState<RevealEvent | null>(null)
   // Track which tick boundaries we've already played so the countdown
   // tone fires exactly once per second in the last 3s.
@@ -73,6 +80,10 @@ export default function QuestionScreen() {
   // Demo-mode: track which questions we've auto-answered so we don't
   // double-submit if React re-renders the same question.
   const demoAnsweredRef = useRef<Set<number>>(new Set())
+  // Client-side timeout handle. If the puck never answers and the
+  // server never emits a reveal, we still need to advance the match —
+  // otherwise we stall forever on the unanswered question.
+  const timeoutTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (!sessionCode) return
@@ -87,9 +98,46 @@ export default function QuestionScreen() {
       setStartedAt(p.started_at)
       setPhase('answering')
       setLockedAnswer(null)
+      setPreviewAnswer(null)
       setReveal(null)
       lastTickRef.current = -1
       audio.questionShow()
+
+      // Client-side timeout safety-net. If the puck never taps and the
+      // server never emits 'reveal', we auto-advance after time_limit
+      // (+ a 1.5s grace window for any in-flight late tap). Cancelled
+      // by onReveal below if the user actually answers.
+      if (timeoutTimerRef.current) {
+        window.clearTimeout(timeoutTimerRef.current)
+      }
+      const elapsedMsAtShow = Math.max(0, Date.now() - p.started_at * 1000)
+      const remainingMs = Math.max(
+        500,
+        p.question.time_limit * 1000 - elapsedMsAtShow + 1500,
+      )
+      timeoutTimerRef.current = window.setTimeout(() => {
+        timeoutTimerRef.current = null
+        // Synthesize a TIMEOUT reveal so the user sees the correct
+        // answer, then auto-advance.
+        setReveal({
+          session_code: sessionCode,
+          puck_id: puckId,
+          question_id: p.question.id,
+          is_correct: false,
+          correct_answer: 'A',  // we don't know; suppressed below
+          submitted_answer: 'A',
+          points: 0,
+          tier: 'TIMEOUT',
+          response_time_ms: p.question.time_limit * 1000,
+        })
+        setPhase('reveal')
+        audio.wrong()
+        window.setTimeout(() => {
+          api.sp
+            .loadQuestion(sessionCode)
+            .catch(() => navigate(`/scoreboard/${sessionCode}`))
+        }, REVEAL_HOLD_MS)
+      }, remainingMs)
 
       // Demo-mode autoplay: randomly pick A/B/C/D after a 1.2-3.0s delay
       // and POST /api/trivia/answer so the match advances without a puck.
@@ -120,11 +168,21 @@ export default function QuestionScreen() {
     function onAnswerLocked(p: AnswerLockedEvent) {
       if (p.session_code !== sessionCode) return
       setLockedAnswer(p.answer)
+      setPreviewAnswer(null)
       setPhase('locked')
       audio.lockIn()
     }
+    function onAnswerPreview(p: AnswerPreviewEvent) {
+      if (p.session_code !== sessionCode) return
+      setPreviewAnswer(p.answer)
+    }
     function onReveal(p: RevealEvent) {
       if (p.session_code !== sessionCode) return
+      // Real reveal arrived — cancel the timeout safety-net.
+      if (timeoutTimerRef.current) {
+        window.clearTimeout(timeoutTimerRef.current)
+        timeoutTimerRef.current = null
+      }
       setReveal(p)
       setPhase('reveal')
       audio.reveal()
@@ -145,6 +203,7 @@ export default function QuestionScreen() {
 
     socket.on('question_show', onQuestionShow)
     socket.on('answer_locked', onAnswerLocked)
+    socket.on('answer_preview', onAnswerPreview)
     socket.on('reveal', onReveal)
     socket.on('match_ended', onMatchEnded)
 
@@ -156,8 +215,13 @@ export default function QuestionScreen() {
     return () => {
       socket.off('question_show', onQuestionShow)
       socket.off('answer_locked', onAnswerLocked)
+      socket.off('answer_preview', onAnswerPreview)
       socket.off('reveal', onReveal)
       socket.off('match_ended', onMatchEnded)
+      if (timeoutTimerRef.current) {
+        window.clearTimeout(timeoutTimerRef.current)
+        timeoutTimerRef.current = null
+      }
     }
   }, [sessionCode, navigate])
 
@@ -191,6 +255,7 @@ export default function QuestionScreen() {
       return 'dim' as const
     }
     if (lockedAnswer === letter) return 'locked' as const
+    if (phase === 'answering' && previewAnswer === letter) return 'preview' as const
     return 'idle' as const
   }
 
@@ -211,15 +276,22 @@ export default function QuestionScreen() {
         frozen={phase === 'locked' || phase === 'reveal'}
       />
 
-      <motion.h1
+      <motion.div
         key={question.id}
         initial={{ y: 30, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.45, ease: [0.34, 1.56, 0.64, 1] }}
-        className="font-display text-[clamp(3rem,7vw,7rem)] leading-tight tracking-tight text-text"
+        className="flex flex-col gap-4"
       >
-        {question.question}
-      </motion.h1>
+        {question.setup ? (
+          <p className="font-body text-[clamp(1.5rem,3vw,3rem)] leading-snug text-text/80">
+            {question.setup}
+          </p>
+        ) : null}
+        <h1 className="font-display text-[clamp(2.5rem,6vw,6rem)] leading-tight tracking-tight text-text">
+          {question.question}
+        </h1>
+      </motion.div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         {(['A', 'B', 'C', 'D'] as const).map((letter, i) => (

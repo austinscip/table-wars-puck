@@ -670,6 +670,14 @@ def register_core_socketio_handlers(sio):
             join_room(code)
             sio.emit("joined_session_room", {"session_code": code}, room=code)
 
+    @sio.on("join_lobby")
+    def _on_join_lobby(*_args):
+        """Title-screen browsers join 'lobby' so they get notified when
+        any puck POSTs /api/pair/request — then they auto-advance to
+        that puck's pair page. Accepts *args so it works whether the
+        client emits with or without a payload."""
+        join_room("lobby")
+
     print("✅ Core WebSocket handlers registered")
 
 # ============================================================================

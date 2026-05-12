@@ -49,6 +49,11 @@ inline uint32_t _question_started_at_ms = 0;  // millis() when puck saw it
 inline uint32_t _question_time_limit_ms = 10000;
 inline uint32_t _last_poll_ms = 0;
 
+// Track the last quadrant we mirrored to the server during answering
+// so we only POST when it actually changes (network is expensive, the
+// IMU read happens every loop tick).
+inline char _last_preview_letter = 0;
+
 inline void _show_pair_mode_glow() {
   // Soft rotating dot in --host palette so the player knows they're
   // in pair mode but no digit is being dialed yet.
@@ -85,6 +90,16 @@ inline bool _post_dial(uint8_t index, uint8_t digit) {
       ",\"digit\":" + String(digit) + "}";
   const int code = sp_net::post_json("/api/pair/dial", body, nullptr);
   return code == 200;
+}
+
+// Live preview broadcast — every tilt posts the current digit so the
+// TV shows what's about to be locked BEFORE the user taps.
+inline void _post_preview(uint8_t index, uint8_t digit) {
+  String body =
+      "{\"puck_id\":" + String(PUCK_ID) +
+      ",\"digit_index\":" + String(index) +
+      ",\"digit\":" + String(digit) + "}";
+  sp_net::post_json("/api/pair/preview", body, nullptr);
 }
 
 inline bool _post_confirm(String* session_code_out) {
@@ -134,22 +149,19 @@ inline bool _extract_bool(const String& json, const char* key, bool* out) {
   return false;
 }
 
-// GET /api/sp/match-state/<session_code>. Returns total round count
-// so the puck can know when the match is done (round >= total).
-inline bool _poll_match_state(int* round_out, int* total_out) {
+// GET /api/sp/match-state/<session_code>. Returns whether the match is
+// truly complete. Server flips `complete` true only AFTER the post-Q7
+// load attempt fails — so simply seeing round=7 doesn't trigger an
+// end-of-match (Q7 is still being played at that point).
+inline bool _poll_match_state_complete() {
   if (_session_code.length() == 0) return false;
-  HTTPClient http;
-  http.begin(String(SPEED_PYRAMID_SERVER_URL) + "/api/sp/match-state/" + _session_code);
-  const int code = http.GET();
-  if (code != 200) { http.end(); return false; }
-  const String body = http.getString();
-  http.end();
-  int r = 0, t = 7;
-  if (!_extract_int(body, "round", &r)) return false;
-  _extract_int(body, "total_rounds", &t);
-  if (round_out) *round_out = r;
-  if (total_out) *total_out = t;
-  return true;
+  String path = "/api/sp/match-state/" + _session_code;
+  String body;
+  const int code = sp_net::get_json(path.c_str(), &body);
+  if (code != 200) return false;
+  bool complete = false;
+  _extract_bool(body, "complete", &complete);
+  return complete;
 }
 
 // POST /api/sp/reset/<session_code>. Clears the round counter for a
@@ -164,21 +176,29 @@ inline bool _post_reset() {
 // question was found and populates _current_question_id / time tracking.
 inline bool _poll_current_question() {
   if (_session_code.length() == 0) return false;
-  HTTPClient http;
-  http.begin(String(SPEED_PYRAMID_SERVER_URL) + "/api/sp/current-question/" + _session_code);
-  const int code = http.GET();
-  if (code != 200) { http.end(); return false; }
-  const String body = http.getString();
-  http.end();
+  String path = "/api/sp/current-question/" + _session_code;
+  String body;
+  const int code = sp_net::get_json(path.c_str(), &body);
+  if (code != 200) {
+    Serial.printf("[POLL] %s -> HTTP %d\n", path.c_str(), code);
+    return false;
+  }
 
   bool active = false;
-  if (!_extract_bool(body, "active", &active) || !active) return false;
+  if (!_extract_bool(body, "active", &active) || !active) {
+    Serial.printf("[POLL] no active question (body=%s)\n", body.c_str());
+    return false;
+  }
 
   int qid = -1, time_limit_s = 10;
-  if (!_extract_int(body, "question_id", &qid)) return false;
+  if (!_extract_int(body, "question_id", &qid)) {
+    Serial.println("[POLL] active but no question_id?");
+    return false;
+  }
   _extract_int(body, "time_limit", &time_limit_s);
 
   if (qid != _current_question_id) {
+    Serial.printf("[POLL] NEW question_id=%d time_limit=%ds\n", qid, time_limit_s);
     _current_question_id = qid;
     _question_started_at_ms = millis();
     _question_time_limit_ms = (uint32_t)time_limit_s * 1000;
@@ -202,6 +222,21 @@ inline bool _post_answer(char letter, uint32_t response_time_ms, bool* is_correc
   _extract_bool(resp, "is_correct", &ok);
   if (is_correct_out) *is_correct_out = ok;
   return true;
+}
+
+// POST /api/trivia/answer-preview — real-time mirror of the currently
+// aimed quadrant so the TV can softly highlight which pill the player
+// is hovering on before they tap to lock.
+inline void _post_answer_preview(char letter) {
+  if (_session_code.length() == 0) return;
+  String body =
+      "{\"session_code\":\"" + _session_code + "\"" +
+      ",\"puck_id\":" + String(PUCK_ID) +
+      ",\"answer\":";
+  if (letter == 0) body += "null";
+  else { body += "\""; body += letter; body += "\""; }
+  body += "}";
+  sp_net::post_json("/api/trivia/answer-preview", body, nullptr);
 }
 
 // Map sp_imu::SpQuadrant -> A/B/C/D letter. UP=A, RIGHT=B, DOWN=C, LEFT=D.
@@ -253,7 +288,13 @@ inline bool pair_mode_loop() {
         _state = State::PAIR_DIALING;
         _dial_pos = 0;
         _current_digit = 0;
+        // "Pair mode active" confirmation: brief gold flash + happy
+        // beep so the user knows their hold succeeded BEFORE seeing
+        // the (less-obvious) digit display.
+        sp_led::flash(sp_led::color_correct(), 200);
+        sp_feedback::beep(1800, 120);
         sp_led::show_dial_digit(_current_digit);
+        _post_preview(_dial_pos, _current_digit);
       } else {
         _state = State::IDLE;
         sp_led::flash(sp_led::color_wrong(), 150);
@@ -269,10 +310,14 @@ inline bool pair_mode_loop() {
       _current_digit = (_current_digit + 1) % 10;
       sp_led::show_dial_digit(_current_digit);
       sp_feedback::beep(900, 30);
+      Serial.printf("[DIAL] slot=%u digit=%u\n", _dial_pos, _current_digit);
+      _post_preview(_dial_pos, _current_digit);
     } else if (tilt == SpTiltEvent::DOWN) {
       _current_digit = (_current_digit + 9) % 10;
       sp_led::show_dial_digit(_current_digit);
       sp_feedback::beep(700, 30);
+      Serial.printf("[DIAL] slot=%u digit=%u\n", _dial_pos, _current_digit);
+      _post_preview(_dial_pos, _current_digit);
     }
 
     if (be == SpButtonEvent::TAP) {
@@ -286,6 +331,11 @@ inline bool pair_mode_loop() {
         String session_code;
         const bool ok = _post_confirm(&session_code);
         if (ok) {
+          // FIX: persist the session_code so /api/sp/current-question
+          // polling works after PAIRED -> IN_GAME_IDLE. Without this
+          // _session_code stays "" and the polling short-circuits.
+          _session_code = session_code;
+          Serial.printf("[PAIR] session=%s\n", _session_code.c_str());
           _state = State::PAIRED;
           sp_led::flash(sp_led::color_correct(), 400);
           sp_feedback::pair_confirmed();
@@ -296,21 +346,23 @@ inline bool pair_mode_loop() {
         }
       } else {
         sp_led::show_dial_digit(_current_digit);
+        _post_preview(_dial_pos, _current_digit);
       }
     }
 
-    if (be == SpButtonEvent::HOLD_3S) {
-      // Cancel pair mode mid-dial.
-      _state = State::IDLE;
-      sp_led::flash(sp_led::color_wrong(), 200);
-    }
+    // Note: previously HOLD_3S cancelled mid-dial. Removed because in
+    // practice users hold the button longer than they think while
+    // staring at the LED, and the cancel was firing constantly. To
+    // restart pair mode now, just power-cycle the puck.
     return true;
   }
 
   if (_state == State::PAIRED) {
     // Hand off to in-game state machine.
+    Serial.println("[STATE] PAIRED -> IN_GAME_IDLE");
     _state = State::IN_GAME_IDLE;
     _current_question_id = -1;
+    _last_poll_ms = 0;  // poll immediately
     return true;
   }
 
@@ -322,18 +374,20 @@ inline bool pair_mode_loop() {
       _state == State::IN_GAME_LOCKED) {
 
     // Poll for active question every 500ms while idle / locked. Also
-    // check match-state to detect end-of-match.
+    // check match-state to detect end-of-match (server's explicit
+    // `complete` flag, set only after the post-Q7 load attempt fails).
     const uint32_t now = millis();
     if ((_state == State::IN_GAME_IDLE || _state == State::IN_GAME_LOCKED) &&
         now - _last_poll_ms > 500) {
       _last_poll_ms = now;
 
-      int r = 0, t = 7;
-      if (_poll_match_state(&r, &t) && r >= t && t > 0) {
+      if (_poll_match_state_complete()) {
+        Serial.println("[STATE] -> MATCH_ENDED");
         _state = State::MATCH_ENDED;
         sp_led::victory_sweep(1500);
         sp_feedback::victory();
       } else if (_poll_current_question()) {
+        Serial.println("[STATE] IN_GAME_IDLE -> IN_GAME_ANSWERING");
         _state = State::IN_GAME_ANSWERING;
       }
     }
@@ -343,30 +397,47 @@ inline bool pair_mode_loop() {
       // around the ring show the timer depletion in accent pink.
       const SpQuadrant q = sp_imu::read_quadrant();
       const int8_t ring_q = _quadrant_to_ring(q);
+      const char preview_letter = _quadrant_to_letter(q);
+      if (preview_letter != _last_preview_letter) {
+        _last_preview_letter = preview_letter;
+        _post_answer_preview(preview_letter);
+      }
 
-      const uint32_t elapsed = now - _question_started_at_ms;
+      // Recapture millis() here; `now` was sampled BEFORE the poll
+      // block, which (if we just transitioned to ANSWERING) set
+      // _question_started_at_ms to a NEWER millis. The subtraction
+      // would underflow as unsigned and report the timer as already
+      // expired.
+      const uint32_t now_in_game = millis();
+      const uint32_t elapsed =
+          (now_in_game >= _question_started_at_ms)
+              ? (now_in_game - _question_started_at_ms)
+              : 0;
       const uint32_t remaining = (elapsed >= _question_time_limit_ms)
                                      ? 0
                                      : _question_time_limit_ms - elapsed;
 
-      // Show timer ring first, then overlay quadrant.
-      sp_led::show_timer(remaining, _question_time_limit_ms, sp_led::color_accent());
-      if (ring_q >= 0) {
-        // Re-tint the quadrant LEDs with primary blue. show_quadrant
-        // clears first, so we have to redo the timer fill manually.
-        sp_led::show_quadrant(ring_q, sp_led::color_primary());
-      }
+      // Clean visual: only the tilt-quadrant LEDs lit in blue. No
+      // timer ring on the puck — the browser's TimerBar is the
+      // single source of truth for time-remaining. Center / no tilt =
+      // ring goes dark.
+      sp_led::show_quadrant(ring_q, sp_led::color_primary());
 
-      // Timeout: lock no answer, server will mark TIMEOUT on next reveal
-      // when the puck sends an empty answer. For v1 we simply hold the
-      // ring dark until the next question arrives.
+      // Timeout: no answer submitted. Server-side, the browser's
+      // client-side safety net turns this into a TIMEOUT reveal. On
+      // the puck we play the wrong-answer feedback so the player
+      // gets the same physical cue as a wrong tap.
       if (remaining == 0) {
+        sp_led::flash(sp_led::color_wrong(), 400);
+        sp_feedback::wrong();
         _state = State::IN_GAME_LOCKED;
         sp_led::clear();
+        _last_preview_letter = 0;
         return true;
       }
 
       if (be == SpButtonEvent::TAP) {
+        _last_preview_letter = 0;  // reset for next question
         const char letter = _quadrant_to_letter(q);
         if (letter == 0) {
           // No commitable tilt -- short reject buzz.

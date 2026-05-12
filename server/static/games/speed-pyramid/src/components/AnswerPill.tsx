@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 
-type State = 'idle' | 'locked' | 'correct' | 'wrong' | 'dim'
+type State = 'idle' | 'preview' | 'locked' | 'correct' | 'wrong' | 'dim'
 
 interface Props {
   letter: 'A' | 'B' | 'C' | 'D'
@@ -12,7 +12,8 @@ interface Props {
 
 const STYLES: Record<State, string> = {
   idle: 'bg-text/5 text-text border-text/15',
-  locked: 'bg-primary/15 text-primary border-primary',
+  preview: 'bg-primary/10 text-text border-primary/50',
+  locked: 'bg-primary/20 text-primary border-primary',
   correct: 'bg-correct/20 text-correct border-correct',
   wrong: 'bg-wrong/15 text-wrong border-wrong',
   dim: 'bg-text/5 text-text/30 border-text/10',
@@ -26,6 +27,8 @@ export default function AnswerPill({ letter, text, state, index }: Props) {
       ? '0 0 30px rgba(239, 68, 68, 0.35)'
       : state === 'locked'
       ? '0 0 30px rgba(59, 130, 246, 0.45)'
+      : state === 'preview'
+      ? '0 0 18px rgba(59, 130, 246, 0.25)'
       : 'none'
 
   return (
@@ -34,7 +37,12 @@ export default function AnswerPill({ letter, text, state, index }: Props) {
       animate={{
         y: 0,
         opacity: 1,
-        scale: state === 'correct' || state === 'locked' ? 1.04 : 1,
+        scale:
+          state === 'correct' || state === 'locked'
+            ? 1.04
+            : state === 'preview'
+            ? 1.02
+            : 1,
         boxShadow: ring,
       }}
       transition={{

@@ -61,6 +61,13 @@ export const api = {
         { puck_id, digit_index, digit },
       ),
 
+    preview: (puck_id: number, digit_index: number, digit: number) =>
+      postJson<{ ok: boolean }>('/api/pair/preview', {
+        puck_id,
+        digit_index,
+        digit,
+      }),
+
     confirm: (puck_id: number, code: string) =>
       postJson<PairConfirmResponse>('/api/pair/confirm', { puck_id, code }),
   },

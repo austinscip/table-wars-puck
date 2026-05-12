@@ -255,6 +255,28 @@ def api_load_question(session_code):
         return jsonify({'error': str(e)}), 500
 
 
+@trivia_bp.route('/api/trivia/answer-preview', methods=['POST'])
+def api_answer_preview():
+    """Real-time answer preview — the puck POSTs which quadrant it's
+    currently aimed at while the question is live, so the TV can softly
+    highlight that pill before the user taps to lock."""
+    data = request.get_json(silent=True) or {}
+    session_code = data.get('session_code')
+    puck_id = data.get('puck_id')
+    answer = data.get('answer')  # 'A'/'B'/'C'/'D' or null when neutral
+
+    if not session_code or puck_id is None:
+        return jsonify({'error': 'session_code and puck_id required'}), 400
+
+    if _socketio is not None:
+        _socketio.emit('answer_preview', {
+            'session_code': session_code,
+            'puck_id': puck_id,
+            'answer': answer,
+        }, room=session_code)
+    return jsonify({'ok': True})
+
+
 @trivia_bp.route('/api/trivia/answer', methods=['POST'])
 def api_submit_answer():
     """

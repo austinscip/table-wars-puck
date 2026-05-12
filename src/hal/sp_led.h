@@ -54,17 +54,17 @@ inline void set_brightness(uint8_t v) {
   FastLED.show();
 }
 
-// Light a single ring position (0..15) in a given color, dim everything
-// else to a low-glow version of the host palette.
+// Light a single ring position for the current digit. Direct 1:1
+// mapping — digit N lights LED N. LEDs 10..15 are always dark.
+//
+// Result: every tilt moves the lit LED exactly one position around
+// the ring (no 1-or-2 jumps from the previous even-spaced mapping).
+// The 6 unused LEDs at positions 10-15 act as a visual gap so the
+// user knows where the dial "wraps".
 inline void show_dial_digit(uint8_t digit) {
-  for (int i = 0; i < SP_NUM_LEDS; ++i) {
-    _leds[i] = color_host();
-    _leds[i].fadeToBlackBy(220);
-  }
-  // 10 evenly-spaced positions around the 16-LED ring for digits 0-9.
-  // i = round(digit * 16 / 10).
-  const uint8_t pos = (uint8_t)((uint16_t)digit * SP_NUM_LEDS / 10);
-  if (pos < SP_NUM_LEDS) _leds[pos] = color_primary();
+  FastLED.setBrightness(_brightness_punch);
+  fill_solid(_leds, SP_NUM_LEDS, CRGB::Black);
+  if (digit < 10) _leds[digit] = color_primary();
   FastLED.show();
 }
 

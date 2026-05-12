@@ -39,6 +39,12 @@ sp_bp = Blueprint("sp", __name__, url_prefix="/api/sp")
 # without a Flask current_app extension dance.
 _socketio = None
 
+# Local question tracker — keyed by session_code, value = {"question_id":
+# int, "started_at": float}. We previously tried to share trivia_routes'
+# tracker across modules, but that silently failed in some import orders.
+# Owning our own copy here is simpler and bulletproof.
+_QUESTION_TRACKER: dict[str, dict] = {}
+
 # In-memory pending codes. Keyed by puck_id.
 # {puck_id: {"code": "274591", "expires_at": 1234567890.0,
 #            "progress": [None,None,None,None,None,None]}}
@@ -86,6 +92,14 @@ def request_code():
 
     existing = _PENDING.get(puck_id)
     if existing and existing["expires_at"] > _now():
+        # Re-emit pair_started even on reuse so a title-screen browser
+        # that loaded AFTER the puck's first POST still auto-advances.
+        if _socketio is not None:
+            _socketio.emit(
+                "pair_started",
+                {"puck_id": puck_id, "pair_code": existing["code"]},
+                room="lobby",
+            )
         return jsonify(
             {
                 "pair_code": existing["code"],
@@ -100,6 +114,14 @@ def request_code():
         "expires_at": _now() + _TTL_SECONDS,
         "progress": [None] * 6,
     }
+    # Broadcast to the global lobby so any title-screen-waiting browser
+    # can auto-advance to the puck's pair page.
+    if _socketio is not None:
+        _socketio.emit(
+            "pair_started",
+            {"puck_id": puck_id, "pair_code": code},
+            room="lobby",
+        )
     return jsonify(
         {
             "pair_code": code,
@@ -107,6 +129,37 @@ def request_code():
             "reused": False,
         }
     )
+
+
+@pair_bp.route("/preview", methods=["POST"])
+def dial_preview():
+    """Real-time digit preview — the puck POSTs this on every tilt so
+    the TV can show what's currently being dialed BEFORE the user taps
+    to lock it. Does not modify pending state — just broadcasts."""
+    _purge_expired()
+    data = request.get_json(silent=True) or {}
+    puck_id = data.get("puck_id")
+    digit_index = data.get("digit_index")
+    digit = data.get("digit")
+
+    if puck_id is None or digit_index is None or digit is None:
+        return jsonify({"error": "puck_id, digit_index, digit required"}), 400
+
+    pending = _PENDING.get(puck_id)
+    if not pending:
+        return jsonify({"error": "no pending pair code for this puck_id"}), 404
+
+    if _socketio is not None:
+        _socketio.emit(
+            "pair_dial_preview",
+            {
+                "puck_id": puck_id,
+                "digit_index": digit_index,
+                "digit": digit,
+            },
+            room=pending["code"],
+        )
+    return jsonify({"ok": True})
 
 
 @pair_bp.route("/dial", methods=["POST"])
@@ -228,10 +281,14 @@ def sp_load_question(session_code: str):
     session_code. Returns the question payload + round metadata.
     """
     state = _SP_STATE.setdefault(
-        session_code, {"round": 0, "asked_ids": set()}
+        session_code, {"round": 0, "asked_ids": set(), "complete": False}
     )
 
     if state["round"] >= SP_TOTAL_ROUNDS:
+        # All rounds have already been LOADED. We won't load another.
+        # Now flip the explicit complete flag so the puck (which polls
+        # /api/sp/match-state) can see that the match is truly over.
+        state["complete"] = True
         if _socketio is not None:
             _socketio.emit(
                 "match_ended",
@@ -293,8 +350,13 @@ def sp_load_question(session_code: str):
             room=session_code,
         )
 
-    # Stash question_started_at in trivia_routes' tracker so its
-    # /api/trivia/answer handler computes the authoritative response_time.
+    # Track question locally for /api/sp/current-question polling.
+    _QUESTION_TRACKER[session_code] = {
+        "question_id": q["id"],
+        "started_at": started_at,
+    }
+    # Also stash in trivia_routes' tracker for /api/trivia/answer's
+    # response_time accounting. Best-effort.
     try:
         import trivia_routes
         trivia_routes._question_start_times[session_code] = {
@@ -303,6 +365,7 @@ def sp_load_question(session_code: str):
         }
     except Exception:
         pass
+    print(f"[sp] loaded Q{q['id']} for session={session_code} difficulty={q['difficulty']}")
 
     return jsonify(
         {
@@ -320,12 +383,15 @@ def sp_match_state(session_code: str):
     and for slice 1D's scoreboard query)."""
     state = _SP_STATE.get(session_code)
     if not state:
-        return jsonify({"round": 0, "total_rounds": SP_TOTAL_ROUNDS})
+        return jsonify(
+            {"round": 0, "total_rounds": SP_TOTAL_ROUNDS, "complete": False}
+        )
     return jsonify(
         {
             "round": state["round"],
             "total_rounds": SP_TOTAL_ROUNDS,
             "questions_asked": len(state["asked_ids"]),
+            "complete": bool(state.get("complete", False)),
         }
     )
 
@@ -394,7 +460,7 @@ def sp_reset(session_code: str):
     session so /load-question starts at Round 1 again. The trivia
     session itself stays the same, so we get a fresh leaderboard but the
     same puck<>TV binding."""
-    _SP_STATE[session_code] = {"round": 0, "asked_ids": set()}
+    _SP_STATE[session_code] = {"round": 0, "asked_ids": set(), "complete": False}
     try:
         import trivia_routes
         trivia_routes._question_start_times.pop(session_code, None)
@@ -413,12 +479,8 @@ def sp_reset(session_code: str):
 def sp_current_question(session_code: str):
     """Polled by the puck firmware to know which question is active +
     when it started + how much time is left. Cheap GET — no DB hit
-    beyond what trivia_routes already tracks."""
-    try:
-        import trivia_routes
-        sst = trivia_routes._question_start_times.get(session_code)
-    except Exception:
-        sst = None
+    beyond what we already track."""
+    sst = _QUESTION_TRACKER.get(session_code)
     if not sst:
         return jsonify({"active": False})
 

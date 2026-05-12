@@ -12,6 +12,12 @@ interface DialProgressEvent {
   progress: (number | null)[]
 }
 
+interface DialPreviewEvent {
+  puck_id: number
+  digit_index: number
+  digit: number
+}
+
 interface PairedEvent {
   puck_id: number
   session_code: string
@@ -37,8 +43,17 @@ export default function PairScreen() {
   const [progress, setProgress] = useState<(number | null)[]>(
     () => Array(6).fill(null) as (number | null)[],
   )
+  const [previewDigit, setPreviewDigit] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const demoStartedRef = useRef(false)
+
+  // Active slot = first index in `progress` that's still null. Once
+  // all 6 are filled this is 6, but at that point the server should
+  // have emitted `paired` and we're navigating away.
+  const activeSlot = (() => {
+    const idx = progress.findIndex((d) => d === null || d === undefined)
+    return idx < 0 ? 6 : idx
+  })()
 
   useEffect(() => {
     let active = true
@@ -60,6 +75,11 @@ export default function PairScreen() {
     function onProgress(payload: DialProgressEvent) {
       if (payload.puck_id !== puckId) return
       setProgress(payload.progress)
+      setPreviewDigit(null)  // locked, clear in-flight preview
+    }
+    function onPreview(payload: DialPreviewEvent) {
+      if (payload.puck_id !== puckId) return
+      setPreviewDigit(payload.digit)
     }
     function onPaired(payload: PairedEvent) {
       if (payload.puck_id !== puckId) return
@@ -68,11 +88,13 @@ export default function PairScreen() {
     }
 
     socket.on('pair_dial_progress', onProgress)
+    socket.on('pair_dial_preview', onPreview)
     socket.on('paired', onPaired)
 
     return () => {
       active = false
       socket.off('pair_dial_progress', onProgress)
+      socket.off('pair_dial_preview', onPreview)
       socket.off('paired', onPaired)
       if (code) {
         socket.emit('leave_pair_room', { pair_code: code })
@@ -132,7 +154,12 @@ export default function PairScreen() {
       </motion.h1>
 
       {code ? (
-        <PairCodeDisplay code={code} progress={progress} />
+        <PairCodeDisplay
+          code={code}
+          progress={progress}
+          activeSlot={activeSlot}
+          previewDigit={previewDigit}
+        />
       ) : error ? (
         <p className="font-body text-2xl text-wrong">{error}</p>
       ) : (
