@@ -173,7 +173,7 @@ def request_code():
             "host_puck_id": puck_id,
             "started": False,
             "session_code": None,
-            "players": {},  # populated on confirm, not on request
+            "players": {},  # host added on confirm; joiners added below.
             "dials_in_progress": {puck_id: [None] * 6},
             "expires_at": _now() + _TTL_SECONDS,
         }
@@ -183,6 +183,18 @@ def request_code():
         role = "host" if _LOBBY["host_puck_id"] == puck_id else "joiner"
         _LOBBY["dials_in_progress"].setdefault(puck_id, [None] * 6)
         is_first = False
+
+    # Joiners skip the dial-confirm step entirely — adding to the lobby on
+    # request is the entire join action. The host still has to dial+confirm
+    # so the TV can mirror the code in the air.
+    joiner_added = False
+    if role == "joiner" and puck_id not in _LOBBY["players"]:
+        _LOBBY["players"][puck_id] = {
+            "color": color_hex,
+            "color_name": color_name,
+            "joined_at": _now(),
+        }
+        joiner_added = True
 
     if _socketio is not None:
         # Title-screen browsers waiting in 'lobby' room jump to the
@@ -198,6 +210,22 @@ def request_code():
             room="lobby",
         )
 
+        # If a joiner was just added, broadcast player_joined to the pair
+        # room so the LobbyScreen shows the new avatar without waiting for
+        # a confirm that will never come.
+        if joiner_added:
+            _socketio.emit(
+                "player_joined",
+                {
+                    "puck_id": puck_id,
+                    "color": color_hex,
+                    "color_name": color_name,
+                    "role": role,
+                    "players": _lobby_snapshot()["players"],
+                },
+                room=_LOBBY["code"],
+            )
+
     return jsonify({
         "pair_code": _LOBBY["code"],
         "role": role,
@@ -206,6 +234,9 @@ def request_code():
         "host_puck_id": _LOBBY["host_puck_id"],
         "players": _lobby_snapshot()["players"],
         "expires_at": _LOBBY["expires_at"],
+        # Joiners get the lobby_code on request so the puck can jump
+        # straight to LOBBY_WAITING with no dial step.
+        "lobby_code": _LOBBY["code"] if role == "joiner" else None,
     })
 
 
@@ -411,6 +442,57 @@ def clear_lobby_endpoint():
     return jsonify({"ok": True})
 
 
+@pair_bp.route("/cancel", methods=["POST"])
+def cancel_lobby():
+    """Player-initiated lobby cancel via HOLD_3S on the puck.
+
+    - If the host cancels: kill the whole lobby, emit lobby_cancelled to
+      the pair room so all joiners (and the TV) bounce back to title.
+    - If a joiner cancels: remove just that joiner from the lobby and
+      emit player_left so the LobbyScreen can drop their avatar.
+    """
+    global _LOBBY
+    _purge_lobby_if_expired()
+    if _LOBBY is None:
+        return jsonify({"ok": True, "noop": True})
+
+    data = request.get_json(silent=True) or {}
+    puck_id_raw = data.get("puck_id")
+    if puck_id_raw is None:
+        return jsonify({"error": "puck_id required"}), 400
+    puck_id = int(puck_id_raw)
+
+    if _LOBBY["started"]:
+        return jsonify({"error": "match_in_progress"}), 409
+
+    code = _LOBBY["code"]
+    is_host = _LOBBY["host_puck_id"] == puck_id
+
+    if is_host:
+        if _socketio is not None:
+            _socketio.emit(
+                "lobby_cancelled",
+                {"by_puck_id": puck_id, "reason": "host_cancelled"},
+                room=code,
+            )
+        _clear_lobby()
+        return jsonify({"ok": True, "scope": "lobby"})
+
+    # Joiner: drop just this puck.
+    _LOBBY["players"].pop(puck_id, None)
+    _LOBBY["dials_in_progress"].pop(puck_id, None)
+    if _socketio is not None:
+        _socketio.emit(
+            "player_left",
+            {
+                "puck_id": puck_id,
+                "players": _lobby_snapshot()["players"],
+            },
+            room=code,
+        )
+    return jsonify({"ok": True, "scope": "self"})
+
+
 # ============================================================================
 # Speed Pyramid v1.1 endpoints (unchanged from previous slice)
 # ============================================================================
@@ -584,6 +666,7 @@ def sp_load_question(session_code: str):
             "round": next_round,
             "total_rounds": SP_TOTAL_ROUNDS,
             "started_at": started_at,
+            "expected_pucks": sorted(state["expected_pucks"]),
         }
     )
 
@@ -689,11 +772,15 @@ def sp_reset(session_code: str):
     return jsonify({"ok": True, "session_code": session_code})
 
 
-def _maybe_emit_reveal(session_code: str) -> bool:
+def _maybe_emit_reveal(session_code: str, force: bool = False) -> bool:
     """If every expected puck has locked an answer for the current
     round (or if explicitly force-revealed), emit the aggregate reveal
     event and update cumulative scores. Returns True if reveal was
-    emitted now, False if still waiting."""
+    emitted now, False if still waiting.
+
+    When `force=True` (called from the force-reveal endpoint on timer
+    expiry), skip the wait-for-all gate and proceed straight to filling
+    TIMEOUT entries for any silent puck."""
     state = _sp_state_for(session_code)
     qid = state["current_question_id"]
     if qid is None:
@@ -703,7 +790,7 @@ def _maybe_emit_reveal(session_code: str) -> bool:
 
     expected = state["expected_pucks"] or set()
     answers = state["current_round_answers"]
-    if expected and not all(pid in answers for pid in expected):
+    if not force and expected and not all(pid in answers for pid in expected):
         return False  # still waiting on someone
 
     # Determine the correct answer once for this question.
@@ -771,7 +858,7 @@ def sp_force_reveal(session_code: str):
     state = _sp_state_for(session_code)
     if state["current_question_id"] is None:
         return jsonify({"ok": False, "reason": "no current question"}), 400
-    emitted = _maybe_emit_reveal(session_code)
+    emitted = _maybe_emit_reveal(session_code, force=True)
     return jsonify({"ok": True, "emitted": emitted})
 
 

@@ -18,6 +18,16 @@ interface MatchStartedEvent {
   players: LobbyPlayer[]
 }
 
+interface PlayerLeftEvent {
+  puck_id: number
+  players: LobbyPlayer[]
+}
+
+interface LobbyCancelledEvent {
+  by_puck_id: number
+  reason: string
+}
+
 /**
  * Lobby screen — what's on the TV between "first puck paired" and
  * "host taps start". Shows:
@@ -70,13 +80,24 @@ export default function LobbyScreen() {
       const qs = isDemo ? `?demo=1&puck_id=${puckId}` : ''
       navigate(`/countdown/${p.session_code}${qs}`)
     }
+    function onPlayerLeft(p: PlayerLeftEvent) {
+      setPlayers(p.players)
+    }
+    function onLobbyCancelled(_p: LobbyCancelledEvent) {
+      // Host bailed — kick everyone back to title.
+      navigate('/', { replace: true })
+    }
 
     socket.on('player_joined', onPlayerJoined)
     socket.on('match_started', onMatchStarted)
+    socket.on('player_left', onPlayerLeft)
+    socket.on('lobby_cancelled', onLobbyCancelled)
 
     return () => {
       socket.off('player_joined', onPlayerJoined)
       socket.off('match_started', onMatchStarted)
+      socket.off('player_left', onPlayerLeft)
+      socket.off('lobby_cancelled', onLobbyCancelled)
     }
   }, [lobbyCode, navigate, isDemo, puckId])
 
@@ -163,7 +184,7 @@ export default function LobbyScreen() {
             ): tap your puck to start
           </span>
           <span className="text-text/40">
-            Other players: hold your puck button + dial the code above to join
+            Other players: hold your puck button for 1 second to join
           </span>
         </motion.div>
       ) : null}

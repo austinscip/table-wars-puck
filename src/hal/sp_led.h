@@ -39,6 +39,24 @@ inline CRGB color_wrong()   { return CRGB(0xEF, 0x44, 0x44); }
 inline CRGB color_text()    { return CRGB(0xF8, 0xFA, 0xFC); }
 inline CRGB color_host()    { return CRGB(0x60, 0xA5, 0xFA); }  // softer blue
 
+// Per-puck identity color — mirrors PUCK_COLORS in server/pair_routes.py
+// and --color-puck-N tokens in speed-pyramid index.css. Server stays the
+// source-of-truth; this exists so the puck LED can self-tint before the
+// pair/request response is in hand (and during pair-mode glow / idle).
+inline CRGB color_for_puck(int puck_id) {
+  switch (puck_id) {
+    case 1: return CRGB(0x3B, 0x82, 0xF6); // blue
+    case 2: return CRGB(0xEC, 0x48, 0x99); // pink
+    case 3: return CRGB(0xFB, 0xBF, 0x24); // gold
+    case 4: return CRGB(0x10, 0xB9, 0x81); // green
+    case 5: return CRGB(0xA8, 0x55, 0xF7); // purple
+    case 6: return CRGB(0xF9, 0x73, 0x16); // orange
+    case 7: return CRGB(0x06, 0xB6, 0xD4); // cyan
+    case 8: return CRGB(0xEF, 0x44, 0x44); // red
+    default: return CRGB(0xF8, 0xFA, 0xFC); // white fallback
+  }
+}
+
 inline void clear() {
   fill_solid(_leds, SP_NUM_LEDS, CRGB::Black);
   FastLED.show();

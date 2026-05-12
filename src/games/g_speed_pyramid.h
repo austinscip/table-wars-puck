@@ -55,6 +55,7 @@ inline int _current_question_id = -1;
 inline uint32_t _question_started_at_ms = 0;  // millis() when puck saw it
 inline uint32_t _question_time_limit_ms = 10000;
 inline uint32_t _last_poll_ms = 0;
+inline uint32_t _last_dial_tap_ms = 0;  // for post-TAP input lockout in PAIR_DIALING
 
 // Track the last quadrant we mirrored to the server during answering
 // so we only POST when it actually changes (network is expensive, the
@@ -62,32 +63,37 @@ inline uint32_t _last_poll_ms = 0;
 inline char _last_preview_letter = 0;
 
 inline void _show_pair_mode_glow() {
-  // Soft rotating dot in --host palette so the player knows they're
-  // in pair mode but no digit is being dialed yet.
+  // Soft rotating dot in this puck's identity color so the player knows
+  // they're in pair / idle mode AND can tell which puck they're holding
+  // at a glance (matches the TV avatar color).
   static uint32_t last_step = 0;
   static uint8_t pos = 0;
   if (millis() - last_step < 100) return;
   last_step = millis();
   pos = (pos + 1) % 16;
+  const CRGB c = sp_led::color_for_puck(PUCK_ID);
   for (int i = 0; i < 16; ++i) {
-    if (i == pos) {
-      FastLED.leds()[i] = sp_led::color_host();
-    } else {
-      FastLED.leds()[i] = sp_led::color_host();
-      FastLED.leds()[i].fadeToBlackBy(240);
-    }
+    FastLED.leds()[i] = c;
+    if (i != pos) FastLED.leds()[i].fadeToBlackBy(240);
   }
   FastLED.show();
 }
 
-// Request a fresh pair code by POST /api/pair/request. Doesn't read the
-// returned code on the puck side (the TV displays it); just confirms
-// the server is ready before letting the player dial.
-inline bool _request_pair_code() {
+// Forward-declare _extract_string (defined further down) so _request_pair_code
+// can parse role + pair_code out of the response.
+inline bool _extract_string(const String& json, const char* key, String* out);
+
+// Request a fresh pair code by POST /api/pair/request. Captures the
+// role + lobby_code from the response so callers can short-circuit
+// joiners straight to LOBBY_WAITING.
+inline bool _request_pair_code(String* role_out, String* lobby_code_out) {
   String body = "{\"puck_id\":" + String(PUCK_ID) + "}";
   String resp;
   const int code = sp_net::post_json("/api/pair/request", body, &resp);
-  return code == 200;
+  if (code != 200) return false;
+  if (role_out) _extract_string(resp, "role", role_out);
+  if (lobby_code_out) _extract_string(resp, "pair_code", lobby_code_out);
+  return true;
 }
 
 inline bool _post_dial(uint8_t index, uint8_t digit) {
@@ -147,6 +153,13 @@ inline bool _post_confirm_v2(String* lobby_code_out, bool* is_host_out) {
 inline bool _post_start() {
   String body = "{\"puck_id\":" + String(PUCK_ID) + "}";
   return sp_net::post_json("/api/pair/start", body, nullptr) == 200;
+}
+
+// v2 /api/pair/cancel — HOLD_3S in lobby/pair. Host kills the lobby
+// for everyone; joiner just drops themselves.
+inline bool _post_cancel() {
+  String body = "{\"puck_id\":" + String(PUCK_ID) + "}";
+  return sp_net::post_json("/api/pair/cancel", body, nullptr) == 200;
 }
 
 // Poll /api/pair/lobby-state. Returns true if the match has started and
@@ -325,18 +338,31 @@ inline bool pair_mode_loop() {
     if (be == SpButtonEvent::HOLD_1S) {
       _state = State::PAIR_REQUESTING;
       sp_feedback::beep(1500, 60);
-      sp_led::flash(sp_led::color_host(), 100);
-      if (_request_pair_code()) {
-        _state = State::PAIR_DIALING;
-        _dial_pos = 0;
-        _current_digit = 0;
-        // "Pair mode active" confirmation: brief gold flash + happy
-        // beep so the user knows their hold succeeded BEFORE seeing
-        // the (less-obvious) digit display.
+      sp_led::flash(sp_led::color_for_puck(PUCK_ID), 100);
+      String role;
+      String lobby_code;
+      if (_request_pair_code(&role, &lobby_code)) {
+        // "Pair mode active" confirmation flash + beep.
         sp_led::flash(sp_led::color_correct(), 200);
         sp_feedback::beep(1800, 120);
-        sp_led::show_dial_digit(_current_digit);
-        _post_preview(_dial_pos, _current_digit);
+
+        if (role == "joiner") {
+          // Joiners skip the dial entirely — server already added them
+          // to the lobby on /request. Jump straight to LOBBY_WAITING.
+          Serial.printf("[PAIR] joiner -> LOBBY_WAITING lobby=%s\n",
+                        lobby_code.c_str());
+          _lobby_code = lobby_code;
+          _is_host = false;
+          _state = State::LOBBY_WAITING;
+          _last_lobby_poll_ms = 0;
+        } else {
+          // Host: dial the 6 digits, then confirm.
+          _state = State::PAIR_DIALING;
+          _dial_pos = 0;
+          _current_digit = 0;
+          sp_led::show_dial_digit(_current_digit);
+          _post_preview(_dial_pos, _current_digit);
+        }
       } else {
         _state = State::IDLE;
         sp_led::flash(sp_led::color_wrong(), 150);
@@ -347,7 +373,15 @@ inline bool pair_mode_loop() {
   }
 
   if (_state == State::PAIR_DIALING) {
-    const SpTiltEvent tilt = sp_imu::poll_tilt();
+    // Post-TAP input lockout: pressing the button physically jolts the
+    // puck, which generates spurious IMU tilts AND a finger pulse can
+    // double-trigger the button. Block all dial input for a short window
+    // after each TAP so the physical impulse can settle out.
+    const uint32_t kPostTapLockoutMs = 500;
+    const bool in_lockout = (_last_dial_tap_ms != 0) &&
+                            (millis() - _last_dial_tap_ms < kPostTapLockoutMs);
+
+    const SpTiltEvent tilt = in_lockout ? SpTiltEvent::NONE : sp_imu::poll_tilt();
     if (tilt == SpTiltEvent::UP) {
       _current_digit = (_current_digit + 1) % 10;
       sp_led::show_dial_digit(_current_digit);
@@ -362,7 +396,8 @@ inline bool pair_mode_loop() {
       _post_preview(_dial_pos, _current_digit);
     }
 
-    if (be == SpButtonEvent::TAP) {
+    if (!in_lockout && be == SpButtonEvent::TAP) {
+      _last_dial_tap_ms = millis();
       _dial_digits[_dial_pos] = _current_digit;
       _post_dial(_dial_pos, _current_digit);
       sp_feedback::lock_in();
@@ -393,10 +428,20 @@ inline bool pair_mode_loop() {
       }
     }
 
-    // Note: previously HOLD_3S cancelled mid-dial. Removed because in
-    // practice users hold the button longer than they think while
-    // staring at the LED, and the cancel was firing constantly. To
-    // restart pair mode now, just power-cycle the puck.
+    // HOLD_3S mid-dial cancels and releases the lobby. (Removed once
+    // for accidental fires; re-added in v2E because the joiner cancel
+    // path is the same gesture and consistency wins. If accidents
+    // resurface, gate by "only after first digit dialed" later.)
+    if (be == SpButtonEvent::HOLD_3S) {
+      Serial.println("[PAIR] HOLD_3S mid-dial -> cancel");
+      _post_cancel();
+      sp_led::flash(sp_led::color_wrong(), 250);
+      sp_feedback::wrong();
+      _state = State::IDLE;
+      _dial_pos = 0;
+      _current_digit = 0;
+      return true;
+    }
     return true;
   }
 
@@ -413,6 +458,19 @@ inline bool pair_mode_loop() {
   // LOBBY_WAITING state (v2)
   // -----------------------------
   if (_state == State::LOBBY_WAITING) {
+    // Any puck: HOLD_3S cancels (host kills the lobby, joiner leaves).
+    if (be == SpButtonEvent::HOLD_3S) {
+      Serial.printf("[LOBBY] HOLD_3S cancel (host=%d)\n", _is_host ? 1 : 0);
+      _post_cancel();
+      sp_led::flash(sp_led::color_wrong(), 250);
+      sp_feedback::wrong();
+      _state = State::IDLE;
+      _lobby_code = "";
+      _is_host = false;
+      _session_code = "";
+      return true;
+    }
+
     // Host: tap-to-start.
     if (_is_host && be == SpButtonEvent::TAP) {
       Serial.println("[LOBBY] host TAP -> /api/pair/start");
@@ -500,13 +558,11 @@ inline bool pair_mode_loop() {
       // ring goes dark.
       sp_led::show_quadrant(ring_q, sp_led::color_primary());
 
-      // Timeout: no answer submitted. Server-side, the browser's
-      // client-side safety net turns this into a TIMEOUT reveal. On
-      // the puck we play the wrong-answer feedback so the player
-      // gets the same physical cue as a wrong tap.
+      // Timeout: no answer submitted. Drop to LOCKED quietly — no
+      // wrong-answer cue yet (that would leak the outcome before the
+      // reveal phase). Reveal-time feedback will fire from
+      // IN_GAME_LOCKED once the server's reveal is published.
       if (remaining == 0) {
-        sp_led::flash(sp_led::color_wrong(), 400);
-        sp_feedback::wrong();
         _state = State::IN_GAME_LOCKED;
         sp_led::clear();
         _last_preview_letter = 0;
@@ -520,20 +576,14 @@ inline bool pair_mode_loop() {
           // No commitable tilt -- short reject buzz.
           sp_feedback::beep(400, 60);
         } else {
+          // Neutral lock-in feedback only — no correct/wrong cue yet.
+          // The puck doesn't reveal its result until everyone has
+          // locked in (or the timer expires) so players can't see
+          // each other's outcome by watching neighbour pucks.
           sp_feedback::lock_in();
-          bool is_correct = false;
-          if (_post_answer(letter, elapsed, &is_correct)) {
-            if (is_correct) {
-              sp_led::flash(sp_led::color_correct(), 500);
-              sp_feedback::correct();
-            } else {
-              sp_led::flash(sp_led::color_wrong(), 400);
-              sp_feedback::wrong();
-            }
-          } else {
-            // Transport error — visible but non-fatal.
-            sp_led::flash(sp_led::color_wrong(), 200);
-          }
+          sp_led::flash(sp_led::color_for_puck(PUCK_ID), 300);
+          bool is_correct = false;  // discarded — see comment above
+          _post_answer(letter, elapsed, &is_correct);
           _state = State::IN_GAME_LOCKED;
         }
       }

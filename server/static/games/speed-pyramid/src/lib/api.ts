@@ -81,6 +81,7 @@ export interface LoadQuestionResponse {
   round: number
   total_rounds: number
   started_at: number
+  expected_pucks?: number[]
 }
 
 export const api = {

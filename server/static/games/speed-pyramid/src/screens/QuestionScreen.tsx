@@ -95,58 +95,128 @@ export default function QuestionScreen() {
 
   useEffect(() => {
     if (!sessionCode) return
+    const sc = sessionCode  // narrow once for inner closures
     const socket = getSocket()
-    socket.emit('join_session_room', { session_code: sessionCode })
+    socket.emit('join_session_room', { session_code: sc })
+    // Defensive: re-join the room on every (re)connect so a flapping
+    // socket doesn't drop us out of the broadcast room and miss the
+    // reveal / question_show events that drive the match forward.
+    function onConnect() {
+      socket.emit('join_session_room', { session_code: sc })
+    }
+    socket.on('connect', onConnect)
 
-    function onQuestionShow(p: QuestionShowEvent) {
-      if (p.session_code !== sessionCode) return
-      setQuestion(p.question)
-      setRound(p.round)
-      setTotalRounds(p.total_rounds)
-      setStartedAt(p.started_at)
+    // Single place that schedules the next-question advance. Called by
+    // both the reveal socket event AND the force-reveal POST response,
+    // so a missed socket event can't strand the match. Replaces any
+    // pending advance timer so we never queue two.
+    function scheduleAdvanceToNextQuestion() {
+      if (advanceTimerRef.current) window.clearTimeout(advanceTimerRef.current)
+      advanceTimerRef.current = window.setTimeout(() => {
+        advanceTimerRef.current = null
+        api.sp
+          .loadQuestion(sc)
+          .then((resp) => {
+            applyQuestionShown({
+              question: resp.question,
+              round: resp.round,
+              total_rounds: resp.total_rounds,
+              started_at: resp.started_at,
+              expected_pucks: resp.expected_pucks,
+            })
+          })
+          .catch(() => navigate(`/scoreboard/${sc}`))
+      }, REVEAL_HOLD_MS)
+    }
+
+    // Single code path for "we have a new question to show" — fired by
+    // either the question_show socket event (primary) or the
+    // load-question REST response (fallback when the socket missed it).
+    // Idempotent: re-applying the same question_id is a no-op for the
+    // visible state and replaces any prior force-reveal timer.
+    function applyQuestionShown(args: {
+      question: SpeedPyramidQuestion
+      round: number
+      total_rounds: number
+      started_at: number
+      expected_pucks?: number[]
+    }) {
+      setQuestion((cur) => {
+        if (cur && cur.id === args.question.id) return cur
+        return args.question
+      })
+      setRound(args.round)
+      setTotalRounds(args.total_rounds)
+      setStartedAt(args.started_at)
       setPhase('answering')
       setReveal(null)
       lastTickRef.current = -1
       audio.questionShow()
 
-      // Initialize lanes — one per expected puck. Preserve cumulative
-      // totals across rounds.
-      setLanes((prev) => {
-        const next: Record<number, PlayerLane> = {}
-        for (const pid of p.expected_pucks) {
-          next[pid] = {
-            puck_id: pid,
-            color: prev[pid]?.color ?? '#F8FAFC',
-            preview: null,
-            locked: null,
-            reveal: null,
-            cumulative: prev[pid]?.cumulative ?? 0,
+      if (args.expected_pucks && args.expected_pucks.length) {
+        setLanes((prev) => {
+          const next: Record<number, PlayerLane> = {}
+          for (const pid of args.expected_pucks!) {
+            next[pid] = {
+              puck_id: pid,
+              color: prev[pid]?.color ?? '#F8FAFC',
+              preview: null,
+              locked: null,
+              reveal: null,
+              cumulative: prev[pid]?.cumulative ?? 0,
+            }
           }
-        }
-        return next
-      })
+          return next
+        })
+      } else {
+        // No expected_pucks in this payload — just reset per-lane round
+        // state, preserve color + cumulative.
+        setLanes((prev) => {
+          const next: Record<number, PlayerLane> = {}
+          for (const pid of Object.keys(prev).map(Number)) {
+            next[pid] = { ...prev[pid], preview: null, locked: null, reveal: null }
+          }
+          return next
+        })
+      }
 
-      // Schedule a force-reveal call slightly after the timer's
-      // nominal expiry. The server's _maybe_emit_reveal is idempotent
-      // — if all pucks have already answered, it does nothing.
       if (forceRevealTimerRef.current) window.clearTimeout(forceRevealTimerRef.current)
-      const elapsedMs = Math.max(0, Date.now() - p.started_at * 1000)
-      const remainingMs = Math.max(500, p.question.time_limit * 1000 - elapsedMs + 800)
+      const elapsedMs = Math.max(0, Date.now() - args.started_at * 1000)
+      const remainingMs = Math.max(500, args.question.time_limit * 1000 - elapsedMs + 800)
       forceRevealTimerRef.current = window.setTimeout(() => {
         forceRevealTimerRef.current = null
-        void api.sp.forceReveal(sessionCode).catch(() => {})
+        api.sp.forceReveal(sc)
+          .then(() => {
+            // Belt-and-suspenders: schedule the advance ourselves even
+            // if the socket `reveal` event is missed. onReveal also sets
+            // this same timer — whichever fires first wins, second is
+            // a no-op because the question_id advances and the load
+            // call is idempotent.
+            scheduleAdvanceToNextQuestion()
+          })
+          .catch(() => {})
       }, remainingMs)
 
-      // Demo-mode auto-answer (single-puck demo flow).
-      if (isDemo && !demoAnsweredRef.current.has(p.question.id)) {
-        demoAnsweredRef.current.add(p.question.id)
+      if (isDemo && !demoAnsweredRef.current.has(args.question.id)) {
+        demoAnsweredRef.current.add(args.question.id)
         const letters = ['A', 'B', 'C', 'D'] as const
         window.setTimeout(() => {
           const a = letters[Math.floor(Math.random() * 4)]
-          const elapsed = Math.max(0, Date.now() - p.started_at * 1000)
-          void api.sp.answer(sessionCode, demoPuckId, p.question.id, a, Math.round(elapsed))
+          const elapsed = Math.max(0, Date.now() - args.started_at * 1000)
+          void api.sp.answer(sc, demoPuckId, args.question.id, a, Math.round(elapsed))
         }, 1200 + Math.random() * 1800)
       }
+    }
+
+    function onQuestionShow(p: QuestionShowEvent) {
+      if (p.session_code !== sessionCode) return
+      applyQuestionShown({
+        question: p.question,
+        round: p.round,
+        total_rounds: p.total_rounds,
+        started_at: p.started_at,
+        expected_pucks: p.expected_pucks,
+      })
     }
 
     function onAnswerLocked(p: AnswerLockedEvent) {
@@ -205,11 +275,7 @@ export default function QuestionScreen() {
         if (anyCorrect) audio.correct()
         else audio.wrong()
       }, 120)
-      // Auto-advance after the hold.
-      if (advanceTimerRef.current) window.clearTimeout(advanceTimerRef.current)
-      advanceTimerRef.current = window.setTimeout(() => {
-        api.sp.loadQuestion(sessionCode).catch(() => navigate(`/scoreboard/${sessionCode}`))
-      }, REVEAL_HOLD_MS)
+      scheduleAdvanceToNextQuestion()
     }
 
     function onMatchEnded() {
@@ -222,9 +288,23 @@ export default function QuestionScreen() {
     socket.on('reveal', onReveal)
     socket.on('match_ended', onMatchEnded)
 
-    api.sp.loadQuestion(sessionCode).catch(() => {})
+    // Initial load — also apply the response inline so the very first
+    // question never depends on the socket event arriving in time.
+    api.sp
+      .loadQuestion(sessionCode)
+      .then((resp) => {
+        applyQuestionShown({
+          question: resp.question,
+          round: resp.round,
+          total_rounds: resp.total_rounds,
+          started_at: resp.started_at,
+          expected_pucks: resp.expected_pucks,
+        })
+      })
+      .catch(() => {})
 
     return () => {
+      socket.off('connect', onConnect)
       socket.off('question_show', onQuestionShow)
       socket.off('answer_locked', onAnswerLocked)
       socket.off('answer_preview', onAnswerPreview)
