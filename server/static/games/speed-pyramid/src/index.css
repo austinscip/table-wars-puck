@@ -14,6 +14,19 @@
   --color-wrong: #EF4444;
   --color-text: #F8FAFC;
 
+  /* Per-puck identity palette — mirrors PUCK_COLORS in server/pair_routes.py.
+   * Use puck_id (1..8) to index. Anything that renders a player avatar,
+   * sidebar lane, or scoreboard row should pull from these tokens so the
+   * server stays the single source-of-truth for color identity. */
+  --color-puck-1: #3B82F6; /* blue */
+  --color-puck-2: #EC4899; /* pink */
+  --color-puck-3: #FBBF24; /* gold */
+  --color-puck-4: #10B981; /* green */
+  --color-puck-5: #A855F7; /* purple */
+  --color-puck-6: #F97316; /* orange */
+  --color-puck-7: #06B6D4; /* cyan */
+  --color-puck-8: #EF4444; /* red */
+
   --font-display: "Anton", system-ui, sans-serif;
   --font-body: "Inter", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
