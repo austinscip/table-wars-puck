@@ -1,0 +1,11 @@
+# Dev-only dependencies. Not deployed to prod.
+#
+# Install with: pip install -r requirements-dev.txt
+#               playwright install chromium
+#
+# These power the sandbox e2e smoke test
+# (scripts/e2e_smoke.py). The point of running them in a real browser
+# is to catch failures that wiring-only assertions miss — silent audio
+# playback, autoplay-blocked SFX, stale TV bundles, etc.
+
+playwright>=1.40.0
