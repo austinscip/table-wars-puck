@@ -588,6 +588,51 @@ def sp_load_question(session_code: str):
             {"error": "match_complete", "rounds": SP_TOTAL_ROUNDS}
         ), 409
 
+    # Idempotency: if a question is already active for this round (set
+    # but not yet revealed), return that question instead of advancing.
+    # Two concurrent callers (e.g. the TV's mount-time load + a polling
+    # client) would otherwise double-increment the round counter and
+    # cause the match to appear to start on round 2 with answers landing
+    # on stale question IDs (=> server returns 409 => puck registers as
+    # TIMEOUT). See docs/adr/0002 + Virtual Puck Hub prototype notes.
+    cur_qid = state.get("current_question_id")
+    revealed_qid = state.get("revealed_for_question_id")
+    if cur_qid is not None and cur_qid != revealed_qid:
+        ph = get_placeholder()
+        existing_q = execute_query(
+            f"SELECT * FROM trivia_questions WHERE id = {ph}",
+            (cur_qid,),
+            fetch_one=True,
+        )
+        if existing_q:
+            cat = execute_query(
+                f"SELECT name, emoji FROM trivia_categories WHERE id = {ph}",
+                (existing_q["category_id"],),
+                fetch_one=True,
+            )
+            return jsonify({
+                "round": state["round"],
+                "total_rounds": SP_TOTAL_ROUNDS,
+                "question": {
+                    "id": existing_q["id"],
+                    "setup": existing_q["setup_text"],
+                    "question": existing_q["question_text"],
+                    "answers": {
+                        "A": existing_q["answer_a"],
+                        "B": existing_q["answer_b"],
+                        "C": existing_q["answer_c"],
+                        "D": existing_q["answer_d"],
+                    },
+                    "difficulty": existing_q["difficulty"],
+                    "time_limit": existing_q["time_limit"] or 10,
+                    "category": cat["name"] if cat else "",
+                    "category_emoji": cat["emoji"] if cat else "",
+                },
+                "started_at": state.get("current_round_started_at"),
+                "expected_pucks": list(state.get("expected_pucks") or []),
+                "is_final": state["round"] >= SP_TOTAL_ROUNDS,
+            })
+
     next_round = state["round"] + 1
     difficulty = _difficulty_for_round(next_round)
     exclude = list(state["asked_ids"]) or None
