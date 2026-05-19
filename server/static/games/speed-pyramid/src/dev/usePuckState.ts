@@ -251,6 +251,40 @@ export function usePuckState(puck_id: number) {
     [puck_id],
   )
 
+  // Atomic pick-and-lock for the variants' single-click ABCD buttons.
+  // Doing selectAnswer() then tap() in two calls is racy: setState is
+  // async, so tap reads the stale stateRef.pending and posts 'A'
+  // regardless of what the user clicked. This action takes the letter
+  // directly so the POST always reflects the click.
+  const lockAnswer = useCallback(
+    async (letter: Letter) => {
+      const cur = stateRef.current
+      if (cur.kind !== 'IN_GAME_ANSWERING') return
+      const elapsed_ms = Math.max(0, Date.now() - cur.started_at)
+      // Optimistic preview so other clients see the chosen letter.
+      setState({ ...cur, pending: letter })
+      void POST('/api/trivia/answer-preview', {
+        session_code: cur.session_code,
+        puck_id,
+        answer: letter,
+      })
+      await POST('/api/sp/answer', {
+        session_code: cur.session_code,
+        puck_id,
+        question_id: cur.question_id,
+        answer: letter,
+        response_time_ms: Math.round(elapsed_ms),
+      })
+      setState({
+        kind: 'IN_GAME_LOCKED',
+        session_code: cur.session_code,
+        question_id: cur.question_id,
+        chosen: letter,
+      })
+    },
+    [puck_id],
+  )
+
   // Category picker (only available if this puck is the picker).
   const pickCategory = useCallback(
     async (category_id: number) => {
@@ -294,7 +328,11 @@ export function usePuckState(puck_id: number) {
         const ms = await GET<MatchStateResp>(`/api/sp/match-state/${sc}`)
         if (!cancelled && ms?.complete) {
           setState({ kind: 'MATCH_ENDED', session_code: sc })
-          return
+          // Fall through so polling keeps ticking. After "Play again"
+          // (tap in MATCH_ENDED) the puck transitions to IN_GAME_IDLE
+          // and the next tick needs to detect the new question. If we
+          // `return`ed here the timer would die and the second match
+          // would never advance past the lobby state.
         }
         // Then check current question. If active and we're not already
         // answering it, transition into ANSWERING.
@@ -312,7 +350,10 @@ export function usePuckState(puck_id: number) {
               question_id: cq.question_id,
               started_at: (cq.started_at ?? Date.now() / 1000) * 1000,
             })
-            return
+            // Fall through to schedule next tick. An earlier version
+            // `return`ed here, which killed the polling timer — the
+            // puck never noticed Q2 because the effect only re-runs on
+            // [puck_id] change. Hub Q2 lock was unreachable.
           }
         }
         // NOTE: pucks must NOT POST /api/sp/load-question. That endpoint
@@ -333,14 +374,33 @@ export function usePuckState(puck_id: number) {
         )
         if (cancelled) return
         if (!cq?.active || cq.question_id !== cur.question_id) {
-          // Question changed or ended without us answering. Server treats
-          // us as TIMEOUT; we drop to LOCKED to wait for the next round.
-          setState({
-            kind: 'IN_GAME_LOCKED',
-            session_code: sc,
-            question_id: cur.question_id,
-            chosen: cur.pending ?? 'A',
-          })
+          // Server says active=false. Either the question rotated, OR
+          // the match ended while we were mid-answer. Use the `complete`
+          // flag the server includes on a complete-match response to
+          // skip straight to MATCH_ENDED instead of LOCKED.
+          if (cq && (cq as { complete?: boolean }).complete) {
+            setState({ kind: 'MATCH_ENDED', session_code: sc })
+          } else {
+            setState({
+              kind: 'IN_GAME_LOCKED',
+              session_code: sc,
+              question_id: cur.question_id,
+              chosen: cur.pending ?? 'A',
+            })
+          }
+        }
+      } else if (cur.kind === 'MATCH_ENDED') {
+        // Detect a "Play again" issued by another puck. The server's
+        // sp_reset clears SP state + _QUESTION_TRACKER, so match-state
+        // flips back to complete=false. Drop to IN_GAME_IDLE and let
+        // the normal IDLE branch pick up the new question on the next
+        // tick. Without this branch, the joining puck stays stuck on
+        // the final scoreboard while the host has already moved on.
+        const sc = cur.session_code
+        const ms = await GET<MatchStateResp>(`/api/sp/match-state/${sc}`)
+        if (cancelled) return
+        if (ms && ms.complete === false) {
+          setState({ kind: 'IN_GAME_IDLE', session_code: sc })
         }
       }
 
@@ -366,6 +426,7 @@ export function usePuckState(puck_id: number) {
       tilt,
       confirmCode,
       selectAnswer,
+      lockAnswer,
       pickCategory,
     },
   }

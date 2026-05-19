@@ -128,7 +128,7 @@ export default function VariantC({ puck_id, onRemove }: Props) {
                   ? 'bg-yellow-400/30 text-yellow-200'
                   : 'bg-white/5 text-cyan-300 hover:bg-white/10'
               }`}
-              onClick={async () => { actions.selectAnswer(L); await actions.tap() }}
+              onClick={() => actions.lockAnswer(L)}
             >
               ▸ SELECT_ANSWER({L})
             </button>
@@ -143,6 +143,22 @@ export default function VariantC({ puck_id, onRemove }: Props) {
               ▸ PICK_CATEGORY({c.id}, '{c.name}')
             </button>
           ))}
+        {state.kind === 'MATCH_ENDED' && (
+          <>
+            <button
+              className="block w-full rounded bg-cyan-400/30 py-1 text-left text-cyan-100 hover:bg-cyan-400/50"
+              onClick={actions.tap}
+            >
+              ▸ PLAY_AGAIN
+            </button>
+            <button
+              className="block w-full rounded bg-white/5 py-1 text-left text-cyan-300 hover:bg-white/10"
+              onClick={actions.hold3s}
+            >
+              ▸ BACK_TO_START
+            </button>
+          </>
+        )}
       </div>
     </div>
   )

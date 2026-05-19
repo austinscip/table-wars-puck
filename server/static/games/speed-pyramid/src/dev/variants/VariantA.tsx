@@ -114,7 +114,7 @@ export default function VariantA({ puck_id, onRemove }: Props) {
                 ? 'bg-yellow-400 text-black'
                 : 'bg-white/10 hover:bg-white/20'
             }`}
-            onClick={async () => { actions.selectAnswer(L); await actions.tap() }}
+            onClick={() => actions.lockAnswer(L)}
           >
             {L}
           </button>
@@ -154,12 +154,21 @@ export default function VariantA({ puck_id, onRemove }: Props) {
       )}
 
       {state.kind === 'MATCH_ENDED' && (
-        <button
-          className="rounded bg-cyan-400/30 px-2 py-1 text-xs hover:bg-cyan-400/50"
-          onClick={actions.tap}
-        >
-          Play again
-        </button>
+        <>
+          <button
+            className="rounded bg-cyan-400/30 px-2 py-1 text-xs hover:bg-cyan-400/50"
+            onClick={actions.tap}
+          >
+            Play again
+          </button>
+          <button
+            className="rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/20"
+            onClick={actions.hold3s}
+            title="Leave match, return to title"
+          >
+            Back to start
+          </button>
+        </>
       )}
 
       {onRemove && (

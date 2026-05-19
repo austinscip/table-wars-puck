@@ -155,7 +155,7 @@ export default function VariantB({ puck_id, onRemove }: Props) {
                     : 'bg-white/10 hover:bg-white/20'
                   : 'bg-white/5 opacity-50'
               }`}
-              onClick={async () => { actions.selectAnswer(L); await actions.tap() }}
+              onClick={() => actions.lockAnswer(L)}
               disabled={!tiltActive}
             >
               {L}
@@ -192,6 +192,23 @@ export default function VariantB({ puck_id, onRemove }: Props) {
           >
             Confirm {state.pair_code}
           </button>
+        )}
+        {state.kind === 'MATCH_ENDED' && (
+          <>
+            <button
+              className="rounded bg-cyan-400/30 px-3 py-1.5 text-xs hover:bg-cyan-400/50"
+              onClick={actions.tap}
+            >
+              Play again
+            </button>
+            <button
+              className="rounded bg-white/10 px-3 py-1.5 text-xs hover:bg-white/20"
+              onClick={actions.hold3s}
+              title="Leave match, return to title"
+            >
+              Back to start
+            </button>
+          </>
         )}
       </div>
 

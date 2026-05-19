@@ -803,6 +803,11 @@ def sp_reset(session_code: str):
         "cumulative_scores": {},
         "revealed_for_question_id": None,
     }
+    # Drop the cached "currently active question" too. Otherwise polling
+    # /api/sp/current-question after reset returns the LAST question of
+    # the previous match and pucks transition into IN_GAME_ANSWERING for
+    # a stale qid that /api/sp/answer rightly rejects with 409.
+    _QUESTION_TRACKER.pop(session_code, None)
     try:
         import trivia_routes
         trivia_routes._question_start_times.pop(session_code, None)
@@ -1018,6 +1023,14 @@ def sp_answer():
 
 @sp_bp.route("/current-question/<session_code>", methods=["GET"])
 def sp_current_question(session_code: str):
+    # When the match is complete, callers must see active=false so
+    # polling pucks/clients can exit IN_GAME_ANSWERING. _QUESTION_TRACKER
+    # holds the LAST question forever otherwise, and ANSWERING-state
+    # polling has no other signal that the match ended.
+    state = _SP_STATE.get(session_code)
+    if state is not None and state.get("complete"):
+        return jsonify({"active": False, "complete": True})
+
     sst = _QUESTION_TRACKER.get(session_code)
     if not sst:
         return jsonify({"active": False})
