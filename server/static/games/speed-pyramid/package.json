@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:sandbox": "VITE_DEV_TOOLS=1 vite",
     "build": "tsc -b && vite build",
+    "build:sandbox": "VITE_DEV_TOOLS=1 tsc -b && VITE_DEV_TOOLS=1 vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },

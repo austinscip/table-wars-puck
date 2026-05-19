@@ -70,3 +70,13 @@ Authoritative source-of-truth for color, type, and motion across all TV games. L
 
 - **Speed Pyramid** — A YDKJ-style trivia game with speed-tiered scoring: gold 0-3s = 1000pts, silver 3-6s = 500pts, bronze 6-10s = 200pts. Player tilts puck for A/B/C/D, taps to lock in. First sprint target. _Avoid_: Trivia Pyramid (the show), Trivia Speed Round.
 - **State Authority** — The single process that owns the canonical state machine for a Match. For Table Wars: always the Flask server. Pucks and TV Views are dumb clients. _Avoid_: source of truth (used informally elsewhere), master.
+
+## Sandbox / dev tooling
+
+These exist only in the sandbox worktree and are never bundled into a production build.
+
+- **Virtual Puck** — A browser-rendered control panel that POSTs the same `/api/pair/*` and `/api/sp/*` endpoints a Puck's firmware does, used in the sandbox for mouse-only end-to-end testing. Never bundled into prod. _Avoid_: demo mode, dev player, fake puck.
+- **Hub** — The single sandbox page at `/dev/hub` that renders up to 8 Virtual Pucks in a grid. The Hub is not itself a Puck; it's the harness that hosts them. Each Virtual Puck reuses real `PUCK_COLORS[1..8]` server-side, so colors match a real-hardware test. _Avoid_: console, dashboard.
+- **Pragmatic input model** — The convention for Virtual Puck controls: faithful at every endpoint surface (TAP / HOLD_1S / HOLD_3S, tilt N/E/S/W, A/B/C/D in answering mode) except the 6-digit pair-code dial, which is short-circuited to a single "Confirm Code" click that auto-POSTs all 6 `/api/pair/dial` calls + `/api/pair/confirm`. Dial cycling on a mouse carries zero information beyond the auto-call; tilt input still needs to be testable end-to-end because answer-preview bugs are real.
+- **Faithful polling** — The Virtual Puck synchronizes with server state by polling the same endpoints at the same cadence as firmware (`/api/sp/current-question` 500ms, `/api/sp/match-state` 500ms, `/api/pair/lobby-state` 1s). It does NOT subscribe to socket.io events. The Hub itself MAY subscribe to sockets for its read-only meta display (pair code, round number) since the Hub is dev tooling, not a Puck.
+- **VITE_DEV_TOOLS** — Build-time Vite env flag (`import.meta.env.VITE_DEV_TOOLS`). When truthy, the Hub route mounts under `/dev/hub`. When falsy (default for prod builds), the Hub code is tree-shaken out of the bundle. Sandbox builds use `VITE_DEV_TOOLS=1 vite build` (wired as `npm run build:sandbox`); prod builds use plain `vite build`.
