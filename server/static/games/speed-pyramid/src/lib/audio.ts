@@ -46,9 +46,16 @@ function _sample(name: string): HTMLAudioElement | null {
 }
 
 function _playSample(name: string): boolean {
+  // Side-effect: create the element so its 'canplaythrough'/'error'
+  // listeners can flip status. The first call always returns false
+  // (status is 'unknown') so the procedural fallback fires — otherwise
+  // Q1 is silent: play() resolves synchronously, .catch() runs later
+  // and sets 'missing', but by then _play has already skipped the
+  // fallback. Q2 then sees 'missing' and falls through to procedural,
+  // which is why the user heard sound on Q2-Q7 but not Q1.
   const el = _sample(name)
   if (!el) return false
-  if (_sampleStatus.get(name) === 'missing') return false
+  if (_sampleStatus.get(name) !== 'present') return false
   try {
     el.currentTime = 0
     void el.play().catch(() => {

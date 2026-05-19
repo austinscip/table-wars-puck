@@ -133,10 +133,13 @@ def drive_match_to_question(smoke: Smoke) -> tuple[str, int, int]:
 def install_audio_probes(page) -> None:
     """Inject before any page script runs. Monkey-patches the Audio
     constructor and AudioContext so we can read what the TV tried to
-    play and whether play() rejected."""
+    play and whether play() rejected. Also counts oscillator-create
+    events on the procedural Web Audio path — when sample MP3s are
+    missing, those are the only sounds the bar actually hears."""
     page.add_init_script("""
         (() => {
           const events = [];
+          const oscEvents = [];
           const _OrigAudio = window.Audio;
           window.Audio = function(src) {
             const a = new _OrigAudio(src);
@@ -152,11 +155,20 @@ def install_audio_probes(page) -> None:
           const ctxs = [];
           if (_OrigCtx) {
             window.AudioContext = class extends _OrigCtx {
-              constructor(...a) { super(...a); ctxs.push(this); }
+              constructor(...a) {
+                super(...a);
+                ctxs.push(this);
+                const orig = this.createOscillator.bind(this);
+                this.createOscillator = () => {
+                  oscEvents.push({ts: Date.now(), state: this.state});
+                  return orig();
+                };
+              }
             };
           }
           window.__audioEvents = events;
           window.__audioCtxs   = ctxs;
+          window.__oscEvents   = oscEvents;
         })();
     """)
 
@@ -200,7 +212,14 @@ def run() -> int:
     print(f"  session={sc} qid={qid} correct={correct}")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        # Mirror the user's bar-runtime launch flag so AudioContext is
+        # running from page-load. Otherwise headless Chromium suspends
+        # the context indefinitely (no implicit user gesture) and every
+        # audio check fails for environmental, not code, reasons.
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--autoplay-policy=no-user-gesture-required"],
+        )
         ctx = browser.new_context()
         page = ctx.new_page()
         install_audio_probes(page)
@@ -234,11 +253,18 @@ def run() -> int:
         # Give the TV a moment to receive the reveal socket event + play SFX.
         time.sleep(2.0)
         events = page.evaluate("() => window.__audioEvents || []")
-        sfx_plays = [e for e in events if e.get("type") == "play"
-                     and ("/audio/sfx/" in (e.get("src") or ""))]
-        smoke.check("reveal SFX play event fired",
-                    bool(sfx_plays),
-                    f"sfx_plays={sfx_plays[:3]}")
+        oscs = page.evaluate("() => window.__oscEvents || []")
+        # Sound on reveal can come from either layer: a sample MP3 play
+        # event, OR a procedural oscillator-create event (the fallback
+        # when the MP3 is missing). The bar hears one or the other —
+        # the check should accept either.
+        sample_plays = [e for e in events if e.get("type") == "play"
+                        and "/audio/sfx_" in (e.get("src") or "")
+                        and ".mp3" in (e.get("src") or "")]
+        proc_plays = [o for o in oscs if o.get("state") == "running"]
+        smoke.check("reveal SFX play event fired (sample or procedural)",
+                    bool(sample_plays) or bool(proc_plays),
+                    f"sample_plays={len(sample_plays)} procedural_running={len(proc_plays)}")
 
         # Commentary visibility on the question screen during reveal.
         body_text = page.evaluate("() => document.body.innerText")
