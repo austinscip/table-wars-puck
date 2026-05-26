@@ -76,12 +76,27 @@ export interface SpeedPyramidQuestion {
   category_emoji: string
 }
 
+export interface CategoryOffer {
+  id: number
+  name: string
+  emoji: string
+  question_count: number
+}
+
 export interface LoadQuestionResponse {
-  question: SpeedPyramidQuestion
+  // Question payload (most common case).
+  question?: SpeedPyramidQuestion
   audio_url?: string | null
+  // Slice E1: when the server is in the category-pick phase, these
+  // fields are set INSTEAD of question. Callers branch on `phase`.
+  phase?: 'category_pick' | 'minigame'
+  picker_puck_id?: number
+  offer?: CategoryOffer[]
+  deadline_at?: number
+  // Always present.
   round: number
   total_rounds: number
-  started_at: number
+  started_at?: number
   expected_pucks?: number[]
 }
 
@@ -164,6 +179,15 @@ export const api = {
       postJson<{ ok: boolean; started_at: number }>(
         `/api/sp/start-timer/${session_code}`,
         {},
+      ),
+    selectCategory: (
+      session_code: string,
+      puck_id: number,
+      category_id: number,
+    ) =>
+      postJson<{ ok: boolean; category_id: number }>(
+        `/api/sp/select-category/${session_code}`,
+        { puck_id, category_id },
       ),
   },
 }

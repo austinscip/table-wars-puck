@@ -63,6 +63,13 @@ interface MatchStateResp {
   complete: boolean
   round?: number
   total_rounds?: number
+  // Slice E1 — set when the server is in a category-pick phase.
+  pending_category_pick?: {
+    picker_puck_id: number
+    offer: CategoryOffer[]
+    deadline_at: number
+    started_at: number
+  } | null
 }
 
 // Post helpers — minimal, prototype error handling (swallow + log).
@@ -353,6 +360,34 @@ export function usePuckState(puck_id: number) {
           // and the next tick needs to detect the new question. If we
           // `return`ed here the timer would die and the second match
           // would never advance past the lobby state.
+        }
+        // Slice E1 — if the server is in a category-pick phase,
+        // transition every puck to CATEGORY_PICKING with the offer.
+        // Only the puck whose puck_id matches picker_puck_id will see
+        // its pickCategory action route through; others sit on the
+        // screen and watch (or are unmounted server-side from the
+        // pick once a pick is locked).
+        // No early return: per the pattern set in Slice C fixes,
+        // setState then fall through so the polling timer at the
+        // bottom keeps scheduling — otherwise the puck would be
+        // pinned in CATEGORY_PICKING forever once it entered.
+        const pp = ms?.pending_category_pick
+        if (!cancelled && pp) {
+          const already =
+            cur.kind === 'CATEGORY_PICKING' &&
+            cur.offer.length === pp.offer.length &&
+            cur.offer.every((c, i) => c.id === pp.offer[i].id)
+          if (!already) {
+            setState({
+              kind: 'CATEGORY_PICKING',
+              session_code: sc,
+              offer: pp.offer,
+            })
+          }
+        } else if (!cancelled && cur.kind === 'CATEGORY_PICKING' && !pp) {
+          // Pick resolved — drop to IN_GAME_IDLE; the next tick picks
+          // up the new question via current-question.
+          setState({ kind: 'IN_GAME_IDLE', session_code: sc })
         }
         // Then check current question. If active and we're not already
         // answering it, transition into ANSWERING.

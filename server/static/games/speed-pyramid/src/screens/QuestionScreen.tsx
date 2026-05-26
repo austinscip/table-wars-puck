@@ -125,12 +125,20 @@ export default function QuestionScreen() {
         api.sp
           .loadQuestion(sc)
           .then((resp) => {
+            // Slice E1: server may return a category-pick phase
+            // instead of a question. Hand off to CategoryPickScreen;
+            // that screen navigates back here once the pick is locked.
+            if (resp.phase === 'category_pick') {
+              navigate(`/category-pick/${sc}`, { replace: true })
+              return
+            }
+            if (!resp.question) return
             applyQuestionShown({
               question: resp.question,
               audio_url: resp.audio_url,
               round: resp.round,
               total_rounds: resp.total_rounds,
-              started_at: resp.started_at,
+              started_at: resp.started_at ?? Date.now() / 1000,
               expected_pucks: resp.expected_pucks,
             })
           })
@@ -404,12 +412,20 @@ export default function QuestionScreen() {
     api.sp
       .loadQuestion(sessionCode)
       .then((resp) => {
+        // Slice E1: if the very first load lands on a category pick
+        // (round 1 always does, given SP_PICK_ROUNDS = {1,3,5,7}),
+        // redirect to the picker screen.
+        if (resp.phase === 'category_pick') {
+          navigate(`/category-pick/${sessionCode}`, { replace: true })
+          return
+        }
+        if (!resp.question) return
         applyQuestionShown({
           question: resp.question,
           audio_url: resp.audio_url,
           round: resp.round,
           total_rounds: resp.total_rounds,
-          started_at: resp.started_at,
+          started_at: resp.started_at ?? Date.now() / 1000,
           expected_pucks: resp.expected_pucks,
         })
       })

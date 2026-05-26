@@ -562,6 +562,10 @@ def _sp_state_for(session_code: str) -> dict:
             "current_round_answers": {},
             "cumulative_scores": {},
             "revealed_for_question_id": None,
+            # Slice E1 — category picker state.
+            "pending_category_pick": None,    # {picker_puck_id, offer, deadline_at, started_at}
+            "next_category_id": None,         # set when picker locks an offer; consumed by next load-question
+            "last_round_winner_puck_id": None,# tracked at reveal; drives subsequent picks
         }
         _SP_STATE[session_code] = state
     elif "expected_pucks" not in state:
@@ -572,7 +576,92 @@ def _sp_state_for(session_code: str) -> dict:
         state.setdefault("current_round_answers", {})
         state.setdefault("cumulative_scores", {})
         state.setdefault("revealed_for_question_id", None)
+    # Slice E1 fields can be missing on pre-E1 in-memory sessions.
+    state.setdefault("pending_category_pick", None)
+    state.setdefault("next_category_id", None)
+    state.setdefault("last_round_winner_puck_id", None)
     return state
+
+
+# Slice E1 — category picker policy.
+# Picks fire BEFORE these question rounds (where state["round"] is the
+# round about to start, i.e. next_round after increment).
+SP_PICK_ROUNDS = {1, 3, 5, 7}
+SP_PICK_OFFER_SIZE = 3
+SP_PICK_TIMEOUT_SEC = 10.0
+
+
+def _eligible_categories_for_pick(difficulty: str, asked_ids: set) -> list[dict]:
+    """Return categories that still have at least one unused question at
+    the requested difficulty. Caller picks SP_PICK_OFFER_SIZE at random."""
+    ph = get_placeholder()
+    placeholders = ",".join(["?"] * (len(asked_ids) or 1))
+    exclude = list(asked_ids) if asked_ids else [-1]
+    rows = execute_query(
+        f"SELECT c.id, c.name, c.emoji, COUNT(q.id) AS remaining "
+        f"FROM trivia_categories c "
+        f"JOIN trivia_questions q ON q.category_id = c.id "
+        f"WHERE q.difficulty = {ph} AND q.id NOT IN ({placeholders}) "
+        f"GROUP BY c.id "
+        f"HAVING remaining > 0 "
+        f"ORDER BY c.id",
+        tuple([difficulty] + exclude),
+        fetch_all=True,
+    ) or []
+    return [
+        {"id": r["id"], "name": r["name"], "emoji": r["emoji"] or "",
+         "question_count": int(r["remaining"])}
+        for r in rows
+    ]
+
+
+def _build_pick_offer(state: dict, next_round: int) -> dict:
+    """Compose the {picker_puck_id, offer, deadline_at, started_at}
+    record for an upcoming pick. Picker rules: round-1 has no prior
+    winner, so the lowest expected puck_id picks; otherwise the round-N
+    winner picks for the next pick round (per user decision)."""
+    import random as _random
+    expected = sorted(state.get("expected_pucks") or {1})
+    if next_round == 1 or not state.get("last_round_winner_puck_id"):
+        picker = expected[0] if expected else 1
+    else:
+        picker = int(state["last_round_winner_puck_id"])
+        # Fall back to lowest expected if the prior winner is gone.
+        if picker not in expected and expected:
+            picker = expected[0]
+    difficulty = _difficulty_for_round(next_round)
+    pool = _eligible_categories_for_pick(difficulty, state.get("asked_ids") or set())
+    if not pool:
+        # Fallback: any category with any question left.
+        pool = _eligible_categories_for_pick("medium", state.get("asked_ids") or set())
+    _random.shuffle(pool)
+    offer = pool[:SP_PICK_OFFER_SIZE]
+    now = _now()
+    return {
+        "picker_puck_id": int(picker),
+        "offer": offer,
+        "started_at": now,
+        "deadline_at": now + SP_PICK_TIMEOUT_SEC,
+    }
+
+
+def _maybe_auto_resolve_pick(state: dict) -> bool:
+    """If pending_category_pick has expired with no selection, lock in
+    the first offer. Returns True if auto-resolved."""
+    pp = state.get("pending_category_pick")
+    if not pp:
+        return False
+    if _now() < pp.get("deadline_at", 0):
+        return False
+    offer = pp.get("offer") or []
+    if not offer:
+        # No offers to default to — clear and let next load-question
+        # produce a question without a category filter.
+        state["pending_category_pick"] = None
+        return True
+    state["next_category_id"] = int(offer[0]["id"])
+    state["pending_category_pick"] = None
+    return True
 
 
 def _difficulty_for_round(r: int) -> str:
@@ -627,6 +716,60 @@ def sp_load_question(session_code: str):
             {"error": "match_complete", "rounds": SP_TOTAL_ROUNDS}
         ), 409
 
+    # Slice E1 — category pick phase.
+    # Before each pick-round (state["round"]+1 in SP_PICK_ROUNDS), the
+    # winner of the previous question round picks a category from a
+    # random offer. The pick phase blocks the question advance until
+    # /api/sp/select-category is called OR the 10-second deadline
+    # expires (auto-default to the first offer).
+    next_round = state["round"] + 1
+    pp = state.get("pending_category_pick")
+    if next_round in SP_PICK_ROUNDS and state.get("next_category_id") is None:
+        if pp:
+            # Auto-resolve if the picker missed the deadline. Then fall
+            # through to the question advance using the defaulted
+            # next_category_id.
+            if _maybe_auto_resolve_pick(state):
+                pp = None
+            else:
+                # Still pending — re-emit so reconnecting clients can
+                # rejoin the pick screen, and return the phase payload.
+                return jsonify({
+                    "phase": "category_pick",
+                    "picker_puck_id": pp["picker_puck_id"],
+                    "offer": pp["offer"],
+                    "deadline_at": pp["deadline_at"],
+                    "started_at": pp["started_at"],
+                    "round": next_round,
+                    "total_rounds": SP_TOTAL_ROUNDS,
+                })
+        else:
+            # Open a new pick phase.
+            pp = _build_pick_offer(state, next_round)
+            state["pending_category_pick"] = pp
+            if _socketio is not None:
+                _socketio.emit(
+                    "category_offer",
+                    {
+                        "session_code": session_code,
+                        "picker_puck_id": pp["picker_puck_id"],
+                        "offer": pp["offer"],
+                        "deadline_at": pp["deadline_at"],
+                        "started_at": pp["started_at"],
+                        "round": next_round,
+                    },
+                    room=session_code,
+                )
+            return jsonify({
+                "phase": "category_pick",
+                "picker_puck_id": pp["picker_puck_id"],
+                "offer": pp["offer"],
+                "deadline_at": pp["deadline_at"],
+                "started_at": pp["started_at"],
+                "round": next_round,
+                "total_rounds": SP_TOTAL_ROUNDS,
+            })
+
     # Idempotency: if a question is already active for this round (set
     # but not yet revealed), return that question instead of advancing.
     # Two concurrent callers (e.g. the TV's mount-time load + a polling
@@ -676,7 +819,27 @@ def sp_load_question(session_code: str):
     next_round = state["round"] + 1
     difficulty = _difficulty_for_round(next_round)
     exclude = list(state["asked_ids"]) or None
-    q = get_random_question(difficulty=difficulty, exclude_ids=exclude)
+    # Slice E1: if a category was picked in the preceding pick phase,
+    # filter the random draw to that category. Consume the field so
+    # subsequent rounds don't keep using the same category until the
+    # next pick fires.
+    forced_category_id = state.get("next_category_id")
+    state["next_category_id"] = None
+    if forced_category_id is not None:
+        q = get_random_question(
+            difficulty=difficulty,
+            exclude_ids=exclude,
+            category_id=forced_category_id,
+        )
+        if not q:
+            # Out of questions at this difficulty for that category —
+            # try any difficulty.
+            q = get_random_question(
+                exclude_ids=exclude,
+                category_id=forced_category_id,
+            )
+    else:
+        q = get_random_question(difficulty=difficulty, exclude_ids=exclude)
     if not q:
         q = get_random_question(exclude_ids=exclude)
     if not q:
@@ -776,6 +939,19 @@ def sp_match_state(session_code: str):
                 "complete": False,
             }
         )
+    # Slice E1: surface the pending category pick so polling pucks
+    # transition into CATEGORY_PICKING without needing to POST
+    # load-question (load-question advances state; pucks must remain
+    # read-only against round transitions per ADR-0002).
+    pp = state.get("pending_category_pick")
+    pick_payload = None
+    if pp:
+        pick_payload = {
+            "picker_puck_id": pp["picker_puck_id"],
+            "offer": pp["offer"],
+            "deadline_at": pp["deadline_at"],
+            "started_at": pp["started_at"],
+        }
     return jsonify(
         {
             "exists": True,
@@ -783,6 +959,7 @@ def sp_match_state(session_code: str):
             "total_rounds": SP_TOTAL_ROUNDS,
             "questions_asked": len(state["asked_ids"]),
             "complete": bool(state.get("complete", False)),
+            "pending_category_pick": pick_payload,
         }
     )
 
@@ -927,6 +1104,18 @@ def _maybe_emit_reveal(session_code: str, force: bool = False) -> bool:
     for pid, a in answers.items():
         state["cumulative_scores"][pid] = state["cumulative_scores"].get(pid, 0) + int(a["points"])
 
+    # Slice E1: track this round's winner (highest points, ties broken
+    # by lowest puck_id). The next category-pick phase will hand the
+    # decision to this puck. Rounds where nobody earned points fall
+    # back to the lowest expected puck_id (set in _build_pick_offer).
+    best_pid, best_pts = None, -1
+    for pid, a in answers.items():
+        pts = int(a["points"])
+        if pts > best_pts or (pts == best_pts and (best_pid is None or pid < best_pid)):
+            best_pid, best_pts = pid, pts
+    if best_pid is not None and best_pts > 0:
+        state["last_round_winner_puck_id"] = best_pid
+
     # Reveal payload is sorted by puck_id ascending. This is the TIE-
     # BREAKER policy: when two pucks earn the same points in a round
     # (same tier, same answer correctness), the lower-numbered puck
@@ -969,6 +1158,47 @@ def _maybe_emit_reveal(session_code: str, force: bool = False) -> bool:
             room=session_code,
         )
     return True
+
+
+@sp_bp.route("/select-category/<session_code>", methods=["POST"])
+def sp_select_category(session_code: str):
+    """Slice E1 — picker locks a category from the pending offer.
+
+    Body: {puck_id, category_id}. Validates that puck_id matches the
+    designated picker and category_id is in the current offer. On
+    success: stash next_category_id, clear pending_category_pick,
+    emit category_picked socket. The next /api/sp/load-question call
+    consumes next_category_id to filter the question draw."""
+    data = request.get_json(silent=True) or {}
+    try:
+        puck_id = int(data.get("puck_id"))
+        category_id = int(data.get("category_id"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "reason": "bad puck_id/category_id"}), 400
+    state = _SP_STATE.get(session_code)
+    if state is None:
+        return jsonify({"ok": False, "reason": "no session"}), 404
+    pp = state.get("pending_category_pick")
+    if not pp:
+        return jsonify({"ok": False, "reason": "no pending pick"}), 409
+    if puck_id != pp["picker_puck_id"]:
+        return jsonify({"ok": False, "reason": "not the picker"}), 403
+    valid_ids = {int(o["id"]) for o in pp.get("offer") or []}
+    if category_id not in valid_ids:
+        return jsonify({"ok": False, "reason": "category not in offer"}), 400
+    state["next_category_id"] = category_id
+    state["pending_category_pick"] = None
+    if _socketio is not None:
+        _socketio.emit(
+            "category_picked",
+            {
+                "session_code": session_code,
+                "picker_puck_id": puck_id,
+                "category_id": category_id,
+            },
+            room=session_code,
+        )
+    return jsonify({"ok": True, "category_id": category_id})
 
 
 @sp_bp.route("/start-timer/<session_code>", methods=["POST"])

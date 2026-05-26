@@ -6,6 +6,7 @@ import LobbyScreen from './screens/LobbyScreen'
 import CountdownScreen from './screens/CountdownScreen'
 import QuestionScreen from './screens/QuestionScreen'
 import ScoreboardScreen from './screens/ScoreboardScreen'
+import CategoryPickScreen from './screens/CategoryPickScreen'
 import { audio } from './lib/audio'
 import { getSocket } from './lib/socket'
 
@@ -130,6 +131,7 @@ export default function App() {
         <Route path="/pair" element={<PairScreen />} />
         <Route path="/lobby/:lobbyCode" element={<LobbyScreen />} />
         <Route path="/countdown/:sessionCode" element={<CountdownScreen />} />
+        <Route path="/category-pick/:sessionCode" element={<CategoryPickScreen />} />
         <Route path="/question/:sessionCode" element={<QuestionScreen />} />
         <Route path="/scoreboard/:sessionCode" element={<ScoreboardScreen />} />
         {Hub && (

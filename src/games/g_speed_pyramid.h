@@ -33,10 +33,19 @@ enum class State : uint8_t {
   PAIRED,             // brief celebration before dropping to LOBBY_WAITING
   LOBBY_WAITING,      // v2: joined lobby, waiting for host to start
   IN_GAME_IDLE,       // session bound, no question active yet
+  IN_GAME_CATEGORY_PICKING,  // Slice E1: picker is choosing 1 of 3 offers
   IN_GAME_ANSWERING,  // question active, tilt-aim + tap
   IN_GAME_LOCKED,     // tap fired, awaiting server reveal
   MATCH_ENDED,        // all 7 rounds done — TAP=PlayAgain, HOLD_3S=NewPlayer
 };
+
+// Slice E1 — category pick state. _pick_offer_ids holds up to 3
+// category IDs; _pick_idx is the currently-aimed index; _pick_picker
+// is the puck_id that's allowed to commit the pick.
+inline int  _pick_offer_ids[3] = {0, 0, 0};
+inline int  _pick_picker = 0;
+inline int  _pick_idx = 0;
+inline char _last_pick_quadrant = 0;
 
 inline State _state = State::IDLE;
 inline uint8_t _dial_digits[6] = {0, 0, 0, 0, 0, 0};
@@ -215,6 +224,54 @@ inline bool _poll_match_state_complete() {
   bool complete = false;
   _extract_bool(body, "complete", &complete);
   return complete;
+}
+
+// Slice E1 — peek into match-state for a pending category-pick phase.
+// Sets _pick_picker and _pick_offer_ids[0..2] (zero-padded for short
+// offers). Returns true if a pick is pending.
+inline bool _poll_pending_pick() {
+  if (_session_code.length() == 0) return false;
+  String path = "/api/sp/match-state/" + _session_code;
+  String body;
+  const int code = sp_net::get_json(path.c_str(), &body);
+  if (code != 200) return false;
+  const int pp_at = body.indexOf("\"pending_category_pick\":");
+  if (pp_at < 0) return false;
+  // null sentinel after the key means no pending pick.
+  int probe = pp_at + 24;
+  while (probe < (int)body.length() && (body[probe] == ' ' || body[probe] == '\t')) probe++;
+  if (probe < (int)body.length() && body[probe] == 'n') return false;  // "null"
+  // Parse picker_puck_id (first match wins — only one in pending block).
+  int picker = 0;
+  if (!_extract_int(body.substring(pp_at), "picker_puck_id", &picker)) return false;
+  _pick_picker = picker;
+  // Parse up to 3 "id":N occurrences within the pending block. The
+  // pending block is delimited by the outer match-state object — good
+  // enough since no other "id" field exists at top-level of
+  // match-state.
+  String slice = body.substring(pp_at);
+  for (int k = 0; k < 3; k++) _pick_offer_ids[k] = 0;
+  int cursor = 0;
+  for (int k = 0; k < 3; k++) {
+    int hit = slice.indexOf("\"id\":", cursor);
+    if (hit < 0) break;
+    String tail = slice.substring(hit);
+    int v = 0;
+    if (!_extract_int(tail, "id", &v)) break;
+    _pick_offer_ids[k] = v;
+    cursor = hit + 5;
+  }
+  return _pick_offer_ids[0] > 0;
+}
+
+// POST /api/sp/select-category. Returns true on 200.
+inline bool _post_select_category(int category_id) {
+  if (_session_code.length() == 0) return false;
+  String body =
+      String("{\"puck_id\":") + PUCK_ID +
+      ",\"category_id\":" + category_id + "}";
+  String path = "/api/sp/select-category/" + _session_code;
+  return sp_net::post_json(path.c_str(), body, nullptr) == 200;
 }
 
 // POST /api/sp/reset/<session_code>. Clears the round counter for a
@@ -505,14 +562,18 @@ inline bool pair_mode_loop() {
   // In-game state machine (slice 1C)
   // -----------------------------
   if (_state == State::IN_GAME_IDLE ||
+      _state == State::IN_GAME_CATEGORY_PICKING ||
       _state == State::IN_GAME_ANSWERING ||
       _state == State::IN_GAME_LOCKED) {
 
-    // Poll for active question every 500ms while idle / locked. Also
-    // check match-state to detect end-of-match (server's explicit
-    // `complete` flag, set only after the post-Q7 load attempt fails).
+    // Poll for active question every 500ms while idle / locked / pick.
+    // Also check match-state to detect end-of-match (server's explicit
+    // `complete` flag, set only after the post-Q7 load attempt fails)
+    // and to detect a pending category-pick phase (Slice E1).
     const uint32_t now = millis();
-    if ((_state == State::IN_GAME_IDLE || _state == State::IN_GAME_LOCKED) &&
+    if ((_state == State::IN_GAME_IDLE ||
+         _state == State::IN_GAME_LOCKED ||
+         _state == State::IN_GAME_CATEGORY_PICKING) &&
         now - _last_poll_ms > 500) {
       _last_poll_ms = now;
 
@@ -521,10 +582,65 @@ inline bool pair_mode_loop() {
         _state = State::MATCH_ENDED;
         sp_led::victory_sweep(1500);
         sp_feedback::victory();
+      } else if (_poll_pending_pick()) {
+        // Server is in a category-pick phase. Every puck visits this
+        // state, but only the picker can commit. The pick_offer_ids
+        // and pick_picker were populated by _poll_pending_pick.
+        if (_state != State::IN_GAME_CATEGORY_PICKING) {
+          Serial.print("[STATE] -> IN_GAME_CATEGORY_PICKING picker=");
+          Serial.println(_pick_picker);
+          _state = State::IN_GAME_CATEGORY_PICKING;
+          _pick_idx = 0;
+          _last_pick_quadrant = 0;
+        }
+      } else if (_state == State::IN_GAME_CATEGORY_PICKING) {
+        // Pick was resolved (server cleared pending_category_pick).
+        // Drop to IN_GAME_IDLE so the next tick picks up the question.
+        Serial.println("[STATE] IN_GAME_CATEGORY_PICKING -> IN_GAME_IDLE");
+        _state = State::IN_GAME_IDLE;
+        sp_led::clear();
       } else if (_poll_current_question()) {
         Serial.println("[STATE] IN_GAME_IDLE -> IN_GAME_ANSWERING");
         _state = State::IN_GAME_ANSWERING;
       }
+    }
+
+    // Picker interaction: tilt LEFT/RIGHT scrolls offer index, tap
+    // commits the selected category. Non-pickers idle visually.
+    if (_state == State::IN_GAME_CATEGORY_PICKING) {
+      if (PUCK_ID == _pick_picker) {
+        const SpQuadrant q = sp_imu::read_quadrant();
+        const char ql = _quadrant_to_letter(q);
+        // Treat RIGHT as next, LEFT as prev. Up/Down ignored. Edge-
+        // trigger on quadrant changes so a held-tilt doesn't auto-
+        // scroll.
+        if (ql != _last_pick_quadrant) {
+          if (ql == 'B' && _pick_idx < 2 && _pick_offer_ids[_pick_idx + 1] > 0) {
+            _pick_idx++;
+            sp_feedback::beep(900, 30);
+          } else if (ql == 'D' && _pick_idx > 0) {
+            _pick_idx--;
+            sp_feedback::beep(900, 30);
+          }
+          _last_pick_quadrant = ql;
+        }
+        // Render: LED ring shows _pick_idx as a colored arc (3 slots).
+        sp_led::show_quadrant(_pick_idx, sp_led::color_accent());
+        if (be == SpButtonEvent::TAP) {
+          const int chosen = _pick_offer_ids[_pick_idx];
+          if (chosen > 0) {
+            sp_feedback::lock_in();
+            if (_post_select_category(chosen)) {
+              _state = State::IN_GAME_IDLE;
+              sp_led::clear();
+            }
+          }
+        }
+      } else {
+        // Not the picker — just glow softly while waiting.
+        _show_pair_mode_glow();
+      }
+      return true;
     }
 
     if (_state == State::IN_GAME_ANSWERING) {
