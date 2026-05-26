@@ -576,14 +576,19 @@ inline bool pair_mode_loop() {
           // No commitable tilt -- short reject buzz.
           sp_feedback::beep(400, 60);
         } else {
-          // Neutral lock-in feedback only — no correct/wrong cue yet.
-          // The puck doesn't reveal its result until everyone has
-          // locked in (or the timer expires) so players can't see
-          // each other's outcome by watching neighbour pucks.
+          // Lock-in + immediate per-player correct/wrong cue. Earlier
+          // builds suppressed the result here to avoid neighbour-peek,
+          // but per-player feedback at the moment of commit is more
+          // valuable than that mild leak — and in a real bar the puck
+          // sits in the player's hand, not on a shared surface, so the
+          // beep isn't broadcast.
           sp_feedback::lock_in();
           sp_led::flash(sp_led::color_for_puck(PUCK_ID), 300);
-          bool is_correct = false;  // discarded — see comment above
-          _post_answer(letter, elapsed, &is_correct);
+          bool is_correct = false;
+          if (_post_answer(letter, elapsed, &is_correct)) {
+            if (is_correct) sp_feedback::correct();
+            else sp_feedback::wrong();
+          }
           _state = State::IN_GAME_LOCKED;
         }
       }

@@ -301,12 +301,25 @@ export default function QuestionScreen() {
         }
         return next
       })
-      audio.reveal()
-      const anyCorrect = p.results.some((r) => r.is_correct)
-      window.setTimeout(() => {
-        if (anyCorrect) audio.correct()
-        else audio.wrong()
-      }, 120)
+      // Hybrid reveal audio: only the unanimous-correct or unanimous-
+      // wrong cases get the chord (audio.correct / audio.wrong). Mixed
+      // outcomes play the neutral reveal stinger only — playing
+      // audio.correct() when some pucks lost (or audio.wrong() when
+      // some pucks won) reads as "the room won/lost" and steps on the
+      // per-puck reveal lanes. The 140ms stinger inside the unanimous
+      // paths used to overlap the chord 120ms later — drop it there
+      // and keep it only as the mixed-case neutral beat.
+      const allCorrect =
+        p.results.length > 0 && p.results.every((r) => r.is_correct)
+      const allWrong =
+        p.results.length > 0 && p.results.every((r) => !r.is_correct)
+      if (allCorrect) {
+        audio.correct()
+      } else if (allWrong) {
+        audio.wrong()
+      } else {
+        audio.reveal()
+      }
       scheduleAdvanceToNextQuestion()
     }
 
