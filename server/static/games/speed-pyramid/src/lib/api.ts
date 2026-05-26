@@ -78,6 +78,7 @@ export interface SpeedPyramidQuestion {
 
 export interface LoadQuestionResponse {
   question: SpeedPyramidQuestion
+  audio_url?: string | null
   round: number
   total_rounds: number
   started_at: number
@@ -154,6 +155,11 @@ export const api = {
     forceReveal: (session_code: string) =>
       postJson<{ ok: boolean; emitted: boolean }>(
         `/api/sp/force-reveal/${session_code}`,
+        {},
+      ),
+    startTimer: (session_code: string) =>
+      postJson<{ ok: boolean; started_at: number }>(
+        `/api/sp/start-timer/${session_code}`,
         {},
       ),
   },

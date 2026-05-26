@@ -568,6 +568,14 @@ def _difficulty_for_round(r: int) -> str:
     return "hard"
 
 
+def _narration_url(question_id: int) -> str:
+    """Canonical narration MP3 path for a question. The file may not
+    exist on disk (TTS generation is a separate content task); the TV
+    treats a 404 as 'no narration', shows the question silently, and
+    falls back to procedural SFX for the lock/reveal beats."""
+    return f"/static/games/speed-pyramid/audio/questions/q_{question_id}.mp3"
+
+
 @sp_bp.route("/load-question/<session_code>", methods=["POST"])
 def sp_load_question(session_code: str):
     state = _sp_state_for(session_code)
@@ -628,6 +636,7 @@ def sp_load_question(session_code: str):
                     "category": cat["name"] if cat else "",
                     "category_emoji": cat["emoji"] if cat else "",
                 },
+                "audio_url": _narration_url(existing_q["id"]),
                 "started_at": state.get("current_round_started_at"),
                 "expected_pucks": list(state.get("expected_pucks") or []),
                 "is_final": state["round"] >= SP_TOTAL_ROUNDS,
@@ -683,6 +692,7 @@ def sp_load_question(session_code: str):
             {
                 "session_code": session_code,
                 "question": payload_question,
+                "audio_url": _narration_url(q["id"]),
                 "round": next_round,
                 "total_rounds": SP_TOTAL_ROUNDS,
                 "started_at": started_at,
@@ -708,6 +718,7 @@ def sp_load_question(session_code: str):
     return jsonify(
         {
             "question": payload_question,
+            "audio_url": _narration_url(q["id"]),
             "round": next_round,
             "total_rounds": SP_TOTAL_ROUNDS,
             "started_at": started_at,
@@ -843,14 +854,17 @@ def _maybe_emit_reveal(session_code: str, force: bool = False) -> bool:
     if not force and expected and not all(pid in answers for pid in expected):
         return False  # still waiting on someone
 
-    # Determine the correct answer once for this question.
+    # Determine the correct answer + host commentary for this question.
     ph = get_placeholder()
     q = execute_query(
-        f"SELECT correct_answer FROM trivia_questions WHERE id = {ph}",
+        f"SELECT correct_answer, host_commentary_correct, host_commentary_wrong "
+        f"FROM trivia_questions WHERE id = {ph}",
         (qid,),
         fetch_one=True,
     )
     correct_answer = q["correct_answer"] if q else None
+    commentary_correct = (q["host_commentary_correct"] if q else None) or ""
+    commentary_wrong = (q["host_commentary_wrong"] if q else None) or ""
 
     # Fill TIMEOUT entries for any expected puck that didn't answer.
     for pid in expected:
@@ -894,11 +908,45 @@ def _maybe_emit_reveal(session_code: str, force: bool = False) -> bool:
                 "session_code": session_code,
                 "question_id": qid,
                 "correct_answer": correct_answer,
+                "commentary_correct": commentary_correct,
+                "commentary_wrong": commentary_wrong,
                 "results": results,
             },
             room=session_code,
         )
     return True
+
+
+@sp_bp.route("/start-timer/<session_code>", methods=["POST"])
+def sp_start_timer(session_code: str):
+    """Mark the question countdown as starting NOW. Decouples the timer
+    from question-load so the TV can pause the countdown during the
+    narration MP3 and call this when narration ends (or errors). Without
+    this handoff the 15s clock starts ticking while the host is still
+    reading the setup.
+
+    Idempotent: calling repeatedly just refreshes started_at. Returns
+    400 if no current question.
+    """
+    state = _SP_STATE.get(session_code)
+    if state is None or state.get("current_question_id") is None:
+        return jsonify({"ok": False, "reason": "no current question"}), 400
+    now = _now()
+    state["current_round_started_at"] = now
+    tracker = _QUESTION_TRACKER.get(session_code)
+    if tracker is not None:
+        tracker["started_at"] = now
+    if _socketio is not None:
+        _socketio.emit(
+            "timer_started",
+            {
+                "session_code": session_code,
+                "question_id": state["current_question_id"],
+                "started_at": now,
+            },
+            room=session_code,
+        )
+    return jsonify({"ok": True, "started_at": now})
 
 
 @sp_bp.route("/force-reveal/<session_code>", methods=["POST"])

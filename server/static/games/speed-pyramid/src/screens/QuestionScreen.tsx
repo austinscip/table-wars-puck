@@ -12,6 +12,7 @@ type Phase = 'awaiting_question' | 'answering' | 'reveal'
 interface QuestionShowEvent {
   session_code: string
   question: SpeedPyramidQuestion
+  audio_url?: string | null
   round: number
   total_rounds: number
   started_at: number
@@ -48,6 +49,8 @@ interface RevealEvent {
   session_code: string
   question_id: number
   correct_answer: 'A' | 'B' | 'C' | 'D'
+  commentary_correct?: string
+  commentary_wrong?: string
   results: RevealResult[]
 }
 
@@ -119,6 +122,7 @@ export default function QuestionScreen() {
           .then((resp) => {
             applyQuestionShown({
               question: resp.question,
+              audio_url: resp.audio_url,
               round: resp.round,
               total_rounds: resp.total_rounds,
               started_at: resp.started_at,
@@ -136,6 +140,7 @@ export default function QuestionScreen() {
     // visible state and replaces any prior force-reveal timer.
     function applyQuestionShown(args: {
       question: SpeedPyramidQuestion
+      audio_url?: string | null
       round: number
       total_rounds: number
       started_at: number
@@ -152,6 +157,32 @@ export default function QuestionScreen() {
       setReveal(null)
       lastTickRef.current = -1
       audio.questionShow()
+
+      // Narration handoff: play the question MP3 (if present) and only
+      // start the answer countdown when the narration ends. If the MP3
+      // 404s, errors out, or never resolves, start the timer immediately
+      // so the question isn't stuck in narration-pending forever.
+      if (args.audio_url) {
+        const a = new Audio(args.audio_url)
+        a.preload = 'auto'
+        let timerStarted = false
+        const handoff = () => {
+          if (timerStarted) return
+          timerStarted = true
+          void api.sp.startTimer(sc).catch(() => {})
+        }
+        a.addEventListener('ended', handoff)
+        a.addEventListener('error', handoff)
+        // Belt-and-suspenders: even if 'ended' never fires, start the
+        // timer after the audio's full duration (or a 1s ceiling for
+        // missing files where duration is NaN).
+        void a.play().catch(handoff)
+        window.setTimeout(handoff, 1000 + (a.duration > 0 ? a.duration * 1000 : 0))
+      } else {
+        // No narration this round — start the timer immediately so the
+        // server-tracked started_at reflects the visible countdown.
+        void api.sp.startTimer(sc).catch(() => {})
+      }
 
       if (args.expected_pucks && args.expected_pucks.length) {
         setLanes((prev) => {
@@ -212,6 +243,7 @@ export default function QuestionScreen() {
       if (p.session_code !== sessionCode) return
       applyQuestionShown({
         question: p.question,
+        audio_url: p.audio_url,
         round: p.round,
         total_rounds: p.total_rounds,
         started_at: p.started_at,
@@ -295,6 +327,7 @@ export default function QuestionScreen() {
       .then((resp) => {
         applyQuestionShown({
           question: resp.question,
+          audio_url: resp.audio_url,
           round: resp.round,
           total_rounds: resp.total_rounds,
           started_at: resp.started_at,
@@ -433,6 +466,33 @@ export default function QuestionScreen() {
                 {reveal.correct_answer} · {question.answers[reveal.correct_answer]}
               </span>
             </motion.p>
+          ) : null}
+        </AnimatePresence>
+
+        {/* Host commentary on reveal. Show the correct-tier line if any
+            puck got it right, the wrong-tier line if any puck got it
+            wrong. Both render when answers were mixed. */}
+        <AnimatePresence>
+          {phase === 'reveal' && reveal ? (
+            <motion.div
+              initial={{ y: 16, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.35, delay: 0.45 }}
+              className="flex flex-col gap-2 font-body text-lg italic text-text/85"
+            >
+              {reveal.commentary_correct &&
+              reveal.results.some((r) => r.is_correct) ? (
+                <span data-testid="commentary-correct" className="text-correct">
+                  {reveal.commentary_correct}
+                </span>
+              ) : null}
+              {reveal.commentary_wrong &&
+              reveal.results.some((r) => !r.is_correct) ? (
+                <span data-testid="commentary-wrong" className="text-wrong">
+                  {reveal.commentary_wrong}
+                </span>
+              ) : null}
+            </motion.div>
           ) : null}
         </AnimatePresence>
       </section>
