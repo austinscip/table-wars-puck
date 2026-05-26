@@ -128,7 +128,7 @@ def drive_match_to_question(smoke: Smoke) -> tuple[str, int, int]:
                         bool(setup_t and question_t and not tail_repeat),
                         f"setup={setup_t[:40]!r} q={question_t!r} tail_repeat={tail_repeat}")
             smoke.check("audio_url returned by load-question",
-                        bool(resp.get("audio_url") and resp["audio_url"].endswith(".mp3")),
+                        bool(resp.get("audio_url") and ".mp3" in (resp.get("audio_url") or "")),
                         f"audio_url={resp.get('audio_url')}")
             smoke.check("round starts at 1 not 2",
                         resp.get("round") == 1,

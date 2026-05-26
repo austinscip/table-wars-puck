@@ -577,60 +577,80 @@ export default function QuestionScreen() {
         </AnimatePresence>
       </section>
 
-      {/* Sidebar */}
-      <aside className="flex w-[clamp(14rem,22vw,22rem)] flex-col gap-3">
+      {/* Sidebar. At >4 players the single-column layout overflows
+          720p TVs; switch to a 2-column grid + wider aside so all 8
+          lanes fit. PUCK_COLORS server-side has 8 entries so the
+          system was always half-designed for this scale. */}
+      <aside
+        className={
+          laneList.length > 4
+            ? 'flex w-[clamp(22rem,36vw,36rem)] flex-col gap-3'
+            : 'flex w-[clamp(14rem,22vw,22rem)] flex-col gap-3'
+        }
+      >
         <span className="font-body text-base font-medium uppercase tracking-widest text-text/40">
           Players
         </span>
-        <AnimatePresence>
-          {laneList.map((lane) => {
-            const r = lane.reveal
-            const stateLabel =
-              r
-                ? `${r.tier}${r.points ? ` +${r.points}` : ''}`
-                : lane.locked
-                ? `LOCKED · ${lane.locked}`
-                : lane.preview
-                ? `aim · ${lane.preview}`
-                : 'thinking…'
-            const stateColorClass = r ? tierColorClass(r.tier) : 'text-text/60'
-            const isWinningLane = phase === 'reveal' && r && r.is_correct
-            return (
-              <motion.div
-                key={lane.puck_id}
-                layout
-                initial={{ y: 10, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: -10, opacity: 0 }}
-                transition={{ duration: 0.25 }}
-                className={`flex items-center gap-3 rounded-2xl border-2 ${
-                  isWinningLane ? 'border-correct' : 'border-text/10'
-                } bg-text/5 px-4 py-3`}
-                style={isWinningLane ? { boxShadow: '0 0 30px rgba(251,191,36,0.4)' } : undefined}
-              >
-                <div
-                  className="flex h-12 w-12 flex-none items-center justify-center rounded-full font-display text-2xl"
-                  style={{ backgroundColor: lane.color, color: '#0A0E1A' }}
+        <div
+          className={
+            laneList.length > 4
+              ? 'grid grid-cols-2 gap-2'
+              : 'flex flex-col gap-3'
+          }
+        >
+          <AnimatePresence>
+            {laneList.map((lane) => {
+              const r = lane.reveal
+              const stateLabel =
+                r
+                  ? `${r.tier}${r.points ? ` +${r.points}` : ''}`
+                  : lane.locked
+                  ? `LOCKED · ${lane.locked}`
+                  : lane.preview
+                  ? `aim · ${lane.preview}`
+                  : 'thinking…'
+              const stateColorClass = r ? tierColorClass(r.tier) : 'text-text/60'
+              const isWinningLane = phase === 'reveal' && r && r.is_correct
+              const compact = laneList.length > 4
+              return (
+                <motion.div
+                  key={lane.puck_id}
+                  layout
+                  initial={{ y: 10, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: -10, opacity: 0 }}
+                  transition={{ duration: 0.25 }}
+                  className={`flex items-center rounded-2xl border-2 ${
+                    isWinningLane ? 'border-correct' : 'border-text/10'
+                  } bg-text/5 ${compact ? 'gap-2 px-2 py-2' : 'gap-3 px-4 py-3'}`}
+                  style={isWinningLane ? { boxShadow: '0 0 30px rgba(251,191,36,0.4)' } : undefined}
                 >
-                  {lane.puck_id}
-                </div>
-                <div className="flex flex-1 flex-col">
-                  <span className="font-body text-base font-bold text-text">
-                    Puck {lane.puck_id}
-                  </span>
-                  <span className={`font-body text-sm ${stateColorClass}`}>
-                    {stateLabel}
-                  </span>
-                </div>
-                <div className="flex-none text-right">
-                  <span className="font-mono text-xl font-bold text-text">
-                    {lane.cumulative.toLocaleString()}
-                  </span>
-                </div>
-              </motion.div>
-            )
-          })}
-        </AnimatePresence>
+                  <div
+                    className={`flex flex-none items-center justify-center rounded-full font-display ${
+                      compact ? 'h-9 w-9 text-lg' : 'h-12 w-12 text-2xl'
+                    }`}
+                    style={{ backgroundColor: lane.color, color: '#0A0E1A' }}
+                  >
+                    {lane.puck_id}
+                  </div>
+                  <div className="flex flex-1 flex-col overflow-hidden">
+                    <span className={`font-body font-bold text-text ${compact ? 'text-sm' : 'text-base'}`}>
+                      Puck {lane.puck_id}
+                    </span>
+                    <span className={`truncate font-body ${stateColorClass} ${compact ? 'text-xs' : 'text-sm'}`}>
+                      {stateLabel}
+                    </span>
+                  </div>
+                  <div className="flex-none text-right">
+                    <span className={`font-mono font-bold text-text ${compact ? 'text-base' : 'text-xl'}`}>
+                      {lane.cumulative.toLocaleString()}
+                    </span>
+                  </div>
+                </motion.div>
+              )
+            })}
+          </AnimatePresence>
+        </div>
         {laneList.length === 0 ? (
           <p className="font-body text-base text-text/50">No players yet…</p>
         ) : null}

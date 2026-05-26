@@ -927,6 +927,17 @@ def _maybe_emit_reveal(session_code: str, force: bool = False) -> bool:
     for pid, a in answers.items():
         state["cumulative_scores"][pid] = state["cumulative_scores"].get(pid, 0) + int(a["points"])
 
+    # Reveal payload is sorted by puck_id ascending. This is the TIE-
+    # BREAKER policy: when two pucks earn the same points in a round
+    # (same tier, same answer correctness), the lower-numbered puck
+    # appears first in the reveal feed and the scoreboard sidebar. The
+    # ordering is deterministic but arbitrary; it's not based on
+    # response_time_ms because Speed Pyramid's scoring already encodes
+    # response time inside the tier bands (LEGENDARY 0-3s vs EXPERT
+    # 3-6s etc.), so identical tier + identical correctness is treated
+    # as a true tie at the per-round level. Final scoreboard sort by
+    # cumulative `total` (ScoreboardScreen.tsx) is the authoritative
+    # ranking; this only affects the per-question reveal order.
     results = [
         {
             "puck_id": pid,

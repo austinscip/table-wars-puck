@@ -74,7 +74,13 @@ export default function ScoreboardScreen() {
       ) : !results ? (
         <p className="font-body text-2xl text-text/60">Tallying scores…</p>
       ) : (
-        <div className="flex w-full max-w-5xl flex-col gap-6">
+        <div
+          className={
+            results.players.length > 4
+              ? 'grid w-full max-w-6xl grid-cols-2 gap-4'
+              : 'flex w-full max-w-5xl flex-col gap-6'
+          }
+        >
           {results.players.length === 0 ? (
             <p className="font-body text-2xl text-text/60">
               No answers recorded.
@@ -85,6 +91,7 @@ export default function ScoreboardScreen() {
               .sort((a, b) => b.total - a.total)
               .map((p, i) => {
                 const isWinner = i === 0 && p.total > 0
+                const compact = results.players.length > 4
                 return (
                   <motion.div
                     key={p.puck_id}
@@ -95,9 +102,9 @@ export default function ScoreboardScreen() {
                       delay: 0.15 * i,
                       ease: [0.34, 1.56, 0.64, 1],
                     }}
-                    className={`flex items-center gap-6 rounded-3xl border-2 ${
+                    className={`flex items-center rounded-3xl border-2 ${
                       isWinner ? 'border-correct' : 'border-text/10'
-                    } bg-text/5 px-8 py-6`}
+                    } bg-text/5 ${compact ? 'gap-3 px-4 py-3' : 'gap-6 px-8 py-6'}`}
                     style={
                       isWinner
                         ? { boxShadow: '0 0 60px rgba(251,191,36,0.5)' }
@@ -105,7 +112,11 @@ export default function ScoreboardScreen() {
                     }
                   >
                     <div
-                      className="flex h-[clamp(4rem,7vw,7rem)] w-[clamp(4rem,7vw,7rem)] flex-none items-center justify-center rounded-full font-display text-[clamp(2rem,3.5vw,3.5rem)]"
+                      className={`flex flex-none items-center justify-center rounded-full font-display ${
+                        compact
+                          ? 'h-[clamp(2.5rem,4vw,4rem)] w-[clamp(2.5rem,4vw,4rem)] text-[clamp(1.25rem,2vw,2rem)]'
+                          : 'h-[clamp(4rem,7vw,7rem)] w-[clamp(4rem,7vw,7rem)] text-[clamp(2rem,3.5vw,3.5rem)]'
+                      }`}
                       style={{
                         backgroundColor: p.color ?? '#F8FAFC',
                         color: '#0A0E1A',
@@ -113,16 +124,16 @@ export default function ScoreboardScreen() {
                     >
                       {p.puck_id}
                     </div>
-                    <div className="flex flex-1 flex-col">
+                    <div className="flex flex-1 flex-col overflow-hidden">
                       <span
-                        className={`font-display text-[clamp(2rem,5vw,4.5rem)] leading-none ${
+                        className={`truncate font-display leading-none ${
                           TIER_COLOR[p.tier] ?? 'text-text'
-                        }`}
+                        } ${compact ? 'text-[clamp(1.25rem,2.5vw,2.5rem)]' : 'text-[clamp(2rem,5vw,4.5rem)]'}`}
                       >
                         {isWinner ? '👑 ' : ''}
                         {p.tier}
                       </span>
-                      <span className="font-body text-xl text-text/60">
+                      <span className={`font-body text-text/60 ${compact ? 'text-sm' : 'text-xl'}`}>
                         Puck #{p.puck_id} · {p.correct}/{p.answered} correct
                       </span>
                     </div>
@@ -130,7 +141,11 @@ export default function ScoreboardScreen() {
                       to={p.total}
                       durationMs={1400}
                       delayMs={400 + i * 200}
-                      className="font-mono text-[clamp(3rem,7vw,6.5rem)] font-bold leading-none text-text"
+                      className={`font-mono font-bold leading-none text-text ${
+                        compact
+                          ? 'text-[clamp(1.5rem,3vw,3.5rem)]'
+                          : 'text-[clamp(3rem,7vw,6.5rem)]'
+                      }`}
                     />
                   </motion.div>
                 )
