@@ -59,6 +59,7 @@ interface CurrentQuestionResp {
 }
 
 interface MatchStateResp {
+  exists?: boolean
   complete: boolean
   round?: number
   total_rounds?: number
@@ -285,6 +286,18 @@ export function usePuckState(puck_id: number) {
     [puck_id],
   )
 
+  // "Back to start" — exposed at MATCH_ENDED as a per-puck affordance
+  // for ending the session entirely. Differs from hold3s (which is a
+  // per-puck leave-match) in that it ALSO clears the global lobby so
+  // the TV navigates back to the title screen instead of getting stuck
+  // on the final scoreboard. Same code path as the Hub-level Reset all
+  // button — both call /api/pair/clear, server broadcasts the
+  // lobby_cancelled socket event, every TV reacts.
+  const goBackToStart = useCallback(async () => {
+    await api.pair.clear()
+    setState({ kind: 'IDLE' })
+  }, [])
+
   // Category picker (only available if this puck is the picker).
   const pickCategory = useCallback(
     async (category_id: number) => {
@@ -390,16 +403,22 @@ export function usePuckState(puck_id: number) {
           }
         }
       } else if (cur.kind === 'MATCH_ENDED') {
-        // Detect a "Play again" issued by another puck. The server's
-        // sp_reset clears SP state + _QUESTION_TRACKER, so match-state
-        // flips back to complete=false. Drop to IN_GAME_IDLE and let
-        // the normal IDLE branch pick up the new question on the next
-        // tick. Without this branch, the joining puck stays stuck on
-        // the final scoreboard while the host has already moved on.
+        // Two recovery paths out of MATCH_ENDED, distinguished by
+        // /api/sp/match-state's `exists` flag:
+        //   - exists=false  -> Hub Reset all or another puck's "Back to
+        //                      start" wiped server state entirely. Drop
+        //                      to IDLE so the user can re-pair fresh.
+        //   - exists=true && complete=false -> another puck hit "Play
+        //                      again". Drop to IN_GAME_IDLE and let the
+        //                      normal IDLE branch detect the new question.
+        //   - exists=true && complete=true -> still on the final
+        //                      scoreboard; sit tight.
         const sc = cur.session_code
         const ms = await GET<MatchStateResp>(`/api/sp/match-state/${sc}`)
         if (cancelled) return
-        if (ms && ms.complete === false) {
+        if (ms && ms.exists === false) {
+          setState({ kind: 'IDLE' })
+        } else if (ms && ms.complete === false) {
           setState({ kind: 'IN_GAME_IDLE', session_code: sc })
         }
       }
@@ -428,6 +447,7 @@ export function usePuckState(puck_id: number) {
       selectAnswer,
       lockAnswer,
       pickCategory,
+      goBackToStart,
     },
   }
 }

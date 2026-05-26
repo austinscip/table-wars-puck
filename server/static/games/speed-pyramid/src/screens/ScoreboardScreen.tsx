@@ -44,9 +44,17 @@ export default function ScoreboardScreen() {
     function onReset() {
       navigate(`/question/${sessionCode}`)
     }
+    function onLobbyCancelled() {
+      // Hub Reset all or per-puck "Back to start" cleared the lobby.
+      // Don't stay on a scoreboard tied to a session that no longer
+      // exists — bounce to title so the next pair flow can start fresh.
+      navigate('/', { replace: true })
+    }
     socket.on('match_reset', onReset)
+    socket.on('lobby_cancelled', onLobbyCancelled)
     return () => {
       socket.off('match_reset', onReset)
+      socket.off('lobby_cancelled', onLobbyCancelled)
     }
   }, [sessionCode, navigate])
 

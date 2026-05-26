@@ -153,7 +153,7 @@ export default function VariantC({ puck_id, onRemove }: Props) {
             </button>
             <button
               className="block w-full rounded bg-white/5 py-1 text-left text-cyan-300 hover:bg-white/10"
-              onClick={actions.hold3s}
+              onClick={actions.goBackToStart}
             >
               ▸ BACK_TO_START
             </button>

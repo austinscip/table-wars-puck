@@ -203,8 +203,8 @@ export default function VariantB({ puck_id, onRemove }: Props) {
             </button>
             <button
               className="rounded bg-white/10 px-3 py-1.5 text-xs hover:bg-white/20"
-              onClick={actions.hold3s}
-              title="Leave match, return to title"
+              onClick={actions.goBackToStart}
+              title="Clear the lobby + return the TV to title"
             >
               Back to start
             </button>

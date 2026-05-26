@@ -436,9 +436,24 @@ def lobby_state():
 
 @pair_bp.route("/clear", methods=["POST"])
 def clear_lobby_endpoint():
-    """Admin/debug: forcibly clear the active lobby. Useful between dev
-    sessions when a stale lobby is blocking new requests."""
+    """Admin/debug: full server reset. Clears the active lobby AND every
+    cached Speed Pyramid session state + question tracker. Without the
+    full wipe, stale _SP_STATE[old_sc].complete=true would keep any
+    polling puck pinned in its MATCH_ENDED state even after the lobby
+    is gone — the puck would never recover to IDLE for a fresh pair.
+
+    Broadcasts `lobby_cancelled` so any TV currently parked on the
+    scoreboard or mid-question reverts to the title screen."""
     _clear_lobby()
+    _SP_STATE.clear()
+    _QUESTION_TRACKER.clear()
+    try:
+        import trivia_routes
+        trivia_routes._question_start_times.clear()
+    except Exception:
+        pass
+    if _socketio is not None:
+        _socketio.emit("lobby_cancelled", {"reason": "admin_reset"})
     return jsonify({"ok": True})
 
 
@@ -731,11 +746,23 @@ def sp_load_question(session_code: str):
 def sp_match_state(session_code: str):
     state = _SP_STATE.get(session_code)
     if not state:
+        # `exists: false` distinguishes "admin wiped this session" from
+        # "session exists but match is over" — both return complete=false
+        # if you only look at that field after sp_reset. Polling pucks
+        # need the difference: missing session => drop to IDLE; existing
+        # session with complete=false => Play again happened, drop to
+        # IN_GAME_IDLE and wait for the new question.
         return jsonify(
-            {"round": 0, "total_rounds": SP_TOTAL_ROUNDS, "complete": False}
+            {
+                "exists": False,
+                "round": 0,
+                "total_rounds": SP_TOTAL_ROUNDS,
+                "complete": False,
+            }
         )
     return jsonify(
         {
+            "exists": True,
             "round": state["round"],
             "total_rounds": SP_TOTAL_ROUNDS,
             "questions_asked": len(state["asked_ids"]),

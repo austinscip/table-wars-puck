@@ -152,24 +152,58 @@ export default function QuestionScreen() {
       })
       setRound(args.round)
       setTotalRounds(args.total_rounds)
-      setStartedAt(args.started_at)
-      setPhase('answering')
       setReveal(null)
       lastTickRef.current = -1
       audio.questionShow()
 
-      // Narration handoff: play the question MP3 (if present) and only
-      // start the answer countdown when the narration ends. If the MP3
-      // 404s, errors out, or never resolves, start the timer immediately
-      // so the question isn't stuck in narration-pending forever.
+      // Begin-answering routine — flips phase, syncs startedAt to the
+      // server's authoritative start moment, and schedules the
+      // force-reveal fallback. Hoisted so the narration handoff can
+      // call it after the MP3 ends instead of running the countdown
+      // concurrent with the narration.
+      const beginAnswering = (at: number) => {
+        setStartedAt(at)
+        setPhase('answering')
+        if (forceRevealTimerRef.current) {
+          window.clearTimeout(forceRevealTimerRef.current)
+        }
+        const elapsedMs = Math.max(0, Date.now() - at * 1000)
+        const remainingMs = Math.max(
+          500,
+          args.question.time_limit * 1000 - elapsedMs + 800,
+        )
+        forceRevealTimerRef.current = window.setTimeout(() => {
+          forceRevealTimerRef.current = null
+          api.sp.forceReveal(sc)
+            .then(() => {
+              // Belt-and-suspenders: schedule the advance ourselves
+              // even if the socket `reveal` event is missed.
+              scheduleAdvanceToNextQuestion()
+            })
+            .catch(() => {})
+        }, remainingMs)
+      }
+
       if (args.audio_url) {
+        // Narration plays first. Until it ends, the TimerBar is frozen
+        // (phase !== 'answering') and the force-reveal timer is not
+        // armed. The countdown should reflect "I have 15s starting
+        // when the host stops reading", not "I have 15s starting at
+        // the moment the question card slid in".
+        setPhase('awaiting_question')
+        // Set startedAt to roughly now so the (frozen) bar renders at
+        // 100% during narration instead of pre-depleted.
+        setStartedAt(Date.now() / 1000)
         const a = new Audio(args.audio_url)
         a.preload = 'auto'
-        let timerStarted = false
+        let started = false
         const handoff = () => {
-          if (timerStarted) return
-          timerStarted = true
-          void api.sp.startTimer(sc).catch(() => {})
+          if (started) return
+          started = true
+          api.sp
+            .startTimer(sc)
+            .then((resp) => beginAnswering(resp.started_at))
+            .catch(() => beginAnswering(Date.now() / 1000))
         }
         a.addEventListener('ended', handoff)
         a.addEventListener('error', handoff)
@@ -177,10 +211,15 @@ export default function QuestionScreen() {
         // timer after the audio's full duration (or a 1s ceiling for
         // missing files where duration is NaN).
         void a.play().catch(handoff)
-        window.setTimeout(handoff, 1000 + (a.duration > 0 ? a.duration * 1000 : 0))
+        window.setTimeout(
+          handoff,
+          1000 + (a.duration > 0 ? a.duration * 1000 : 0),
+        )
       } else {
-        // No narration this round — start the timer immediately so the
-        // server-tracked started_at reflects the visible countdown.
+        // No narration — start countdown immediately, using the
+        // server's args.started_at so the TV stays synced with the
+        // server-side force-reveal timer.
+        beginAnswering(args.started_at)
         void api.sp.startTimer(sc).catch(() => {})
       }
 
@@ -210,23 +249,6 @@ export default function QuestionScreen() {
           return next
         })
       }
-
-      if (forceRevealTimerRef.current) window.clearTimeout(forceRevealTimerRef.current)
-      const elapsedMs = Math.max(0, Date.now() - args.started_at * 1000)
-      const remainingMs = Math.max(500, args.question.time_limit * 1000 - elapsedMs + 800)
-      forceRevealTimerRef.current = window.setTimeout(() => {
-        forceRevealTimerRef.current = null
-        api.sp.forceReveal(sc)
-          .then(() => {
-            // Belt-and-suspenders: schedule the advance ourselves even
-            // if the socket `reveal` event is missed. onReveal also sets
-            // this same timer — whichever fires first wins, second is
-            // a no-op because the question_id advances and the load
-            // call is idempotent.
-            scheduleAdvanceToNextQuestion()
-          })
-          .catch(() => {})
-      }, remainingMs)
 
       if (isDemo && !demoAnsweredRef.current.has(args.question.id)) {
         demoAnsweredRef.current.add(args.question.id)
@@ -327,11 +349,17 @@ export default function QuestionScreen() {
       navigate(`/scoreboard/${sessionCode}`)
     }
 
+    function onLobbyCancelled() {
+      // Admin reset / Back to start mid-match: bounce to title.
+      navigate('/', { replace: true })
+    }
+
     socket.on('question_show', onQuestionShow)
     socket.on('answer_locked', onAnswerLocked)
     socket.on('answer_preview', onAnswerPreview)
     socket.on('reveal', onReveal)
     socket.on('match_ended', onMatchEnded)
+    socket.on('lobby_cancelled', onLobbyCancelled)
 
     // Initial load — also apply the response inline so the very first
     // question never depends on the socket event arriving in time.
@@ -356,6 +384,7 @@ export default function QuestionScreen() {
       socket.off('answer_preview', onAnswerPreview)
       socket.off('reveal', onReveal)
       socket.off('match_ended', onMatchEnded)
+      socket.off('lobby_cancelled', onLobbyCancelled)
       if (forceRevealTimerRef.current) {
         window.clearTimeout(forceRevealTimerRef.current)
         forceRevealTimerRef.current = null
@@ -434,7 +463,7 @@ export default function QuestionScreen() {
         <TimerBar
           durationSec={question.time_limit}
           startedAt={startedAt}
-          frozen={phase === 'reveal'}
+          frozen={phase !== 'answering'}
         />
 
         <motion.div

@@ -109,6 +109,9 @@ export const api = {
     start: (puck_id: number) =>
       postJson<PairStartResponse>('/api/pair/start', { puck_id }),
 
+    clear: () =>
+      postJson<{ ok: boolean }>('/api/pair/clear', {}),
+
     lobbyState: async (): Promise<LobbyStateResponse> => {
       const res = await fetch('/api/pair/lobby-state')
       if (!res.ok) throw new Error(`lobby-state ${res.status}`)

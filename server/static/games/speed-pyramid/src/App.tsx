@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
 import TitleScreen from './screens/TitleScreen'
 import PairScreen from './screens/PairScreen'
 import LobbyScreen from './screens/LobbyScreen'
@@ -7,6 +7,7 @@ import CountdownScreen from './screens/CountdownScreen'
 import QuestionScreen from './screens/QuestionScreen'
 import ScoreboardScreen from './screens/ScoreboardScreen'
 import { audio } from './lib/audio'
+import { getSocket } from './lib/socket'
 
 // Sandbox / dev tooling gate (see CONTEXT.md "VITE_DEV_TOOLS" entry +
 // docs/adr/0002). When false at build time the Hub module is tree-shaken
@@ -59,10 +60,40 @@ function AudioPrimer() {
   )
 }
 
+/**
+ * One-shot subscription to the `lobby_cancelled` server broadcast that
+ * fires whenever /api/pair/clear runs (Hub "Reset all" or a per-puck
+ * "Back to start"). Lives at the App level instead of inlined into every
+ * screen so a single listener wins regardless of which route the TV is
+ * parked on. `replace: true` prevents the back button from sending the
+ * TV back to a stale scoreboard / countdown.
+ */
+function GlobalLobbyResetListener() {
+  const navigate = useNavigate()
+  useEffect(() => {
+    const socket = getSocket()
+    function onLobbyCancelled() {
+      // The Hub IS the thing that triggered the reset; it shouldn't
+      // bounce itself away from /dev/hub. Skip the navigation for any
+      // tab currently on a dev route.
+      if (window.location.pathname.startsWith('/tv/speed-pyramid/dev/')) {
+        return
+      }
+      navigate('/', { replace: true })
+    }
+    socket.on('lobby_cancelled', onLobbyCancelled)
+    return () => {
+      socket.off('lobby_cancelled', onLobbyCancelled)
+    }
+  }, [navigate])
+  return null
+}
+
 export default function App() {
   return (
     <BrowserRouter basename="/tv/speed-pyramid">
       <AudioPrimer />
+      <GlobalLobbyResetListener />
       <Routes>
         <Route path="/" element={<TitleScreen />} />
         <Route path="/pair" element={<PairScreen />} />
