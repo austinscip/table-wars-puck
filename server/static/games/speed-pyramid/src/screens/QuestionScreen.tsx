@@ -95,6 +95,11 @@ export default function QuestionScreen() {
   const demoAnsweredRef = useRef<Set<number>>(new Set())
   const forceRevealTimerRef = useRef<number | null>(null)
   const advanceTimerRef = useRef<number | null>(null)
+  // Track the currently-playing narration so a second applyQuestionShown
+  // for the same question (REST + socket race) doesn't stack two
+  // overlapping Audio elements that play in echo.
+  const narrationAudioRef = useRef<HTMLAudioElement | null>(null)
+  const narratedQidRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (!sessionCode) return
@@ -190,16 +195,40 @@ export default function QuestionScreen() {
         // armed. The countdown should reflect "I have 15s starting
         // when the host stops reading", not "I have 15s starting at
         // the moment the question card slid in".
+
+        // Guard against double-narration: applyQuestionShown can fire
+        // twice for the same question (initial REST loadQuestion + the
+        // question_show socket event a beat later). Without this gate
+        // two Audio elements get created and play() in parallel, which
+        // sounds exactly like an echo.
+        if (narratedQidRef.current === args.question.id) {
+          // Already narrated this question — fall through to the rest of
+          // applyQuestionShown without starting another playback.
+        } else {
+          narratedQidRef.current = args.question.id
+          // Kill any narration still in flight from a previous question.
+          if (narrationAudioRef.current) {
+            try {
+              narrationAudioRef.current.pause()
+              narrationAudioRef.current.src = ''
+            } catch {
+              /* swallow — element may already be torn down */
+            }
+            narrationAudioRef.current = null
+          }
         setPhase('awaiting_question')
         // Set startedAt to roughly now so the (frozen) bar renders at
         // 100% during narration instead of pre-depleted.
         setStartedAt(Date.now() / 1000)
         const a = new Audio(args.audio_url)
         a.preload = 'auto'
+        narrationAudioRef.current = a
         let started = false
+        let metadataTimer: number | null = null
         const handoff = () => {
           if (started) return
           started = true
+          if (metadataTimer !== null) window.clearTimeout(metadataTimer)
           api.sp
             .startTimer(sc)
             .then((resp) => beginAnswering(resp.started_at))
@@ -207,14 +236,23 @@ export default function QuestionScreen() {
         }
         a.addEventListener('ended', handoff)
         a.addEventListener('error', handoff)
-        // Belt-and-suspenders: even if 'ended' never fires, start the
-        // timer after the audio's full duration (or a 1s ceiling for
-        // missing files where duration is NaN).
+        // 'loadedmetadata' fires once a.duration is known (typically
+        // within tens of ms of starting to load). Only then can we
+        // schedule a sane fallback timeout: duration + 1s grace. The
+        // previous code referenced a.duration at construction time
+        // when it's NaN, fell back to a fixed 1000 ms, and cut every
+        // narration off at 1 second — countdown started early.
+        a.addEventListener('loadedmetadata', () => {
+          if (started) return
+          const dur = isFinite(a.duration) && a.duration > 0 ? a.duration : 0
+          if (dur > 0) {
+            metadataTimer = window.setTimeout(handoff, dur * 1000 + 1000)
+          }
+        })
+        // If autoplay rejects, hand off immediately (silent narration
+        // means there's nothing to wait on).
         void a.play().catch(handoff)
-        window.setTimeout(
-          handoff,
-          1000 + (a.duration > 0 ? a.duration * 1000 : 0),
-        )
+        }  // end narration-not-yet-started branch
       } else {
         // No narration — start countdown immediately, using the
         // server's args.started_at so the TV stays synced with the

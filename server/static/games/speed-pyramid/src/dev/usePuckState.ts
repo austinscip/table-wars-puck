@@ -294,9 +294,16 @@ export function usePuckState(puck_id: number) {
   // button — both call /api/pair/clear, server broadcasts the
   // lobby_cancelled socket event, every TV reacts.
   const goBackToStart = useCallback(async () => {
-    await api.pair.clear()
+    console.log('[goBackToStart] called', { puck_id })
+    try {
+      const r = await api.pair.clear()
+      console.log('[goBackToStart] api.pair.clear ok', r)
+    } catch (e) {
+      console.warn('[goBackToStart] api.pair.clear failed', e)
+    }
     setState({ kind: 'IDLE' })
-  }, [])
+    console.log('[goBackToStart] setState IDLE')
+  }, [puck_id])
 
   // Category picker (only available if this puck is the picker).
   const pickCategory = useCallback(

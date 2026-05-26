@@ -10,11 +10,59 @@
 //
 // Tree-shaken from prod via VITE_DEV_TOOLS=1 build flag (gated in App.tsx).
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import PrototypeSwitcher, { useVariant } from './PrototypeSwitcher'
 import VariantA from './variants/VariantA'
 import VariantB from './variants/VariantB'
 import VariantC from './variants/VariantC'
+
+// In-page debug log. The user has no DevTools comfort, so each click +
+// each /api/* request appears as a row in a fixed overlay at the bottom.
+// Lets us triangulate "I clicked Reset all and nothing happened" without
+// asking the user to open Network tabs.
+const _debugLines: { ts: number; line: string }[] = []
+const _debugSubs = new Set<() => void>()
+function debug(line: string) {
+  _debugLines.push({ ts: Date.now(), line })
+  if (_debugLines.length > 40) _debugLines.shift()
+  _debugSubs.forEach((cb) => cb())
+}
+function useDebugLines() {
+  const [, force] = useState(0)
+  useEffect(() => {
+    const cb = () => force((n) => n + 1)
+    _debugSubs.add(cb)
+    return () => { _debugSubs.delete(cb) }
+  }, [])
+  return _debugLines
+}
+// Monkey-patch fetch once so every request is captured.
+let _patched = false
+function patchFetch() {
+  if (_patched) return
+  _patched = true
+  const orig = window.fetch.bind(window)
+  window.fetch = (input, init) => {
+    const url = typeof input === 'string' ? input : (input as Request).url
+    const method = (init?.method || 'GET').toUpperCase()
+    if (url.startsWith('/api/')) {
+      debug(`${method} ${url.split('/api/')[1]}`)
+    }
+    return orig(input, init).then(
+      (r) => {
+        if (url.startsWith('/api/')) {
+          debug(`-> ${r.status} ${url.split('/api/')[1]}`)
+        }
+        return r
+      },
+      (e) => {
+        if (url.startsWith('/api/')) debug(`-> ERR ${url.split('/api/')[1]} ${String(e).slice(0, 80)}`)
+        throw e
+      },
+    )
+  }
+}
+patchFetch()
 
 const MAX_PUCKS = 8
 
@@ -47,15 +95,25 @@ export default function Hub() {
   }
 
   async function resetAll() {
-    await fetch('/api/pair/clear', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: '{}',
-    }).catch(() => {})
+    debug(`[CLICK] Reset all`)
+    try {
+      await fetch('/api/pair/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      })
+      debug(`[OK] pair/clear`)
+    } catch (e) {
+      debug(`[ERR] pair/clear ${String(e).slice(0, 60)}`)
+    }
     // Re-mount all puck components to reset their internal state.
     const ids = [...pucks]
     setPucks([])
-    setTimeout(() => setPucks(ids), 50)
+    debug(`[UI] setPucks([]) -> unmount`)
+    setTimeout(() => {
+      setPucks(ids)
+      debug(`[UI] setPucks([${ids.join(',')}]) -> remount`)
+    }, 50)
   }
 
   // Hub-level meta display: poll lobby state for everyone's reference.
@@ -100,6 +158,9 @@ export default function Hub() {
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-lg font-bold tracking-tight">
             Virtual Puck Hub <span className="opacity-50">/dev/hub</span>
+            <span className="ml-2 rounded bg-yellow-400 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-black">
+              build May-26 b866c2d
+            </span>
           </h1>
           <button
             className="ml-auto rounded bg-cyan-500/30 px-3 py-1 text-xs hover:bg-cyan-500/50"
@@ -165,6 +226,36 @@ export default function Hub() {
       </main>
 
       <PrototypeSwitcher />
+      <DebugOverlay />
+    </div>
+  )
+}
+
+function DebugOverlay() {
+  const lines = useDebugLines()
+  const ref = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight
+  }, [lines.length])
+  return (
+    <div
+      ref={ref}
+      className="fixed bottom-12 left-2 right-2 z-20 max-h-40 overflow-y-auto rounded border border-yellow-400/40 bg-black/85 p-2 font-mono text-[10px] leading-tight text-yellow-100"
+    >
+      <div className="mb-1 font-semibold text-yellow-300">
+        DEBUG LOG (latest 40 events) — clear with Reset all
+      </div>
+      {lines.length === 0 && (
+        <div className="opacity-50">No events yet. Click a button.</div>
+      )}
+      {lines.map((l, i) => (
+        <div key={i}>
+          <span className="opacity-50">
+            {new Date(l.ts).toISOString().slice(11, 19)}
+          </span>{' '}
+          {l.line}
+        </div>
+      ))}
     </div>
   )
 }

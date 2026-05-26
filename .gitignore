@@ -57,3 +57,6 @@ env/
 
 # Docker
 docker-compose.override.yml
+
+# Piper TTS voice models (large .onnx weights — download via generate_narration.py)
+server/voices/piper/*.onnx

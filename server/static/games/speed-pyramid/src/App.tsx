@@ -89,11 +89,42 @@ function GlobalLobbyResetListener() {
   return null
 }
 
+// Tiny build marker so we can tell from across the room whether a tab
+// has the latest bundle loaded. Skipped on /dev/hub (the Hub has its
+// own chip in the header).
+function BuildChip() {
+  if (window.location.pathname.startsWith('/tv/speed-pyramid/dev/')) {
+    return null
+  }
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: 8,
+        right: 8,
+        zIndex: 1000,
+        background: '#fbbf24',
+        color: '#000',
+        padding: '2px 6px',
+        borderRadius: 4,
+        fontFamily: 'monospace',
+        fontSize: 10,
+        fontWeight: 600,
+        textTransform: 'uppercase',
+        pointerEvents: 'none',
+      }}
+    >
+      build May-26 b866c2d-tv
+    </div>
+  )
+}
+
 export default function App() {
   return (
     <BrowserRouter basename="/tv/speed-pyramid">
       <AudioPrimer />
       <GlobalLobbyResetListener />
+      <BuildChip />
       <Routes>
         <Route path="/" element={<TitleScreen />} />
         <Route path="/pair" element={<PairScreen />} />

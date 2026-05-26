@@ -584,11 +584,27 @@ def _difficulty_for_round(r: int) -> str:
 
 
 def _narration_url(question_id: int) -> str:
-    """Canonical narration MP3 path for a question. The file may not
-    exist on disk (TTS generation is a separate content task); the TV
-    treats a 404 as 'no narration', shows the question silently, and
-    falls back to procedural SFX for the lock/reveal beats."""
-    return f"/static/games/speed-pyramid/audio/questions/q_{question_id}.mp3"
+    """Canonical narration MP3 path for a question. Appends ?v=<mtime>
+    when the file exists so the browser cache invalidates immediately
+    after a regen (otherwise the TV keeps playing the previous voice).
+    The file may not exist on disk (TTS generation is a separate
+    content task); the TV treats a 404 as 'no narration', shows the
+    question silently, and falls back to procedural SFX."""
+    import os
+    rel = f"/static/games/speed-pyramid/audio/questions/q_{question_id}.mp3"
+    abs_path = os.path.join(
+        os.path.dirname(__file__),
+        "static",
+        "games",
+        "speed-pyramid",
+        "audio",
+        "questions",
+        f"q_{question_id}.mp3",
+    )
+    try:
+        return f"{rel}?v={int(os.path.getmtime(abs_path))}"
+    except OSError:
+        return rel
 
 
 @sp_bp.route("/load-question/<session_code>", methods=["POST"])
