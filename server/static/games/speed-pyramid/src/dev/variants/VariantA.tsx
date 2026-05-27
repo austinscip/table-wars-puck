@@ -152,12 +152,49 @@ export default function VariantA({ puck_id, onRemove }: Props) {
       )}
 
       {state.kind === 'MINIGAME' && (
-        <button
-          className="rounded bg-orange-400/30 px-2 py-1 text-xs hover:bg-orange-400/50"
-          onClick={actions.tap}
-        >
-          Fire
-        </button>
+        <span className="flex items-center gap-1">
+          {/* BULLSEYE needs aim, or every fire defaults to A and misses
+              the target (0 points, no winner). Compact A/B/C/D aim pills
+              set the quadrant, then Fire. SHOT_CLOCK just fires. */}
+          {state.flavor === 'BULLSEYE' && (
+            <>
+              <span className="text-[10px] uppercase opacity-60">
+                aim {state.target_quadrant}
+              </span>
+              {(
+                [
+                  ['N', 'A'],
+                  ['E', 'B'],
+                  ['S', 'C'],
+                  ['W', 'D'],
+                ] as Array<['N' | 'E' | 'S' | 'W', Letter]>
+              ).map(([dir, L]) => (
+                <button
+                  key={L}
+                  className={`rounded px-1.5 py-1 text-xs ${
+                    state.pending_quadrant === L
+                      ? 'bg-yellow-400 text-black'
+                      : 'bg-white/10 hover:bg-white/20'
+                  }`}
+                  onClick={() => actions.tilt(dir)}
+                  disabled={state.fired}
+                >
+                  {L}
+                </button>
+              ))}
+            </>
+          )}
+          <button
+            className="rounded bg-orange-400/30 px-2 py-1 text-xs hover:bg-orange-400/50"
+            onClick={actions.tap}
+            disabled={state.fired}
+          >
+            Fire
+            {state.flavor === 'BULLSEYE' && state.pending_quadrant
+              ? ` ${state.pending_quadrant}`
+              : ''}
+          </button>
+        </span>
       )}
 
       {state.kind === 'MATCH_ENDED' && (
