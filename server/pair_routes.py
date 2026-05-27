@@ -569,6 +569,9 @@ def _sp_state_for(session_code: str) -> dict:
             # Slice E2 — minigame state.
             "pending_minigame": None,         # {flavor, duration_s, target_quadrant?, started_at, deadline_at, fires}
             "minigame_resolved_round": None,  # last round we already played a minigame for (gates re-entry)
+            # Slice E3 — power-ups + sabotage.
+            "power_up_inventories": {},       # puck_id -> [{id: uuid, type}]
+            "power_up_arms": {},              # puck_id -> {double, reveal, shield, incoming_steals: [firer_puck_id]}
         }
         _SP_STATE[session_code] = state
     elif "expected_pucks" not in state:
@@ -586,7 +589,111 @@ def _sp_state_for(session_code: str) -> dict:
     # Slice E2 fields.
     state.setdefault("pending_minigame", None)
     state.setdefault("minigame_resolved_round", None)
+    # Slice E3 fields.
+    state.setdefault("power_up_inventories", {})
+    state.setdefault("power_up_arms", {})
     return state
+
+
+# Slice E3 — power-up catalog.
+SP_POWER_UP_TYPES = ("DOUBLE", "SHIELD", "REVEAL", "STEAL")
+
+
+def _empty_arms() -> dict:
+    return {"double": False, "reveal": False, "shield": False, "incoming_steals": []}
+
+
+def _grant_power_up(state: dict, session_code: str, puck_id: int) -> dict | None:
+    """Grant a random power-up to the given puck. Returns the granted
+    item dict for inclusion in socket payloads, or None if grant
+    failed (shouldn't happen). Emits inventory_updated so the TV HUD
+    refreshes."""
+    import random as _random
+    import uuid as _uuid
+    item = {"id": _uuid.uuid4().hex[:12], "type": _random.choice(SP_POWER_UP_TYPES)}
+    inv = state["power_up_inventories"].setdefault(int(puck_id), [])
+    inv.append(item)
+    if _socketio is not None:
+        _socketio.emit(
+            "inventory_updated",
+            {"session_code": session_code, "puck_id": int(puck_id),
+             "items": list(inv)},
+            room=session_code,
+        )
+    return item
+
+
+def _apply_power_up_arms(state: dict, session_code: str, qid: int, answers: dict) -> None:
+    """Apply armed power-up effects to this question's answers BEFORE
+    cumulative scoring. Called from _maybe_emit_reveal once all pucks
+    have answered (or timed out). Mutates the answers dict in place:
+    REVEAL forces is_correct/tier/points to LEGENDARY-equivalent.
+    DOUBLE multiplies the puck's points by 2. STEAL queues a transfer
+    of half the target's points to the firer (applied after the
+    target's own scoring). SHIELD nullifies one incoming STEAL.
+
+    Arms are one-shot per question — cleared after application."""
+    arms_table = state.get("power_up_arms", {})
+    if not arms_table:
+        return
+    # Apply REVEAL + DOUBLE first (affects each puck's own score).
+    for pid, ans in answers.items():
+        arms = arms_table.get(pid)
+        if not arms:
+            continue
+        if arms.get("reveal"):
+            # Auto-correct: LEGENDARY tier (0-3s correct = 1000pt).
+            ans["is_correct"] = True
+            ans["points"] = 1000
+            ans["tier"] = "LEGENDARY"
+        if arms.get("double"):
+            ans["points"] = int(ans.get("points", 0)) * 2
+    # STEAL: process AFTER reveal/double so the stolen amount reflects
+    # any reveal/double on the target. For each target with incoming
+    # steals that aren't shielded, transfer half their points to each
+    # firer.
+    for target_pid, ans in answers.items():
+        arms = arms_table.get(target_pid)
+        if not arms:
+            continue
+        incoming = arms.get("incoming_steals") or []
+        if not incoming:
+            continue
+        if arms.get("shield"):
+            # Single shield blocks ALL incoming steals this round.
+            # (Simpler than per-source; matches the catalog blurb.)
+            incoming = []
+        target_points = int(ans.get("points", 0))
+        if target_points <= 0:
+            continue
+        stolen_each = target_points // 2 // max(1, len(incoming))
+        if stolen_each <= 0:
+            continue
+        for firer_pid in incoming:
+            firer_ans = answers.get(firer_pid)
+            if firer_ans is None:
+                # Firer didn't answer this round — credit directly to
+                # cumulative_scores via a side-channel ledger.
+                state["cumulative_scores"][firer_pid] = (
+                    state["cumulative_scores"].get(firer_pid, 0) + stolen_each
+                )
+            else:
+                firer_ans["points"] = int(firer_ans.get("points", 0)) + stolen_each
+            ans["points"] = int(ans.get("points", 0)) - stolen_each
+            if _socketio is not None:
+                _socketio.emit(
+                    "power_up_resolved",
+                    {
+                        "session_code": session_code,
+                        "type": "STEAL",
+                        "firer_puck_id": int(firer_pid),
+                        "target_puck_id": int(target_pid),
+                        "points_transferred": stolen_each,
+                    },
+                    room=session_code,
+                )
+    # Clear all arms (one-shot per round).
+    state["power_up_arms"] = {}
 
 
 # Slice E1 — category picker policy.
@@ -772,6 +879,9 @@ def _resolve_minigame(state: dict, session_code: str, *, force: bool = False) ->
             state["cumulative_scores"].get(winner_pid, 0) + SP_MINIGAME_WIN_BONUS
         )
         awarded[winner_pid] = SP_MINIGAME_WIN_BONUS
+        # Slice E3 — grant a random power-up to the minigame winner.
+        # 3 minigames per match = up to 3 power-ups granted.
+        _grant_power_up(state, session_code, winner_pid)
     if len(ranked) > 1 and ranked[1][1]["points"] > 0:
         second_pid = ranked[1][0]
         state["cumulative_scores"][second_pid] = (
@@ -1196,6 +1306,13 @@ def sp_match_state(session_code: str):
             "complete": bool(state.get("complete", False)),
             "pending_category_pick": pick_payload,
             "pending_minigame": mg_payload,
+            # Slice E3 — per-puck inventories so the Hub HUD + the
+            # firmware can render available power-ups without a
+            # separate /inventory call per puck per tick.
+            "power_up_inventories": {
+                str(pid): list(items)
+                for pid, items in state.get("power_up_inventories", {}).items()
+            },
         }
     )
 
@@ -1336,6 +1453,12 @@ def _maybe_emit_reveal(session_code: str, force: bool = False) -> bool:
                 "color_name": color_name,
             }
 
+    # Slice E3 — apply armed power-up effects BEFORE cumulative
+    # scoring so DOUBLE / REVEAL adjust the per-round points the
+    # client sees in the reveal payload AND the running total. STEAL
+    # transfers happen inside this call too. One-shot per round.
+    _apply_power_up_arms(state, session_code, qid, answers)
+
     # Update cumulative scores.
     for pid, a in answers.items():
         state["cumulative_scores"][pid] = state["cumulative_scores"].get(pid, 0) + int(a["points"])
@@ -1417,6 +1540,91 @@ def sp_minigame_state(session_code: str):
         "deadline_at": mg["deadline_at"],
         "fires": mg.get("fires") or {},
     })
+
+
+@sp_bp.route("/inventory/<session_code>", methods=["GET"])
+def sp_inventory(session_code: str):
+    """Slice E3 — return power-up inventory for a puck.
+    Query param: puck_id. Empty list if no session."""
+    try:
+        puck_id = int(request.args.get("puck_id"))
+    except (TypeError, ValueError):
+        return jsonify({"items": []}), 400
+    state = _SP_STATE.get(session_code)
+    if state is None:
+        return jsonify({"items": []})
+    items = list(state.get("power_up_inventories", {}).get(puck_id, []))
+    return jsonify({"items": items, "puck_id": puck_id})
+
+
+@sp_bp.route("/power-up/activate", methods=["POST"])
+def sp_power_up_activate():
+    """Slice E3 — activate a power-up between rounds.
+
+    Body: {session_code, puck_id, item_id, target_puck_id?}.
+    Only valid during a pick or minigame phase (i.e., between
+    rounds). Removes the item from inventory and arms its effect
+    for the NEXT question's reveal. STEAL requires a target_puck_id.
+
+    Returns 409 if not in a between-rounds phase, 404 if item not
+    found in inventory, 400 if STEAL missing target.
+    """
+    data = request.get_json(silent=True) or {}
+    try:
+        sc = str(data["session_code"])
+        puck_id = int(data["puck_id"])
+        item_id = str(data["item_id"])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"ok": False, "reason": "bad payload"}), 400
+    target_puck_id = data.get("target_puck_id")
+    state = _SP_STATE.get(sc)
+    if state is None:
+        return jsonify({"ok": False, "reason": "no session"}), 404
+    # Gate: must be between rounds (pick or minigame pending). This
+    # keeps activation off the mid-question critical path.
+    if not (state.get("pending_category_pick") or state.get("pending_minigame")):
+        return jsonify({"ok": False, "reason": "not between rounds"}), 409
+    inv = state["power_up_inventories"].setdefault(puck_id, [])
+    item = next((it for it in inv if it["id"] == item_id), None)
+    if item is None:
+        return jsonify({"ok": False, "reason": "item not in inventory"}), 404
+    item_type = item["type"]
+    if item_type == "STEAL":
+        if target_puck_id is None:
+            return jsonify({"ok": False, "reason": "STEAL needs target_puck_id"}), 400
+        try:
+            target_puck_id = int(target_puck_id)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "reason": "bad target_puck_id"}), 400
+        target_arms = state["power_up_arms"].setdefault(target_puck_id, _empty_arms())
+        target_arms.setdefault("incoming_steals", []).append(puck_id)
+    elif item_type == "DOUBLE":
+        state["power_up_arms"].setdefault(puck_id, _empty_arms())["double"] = True
+    elif item_type == "REVEAL":
+        state["power_up_arms"].setdefault(puck_id, _empty_arms())["reveal"] = True
+    elif item_type == "SHIELD":
+        state["power_up_arms"].setdefault(puck_id, _empty_arms())["shield"] = True
+    # Remove from inventory (one-shot).
+    inv.remove(item)
+    if _socketio is not None:
+        _socketio.emit(
+            "power_up_used",
+            {
+                "session_code": sc,
+                "puck_id": puck_id,
+                "item_id": item_id,
+                "type": item_type,
+                "target_puck_id": target_puck_id,
+            },
+            room=sc,
+        )
+        _socketio.emit(
+            "inventory_updated",
+            {"session_code": sc, "puck_id": puck_id, "items": list(inv)},
+            room=sc,
+        )
+    return jsonify({"ok": True, "type": item_type,
+                    "target_puck_id": target_puck_id})
 
 
 @sp_bp.route("/minigame/preview", methods=["POST"])
