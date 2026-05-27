@@ -958,6 +958,38 @@ def _narration_url(question_id: int) -> str:
         return rel
 
 
+_NARRATED_QIDS_CACHE: set | None = None
+
+
+def _narrated_qids() -> set:
+    """Set of question ids that have a narration MP3 on disk. Cached at
+    first use (narration files are static content; a server restart picks
+    up newly generated ones)."""
+    global _NARRATED_QIDS_CACHE
+    if _NARRATED_QIDS_CACHE is None:
+        import os
+        import glob
+        d = os.path.join(
+            os.path.dirname(__file__),
+            "static", "games", "speed-pyramid", "audio", "questions",
+        )
+        ids = set()
+        for p in glob.glob(os.path.join(d, "q_*.mp3")):
+            try:
+                ids.add(int(os.path.basename(p)[2:-4]))
+            except ValueError:
+                pass
+        _NARRATED_QIDS_CACHE = ids
+    return _NARRATED_QIDS_CACHE
+
+
+def _has_narration(question_id: int) -> bool:
+    try:
+        return int(question_id) in _narrated_qids()
+    except (TypeError, ValueError):
+        return False
+
+
 @sp_bp.route("/load-question/<session_code>", methods=["POST"])
 def sp_load_question(session_code: str):
     state = _sp_state_for(session_code)
@@ -1188,6 +1220,26 @@ def sp_load_question(session_code: str):
         q = get_random_question(exclude_ids=exclude)
     if not q:
         return jsonify({"error": "no questions available"}), 404
+
+    # R027: prefer a question that actually has a narration MP3. 116 of
+    # 1296 questions lack one and 404, leaving the host silent. Re-draw a
+    # few times (keeping the picked category, relaxing difficulty to widen
+    # the pool) until we land on a narrated question. Falls back to the
+    # original pick if a category is mostly un-narrated (TV handles 404).
+    if q and not _has_narration(q["id"]):
+        tried = set(exclude or [])
+        tried.add(q["id"])
+        for _ in range(12):
+            alt = get_random_question(
+                exclude_ids=list(tried),
+                category_id=forced_category_id,
+            )
+            if not alt:
+                break
+            if _has_narration(alt["id"]):
+                q = alt
+                break
+            tried.add(alt["id"])
 
     state["round"] = next_round
     state["asked_ids"].add(q["id"])
