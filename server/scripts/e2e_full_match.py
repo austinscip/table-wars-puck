@@ -265,83 +265,105 @@ def run() -> int:
         time.sleep(1.5)
 
         # ===== 7 ROUNDS =====
-        for round_idx in range(7):
-            log(f"--- round {round_idx + 1} ---")
-            # Up to 5 phase advances per round (pick/minigame/question)
-            for phase_attempt in range(6):
-                s1 = puck_state(hub, 0)
-                s2 = puck_state(hub, 1)
-                log(f"  phase {phase_attempt}: puck1={s1!r} puck2={s2!r}")
-
-                if "MATCH ENDED" in s1 and "MATCH ENDED" in s2:
-                    log("  match ended early")
+        # Phase-driven driver: resolve whatever phase is current until the TV
+        # reaches the scoreboard. Robust to the exact pick/minigame/question
+        # ordering instead of guessing a fixed round structure (the old
+        # 7x6 nested loop desynced from the server's phases and dropped a
+        # round, giving 6/7). We answer each distinct question_id exactly
+        # once, so the POST count lands on 7 deterministically.
+        def parse_qid(state: str):
+            if "Q" not in state:
+                return None
+            tail = state.split("Q", 1)[1]
+            num = ""
+            for ch in tail:
+                if ch.isdigit():
+                    num += ch
+                else:
                     break
+            return int(num) if num else None
 
-                if "PICK CATEGORY" in s1 or "PICK CATEGORY" in s2:
-                    # Picker is whichever puck has it (one of them)
-                    picker_idx = 0 if "PICK CATEGORY" in s1 else 1
-                    log(f"  picker is puck{picker_idx + 1}, clicking first offer")
-                    # Click the first button with a `title` attribute on
-                    # the picker row — category buttons have title=name;
-                    # control buttons don't. Use force=True because the
-                    # Hub re-renders on every polling tick and stable-
-                    # element check sees the row replaced mid-attempt.
-                    cat_buttons = puck_row(hub, picker_idx).locator("button[title]")
-                    cnt = cat_buttons.count()
-                    log(f"  found {cnt} category buttons (with title attr)")
-                    if cnt > 0:
-                        first_title = cat_buttons.first.get_attribute("title") or "?"
-                        harness.record_click("category", picker_idx, first_title)
-                        try:
-                            cat_buttons.first.click(force=True, timeout=3000)
-                        except Exception as e:
-                            log(f"  category click err: {e!r}")
-                        time.sleep(1.5)
-                        continue
-                    log("  WARN: no category buttons found")
-                    break
+        answered_qids: set[int] = set()
+        match_deadline = time.time() + 200
+        while time.time() < match_deadline:
+            route = tv.evaluate("() => location.pathname")
+            if "/scoreboard/" in route:
+                log("  reached scoreboard")
+                break
+            s1 = puck_state(hub, 0)
+            s2 = puck_state(hub, 1)
 
-                if "MINIGAME" in s1 or "MINIGAME" in s2:
-                    # Try to click a fire/tap button on each puck
-                    log("  minigame phase, clicking fire on both pucks")
-                    for idx in (0, 1):
-                        btns = puck_row(hub, idx).locator("button").all_inner_texts()
-                        fire_btn = None
-                        for b in btns:
-                            if b.upper() in ("FIRE", "TAP", "TAP (LOCK)"):
-                                fire_btn = b
-                                break
-                        if fire_btn:
-                            harness.record_click("minigame_fire", idx, fire_btn)
+            if "MATCH ENDED" in s1 and "MATCH ENDED" in s2:
+                log("  pucks in MATCH ENDED")
+                break
+
+            if "PICK CATEGORY" in s1 or "PICK CATEGORY" in s2:
+                # Robust pick resolution. The Hub re-renders every 500ms, so a
+                # single force-click frequently loses the race. Retry clicking
+                # the first category on BOTH rows each tick until neither puck
+                # is picking; if clicks keep losing, the R024 server
+                # auto-default advances after the 10s deadline (we wait 13s).
+                log("  category pick — retrying clicks on both rows until resolved")
+                pick_deadline = time.time() + 13
+                recorded = False
+                while time.time() < pick_deadline:
+                    if ("PICK CATEGORY" not in puck_state(hub, 0)
+                            and "PICK CATEGORY" not in puck_state(hub, 1)):
+                        break
+                    for pidx in (0, 1):
+                        btns = puck_row(hub, pidx).locator("button[title]")
+                        if btns.count() > 0:
+                            if not recorded:
+                                harness.record_click(
+                                    "category", pidx,
+                                    btns.first.get_attribute("title") or "?")
+                                recorded = True
                             try:
-                                puck_row(hub, idx).get_by_role("button", name=fire_btn, exact=False).first.click(timeout=3000)
-                            except Exception as e:
-                                log(f"  WARN puck{idx + 1} fire click failed: {e!r}")
-                        else:
-                            log(f"  WARN puck{idx + 1} no fire button. buttons: {btns}")
-                    time.sleep(2.0)
+                                btns.first.click(force=True, timeout=1200)
+                            except Exception:
+                                pass
+                    time.sleep(0.5)
+                time.sleep(1.0)
+                continue
+
+            if "MINIGAME" in s1 or "MINIGAME" in s2:
+                log("  minigame phase, firing on both pucks")
+                for idx in (0, 1):
+                    btns = puck_row(hub, idx).locator("button").all_inner_texts()
+                    fire_btn = next((b for b in btns if b.upper() in ("FIRE", "TAP", "TAP (LOCK)")), None)
+                    if fire_btn:
+                        harness.record_click("minigame_fire", idx, fire_btn)
+                        try:
+                            puck_row(hub, idx).get_by_role("button", name=fire_btn, exact=False).first.click(timeout=3000)
+                        except Exception as e:
+                            log(f"  WARN puck{idx + 1} fire click failed: {e!r}")
+                time.sleep(2.0)
+                continue
+
+            if "ANSWERING" in s1 and "ANSWERING" in s2:
+                qid = parse_qid(s1) or parse_qid(s2)
+                if qid in answered_qids:
+                    time.sleep(0.3)
                     continue
+                if qid is not None:
+                    answered_qids.add(qid)
+                log(f"  answering Q{qid} — A on puck1, B on puck2")
+                try:
+                    harness.record_click("answer", 0, "A")
+                    puck_row(hub, 0).get_by_role("button", name="A", exact=True).click(timeout=3000, force=True)
+                except Exception as e:
+                    log(f"  WARN puck1 A click err: {e!r}")
+                time.sleep(0.4)
+                try:
+                    harness.record_click("answer", 1, "B")
+                    puck_row(hub, 1).get_by_role("button", name="B", exact=True).click(timeout=3000, force=True)
+                except Exception as e:
+                    log(f"  WARN puck2 B click err: {e!r}")
+                time.sleep(2.5)  # let reveal happen
+                continue
 
-                if "ANSWERING" in s1 and "ANSWERING" in s2:
-                    log("  answering — clicking A on puck1, B on puck2")
-                    try:
-                        harness.record_click("answer", 0, "A")
-                        puck_row(hub, 0).get_by_role("button", name="A", exact=True).click(timeout=3000, force=True)
-                    except Exception as e:
-                        log(f"  WARN puck1 A click err: {e!r}")
-                    time.sleep(0.4)
-                    try:
-                        harness.record_click("answer", 1, "B")
-                        puck_row(hub, 1).get_by_role("button", name="B", exact=True).click(timeout=3000, force=True)
-                    except Exception as e:
-                        log(f"  WARN puck2 B click err: {e!r}")
-                    time.sleep(2.5)  # let reveal happen
-                    break  # round complete
-
-                # Neither — wait a bit and re-check
-                time.sleep(0.5)
-            else:
-                log(f"  WARN round {round_idx + 1} never reached ANSWERING")
+            time.sleep(0.4)
+        log(f"  answered {len(answered_qids)} distinct questions")
 
         # ===== ASSERTIONS =====
         log("--- assertions ---")

@@ -962,7 +962,19 @@ def _narration_url(question_id: int) -> str:
 def sp_load_question(session_code: str):
     state = _sp_state_for(session_code)
 
-    if state["round"] >= SP_TOTAL_ROUNDS:
+    # R026: the match completes only once the FINAL round's question has
+    # been revealed — not the instant round hits SP_TOTAL_ROUNDS. Q7 loads
+    # with round==7 but is still unanswered; a second load-question call
+    # while Q7 is active (e.g. the pick-timeout kick advances to Q7, then
+    # QuestionScreen mounts and re-issues load-question) must return the
+    # active Q7, not end the match. Otherwise the final question is skipped
+    # and the scoreboard shows X/7 after only 6 questions were asked.
+    _cur_qid_final = state.get("current_question_id")
+    _final_revealed = (
+        _cur_qid_final is None
+        or state.get("revealed_for_question_id") == _cur_qid_final
+    )
+    if state["round"] >= SP_TOTAL_ROUNDS and _final_revealed:
         state["complete"] = True
         if _socketio is not None:
             _socketio.emit(
