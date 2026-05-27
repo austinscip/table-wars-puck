@@ -57,7 +57,12 @@ function describe(s: PuckState): string {
 
 export default function VariantA({ puck_id, onRemove }: Props) {
   const [hex, name] = PUCK_COLOR_NAMES[puck_id] ?? ['#F8FAFC', 'white']
-  const { state, actions } = usePuckState(puck_id)
+  const { state, inventory, actions } = usePuckState(puck_id)
+  // Slice E3 — between-rounds gate: only show power-up activate
+  // buttons during pick/minigame phases (server enforces this too,
+  // but the UI shouldn't tempt the user to click during ANSWERING).
+  const canActivatePowerUps =
+    state.kind === 'CATEGORY_PICKING' || state.kind === 'MINIGAME'
 
   return (
     <div
@@ -169,6 +174,34 @@ export default function VariantA({ puck_id, onRemove }: Props) {
             Back to start
           </button>
         </>
+      )}
+
+      {/* Slice E3 — power-up inventory + activate buttons. STEAL needs
+          a target; this UI prompts for one via browser prompt(), which
+          is sandbox-acceptable — production firmware will use tilt-aim
+          to pick a target by quadrant. */}
+      {inventory.length > 0 && canActivatePowerUps && (
+        <span className="flex flex-wrap gap-1">
+          {inventory.map((item) => (
+            <button
+              key={item.id}
+              className="rounded bg-purple-500/30 px-2 py-1 text-xs hover:bg-purple-500/50"
+              onClick={() => {
+                let target: number | null = null
+                if (item.type === 'STEAL') {
+                  const ans = window.prompt('STEAL target puck_id?')
+                  if (!ans) return
+                  target = parseInt(ans, 10)
+                  if (Number.isNaN(target)) return
+                }
+                void actions.activatePowerUp(item.id, target)
+              }}
+              title={item.type}
+            >
+              ✦ {item.type}
+            </button>
+          ))}
+        </span>
       )}
 
       {onRemove && (

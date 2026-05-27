@@ -9,7 +9,7 @@
 //   - No active power-up use, no sabotage targeting (defer to v1.1).
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api } from '../lib/api'
+import { api, type PowerUpItem } from '../lib/api'
 
 export type Letter = 'A' | 'B' | 'C' | 'D'
 
@@ -89,6 +89,9 @@ interface MatchStateResp {
     started_at: number
     deadline_at: number
   } | null
+  // Slice E3 — per-puck power-up inventories, keyed by puck_id as
+  // string (JSON object).
+  power_up_inventories?: Record<string, PowerUpItem[]>
 }
 
 // Post helpers — minimal, prototype error handling (swallow + log).
@@ -125,6 +128,10 @@ export function usePuckState(puck_id: number) {
   const [state, setState] = useState<PuckState>({ kind: 'IDLE' })
   const stateRef = useRef(state)
   stateRef.current = state
+  // Slice E3 — per-puck power-up inventory, updated by polling from
+  // match-state. Exposed in the returned object so variants can show
+  // available power-ups.
+  const [inventory, setInventory] = useState<PowerUpItem[]>([])
 
   // ---- Actions (mirror firmware events) ----
 
@@ -334,6 +341,20 @@ export function usePuckState(puck_id: number) {
     [puck_id],
   )
 
+  // Slice E3 — activate a power-up. Only valid during pick/minigame
+  // phase (the server gates it too). For STEAL, pass target_puck_id.
+  const activatePowerUp = useCallback(
+    async (item_id: string, target_puck_id?: number | null) => {
+      const cur = stateRef.current
+      const sc = (cur as { session_code?: string }).session_code
+      if (!sc) return
+      await api.sp.activatePowerUp(sc, puck_id, item_id, target_puck_id ?? null)
+      // Inventory will refresh on next polling tick via inventory_updated
+      // socket / match-state poll.
+    },
+    [puck_id],
+  )
+
   // "Back to start" — exposed at MATCH_ENDED as a per-puck affordance
   // for ending the session entirely. Differs from hold3s (which is a
   // per-puck leave-match) in that it ALSO clears the global lobby so
@@ -429,6 +450,16 @@ export function usePuckState(puck_id: number) {
           // Pick resolved — drop to IN_GAME_IDLE; the next tick picks
           // up the new question via current-question.
           setState({ kind: 'IN_GAME_IDLE', session_code: sc })
+        }
+
+        // Slice E3 — refresh inventory from match-state.
+        const invMap = ms?.power_up_inventories
+        if (invMap) {
+          const mine = invMap[String(puck_id)] || []
+          // Compare by id list so we only call setInventory when it changes.
+          const sameLen = mine.length === inventory.length
+          const sameIds = sameLen && mine.every((it, i) => it.id === inventory[i]?.id)
+          if (!sameIds) setInventory(mine)
         }
 
         // Slice E2 — same pattern for minigame phase.
@@ -543,6 +574,7 @@ export function usePuckState(puck_id: number) {
 
   return {
     state,
+    inventory,
     actions: {
       tap,
       hold1s,
@@ -552,6 +584,7 @@ export function usePuckState(puck_id: number) {
       selectAnswer,
       lockAnswer,
       pickCategory,
+      activatePowerUp,
       goBackToStart,
     },
   }

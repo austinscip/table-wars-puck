@@ -218,7 +218,27 @@ export const api = {
         `/api/sp/minigame/preview`,
         { session_code, puck_id, quadrant: quadrant ?? null },
       ),
+    inventory: async (session_code: string, puck_id: number) => {
+      const res = await fetch(`/api/sp/inventory/${session_code}?puck_id=${puck_id}`)
+      if (!res.ok) return { items: [] as PowerUpItem[], puck_id }
+      return res.json() as Promise<{ items: PowerUpItem[]; puck_id: number }>
+    },
+    activatePowerUp: (
+      session_code: string,
+      puck_id: number,
+      item_id: string,
+      target_puck_id?: number | null,
+    ) =>
+      postJson<{ ok: boolean; type?: string; target_puck_id?: number | null; reason?: string }>(
+        `/api/sp/power-up/activate`,
+        { session_code, puck_id, item_id, target_puck_id: target_puck_id ?? null },
+      ),
   },
+}
+
+export interface PowerUpItem {
+  id: string
+  type: 'DOUBLE' | 'SHIELD' | 'REVEAL' | 'STEAL'
 }
 
 export interface MinigameStateResponse {
