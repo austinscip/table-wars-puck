@@ -31,7 +31,7 @@ with a gate-assertion name, it's not fixed.
 | R017 | 2026-05-27 | TBD | No audio for countdown 3-2-1-GO | sfx-tick-fires-on-each-countdown-step |
 | R018 | 2026-05-27 | TBD | No audio on category pick screen | sfx-category-pick-fires-on-screen-show |
 | R019 | 2026-05-27 | TBD | Category pick timeout: no visible/audible response | TBD-pick-timeout-shows-default-locked |
-| R020 | 2026-05-27 | TBD | Minigame Hub controls (◀ A, ▶ B etc.) don't respond | hub-minigame-tilt-buttons-fire |
+| R020 | 2026-05-27 | 2026-05-27 | Minigame Hub controls (◀ A, ▶ B etc.) don't respond — Variant B D-pad was `disabled` during MINIGAME (`tiltActive` excluded minigames); fix enables the D-pad for BULLSEYE aim + adds on-screen minigame instructions | hub-minigame-tilt-buttons-fire |
 | R021 | 2026-05-27 | TBD | Q1 commentator audio starts before question card fully renders | commentary-fires-during-reveal-not-question-show |
 | R022 | 2026-05-27 | TBD | Commentator keeps talking onto next screen when both pucks answer quickly | reveal-audio-stops-on-navigate-away |
 | R023 | 2026-05-27 | TBD | Countdown starts immediately after narration ends with no breath | TBD-gap-between-narration-end-and-countdown |

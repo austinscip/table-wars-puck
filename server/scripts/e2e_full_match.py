@@ -13,6 +13,8 @@ socket event. Asserts:
   4. No round shows the puck in MATCH_ENDED prematurely.
   5. Narration MP3 fires before countdown starts (no overlap).
   6. Commentator text fires DURING reveal phase (not before).
+  7. R020 (hub-minigame-tilt-buttons-fire): the Variant B D-pad is live
+     during a BULLSEYE minigame — clicking ▶ fires a preview POST.
 
 This is the new gate — old per-slice diagnostics roll into this.
 The user explicitly called out that the per-slice tests miss real
@@ -107,6 +109,109 @@ def wait_for_state(page: Page, idx: int, substr: str, timeout_s: float = 12) -> 
             return last
         time.sleep(0.2)
     return last
+
+
+def assert_variantB_minigame_aim(ctx, harness: "Harness") -> None:
+    """Gate for R020 — the Variant B (game-controller) D-pad must be live
+    during a BULLSEYE minigame so the player can aim. Drives a fresh
+    2-puck match in ?variant=B, reaches the deterministic round-2 BULLSEYE
+    minigame, clicks the ▶ D-pad, and asserts a /api/sp/minigame/preview
+    POST fired (quadrant B). Before the R020 fix the D-pad was `disabled`
+    during MINIGAME, so the click was a no-op and no preview POST fired.
+
+    Gate assertion name: hub-minigame-tilt-buttons-fire
+    """
+    reset()
+    preview_posts: list[dict] = []
+    hub = ctx.new_page()
+    tv = ctx.new_page()
+
+    def on_req(req: Request) -> None:
+        if "/api/sp/minigame/preview" in req.url and req.method == "POST":
+            try:
+                preview_posts.append(json.loads(req.post_data or "{}"))
+            except Exception:
+                preview_posts.append({})
+
+    hub.on("request", on_req)
+    hub.goto(f"{HUB}?variant=B", wait_until="domcontentloaded")
+    tv.goto(TV + "/", wait_until="domcontentloaded")
+    time.sleep(1.5)
+
+    # Pair (Variant B starts via TAP — no dedicated Start button).
+    puck_row(hub, 0).get_by_role("button", name="Hold 1s").click()
+    time.sleep(0.6)
+    puck_row(hub, 0).locator("button", has_text="Confirm").click()
+    time.sleep(0.6)
+    puck_row(hub, 1).get_by_role("button", name="Hold 1s").click()
+    time.sleep(0.8)
+    puck_row(hub, 0).get_by_role("button", name="TAP", exact=True).click()
+    time.sleep(1.5)
+
+    sc = requests.get(f"{BASE}/api/pair/lobby-state", timeout=5).json().get("session_code")
+    if not sc:
+        harness.check("hub-minigame-tilt-buttons-fire", False,
+                      "no session_code after Variant B match start")
+        hub.close(); tv.close()
+        return
+    tv.goto(f"{TV}/question/{sc}", wait_until="domcontentloaded")
+    time.sleep(1.5)
+
+    # Advance to the round-2 BULLSEYE minigame.
+    reached = False
+    for _ in range(40):
+        s1 = puck_state(hub, 0)
+        s2 = puck_state(hub, 1)
+        if "mg/BULLSEYE" in s1 or "mg/BULLSEYE" in s2:
+            reached = True
+            break
+        if "pick category" in s1 or "pick category" in s2:
+            picker = 0 if "pick category" in s1 else 1
+            btns = puck_row(hub, picker).locator("button")
+            for i in range(btns.count()):
+                txt = (btns.nth(i).inner_text() or "").strip()
+                if txt and txt not in ("Hold 1s", "Hold 3s", "TAP", "×",
+                                       "▲", "◀", "▶", "▼", "A", "B", "C", "D"):
+                    try:
+                        btns.nth(i).click(force=True, timeout=2000)
+                    except Exception:
+                        pass
+                    break
+            time.sleep(1.5)
+            continue
+        if s1.startswith("Q") and s2.startswith("Q"):
+            for idx in (0, 1):
+                try:
+                    puck_row(hub, idx).get_by_role("button", name="A", exact=True).click(
+                        force=True, timeout=2500)
+                except Exception:
+                    pass
+                time.sleep(0.3)
+            time.sleep(2.5)
+            continue
+        time.sleep(0.5)
+
+    if not reached:
+        harness.check("hub-minigame-tilt-buttons-fire", False,
+                      "never reached BULLSEYE minigame in Variant B")
+        hub.close(); tv.close()
+        return
+
+    # Click ▶ to aim — must fire a preview POST (button must NOT be disabled).
+    preview_posts.clear()
+    btn = puck_row(hub, 0).get_by_role("button", name="▶", exact=True).first
+    disabled = btn.is_disabled()
+    try:
+        btn.click(force=True, timeout=2500)
+    except Exception:
+        pass
+    time.sleep(1.2)
+    harness.check(
+        "hub-minigame-tilt-buttons-fire",
+        (not disabled) and len(preview_posts) > 0,
+        f"▶ disabled={disabled} preview_posts={preview_posts}",
+    )
+    hub.close(); tv.close()
 
 
 def run() -> int:
@@ -303,6 +408,10 @@ def run() -> int:
         hub.screenshot(path="/tmp/full_match_hub.png", full_page=True)
         tv.screenshot(path="/tmp/full_match_tv.png", full_page=True)
         log(f"  screenshots: /tmp/full_match_hub.png /tmp/full_match_tv.png")
+
+        # R020 — Variant B minigame D-pad aim must respond.
+        log("--- R020: Variant B BULLSEYE aim ---")
+        assert_variantB_minigame_aim(ctx, harness)
 
         browser.close()
 

@@ -58,8 +58,21 @@ export default function VariantB({ puck_id, onRemove }: Props) {
   const [hex, name] = PUCK_COLOR_NAMES[puck_id] ?? ['#F8FAFC', 'white']
   const { state, actions } = usePuckState(puck_id)
 
-  const tiltActive = state.kind === 'IN_GAME_ANSWERING'
-  const pending = state.kind === 'IN_GAME_ANSWERING' ? state.pending : undefined
+  // Tilt/D-pad is live both when answering a question AND when aiming a
+  // BULLSEYE minigame (before firing). R020: minigames were excluded
+  // here, so the ◀ ▲ ▶ ▼ aim buttons were dead during a minigame.
+  const answering = state.kind === 'IN_GAME_ANSWERING'
+  const bullseyeAim =
+    state.kind === 'MINIGAME' && state.flavor === 'BULLSEYE' && !state.fired
+  const tiltActive = answering || bullseyeAim
+  // The currently-pending letter to highlight on the D-pad: answer letter
+  // when answering, aimed quadrant when in a BULLSEYE minigame.
+  const pending: Letter | undefined =
+    state.kind === 'IN_GAME_ANSWERING'
+      ? state.pending
+      : state.kind === 'MINIGAME'
+        ? state.pending_quadrant
+        : undefined
 
   return (
     <div
@@ -149,20 +162,40 @@ export default function VariantB({ puck_id, onRemove }: Props) {
             <button
               key={L}
               className={`h-14 w-14 rounded-full text-base font-bold ${
-                tiltActive
+                answering
                   ? pending === L
                     ? 'bg-yellow-400 text-black'
                     : 'bg-white/10 hover:bg-white/20'
                   : 'bg-white/5 opacity-50'
               }`}
               onClick={() => actions.lockAnswer(L)}
-              disabled={!tiltActive}
+              disabled={!answering}
             >
               {L}
             </button>
           ))}
         </div>
       </div>
+
+      {/* Minigame instructions — players didn't know how to interact. */}
+      {state.kind === 'MINIGAME' && (
+        <div className="mt-3 rounded-lg bg-orange-400/10 px-3 py-2 text-[11px] leading-snug text-orange-200 ring-1 ring-orange-400/20">
+          {state.flavor === 'BULLSEYE' ? (
+            <>
+              🎯 <strong>BULLSEYE</strong> — aim the D-pad at quadrant{' '}
+              <strong>{state.target_quadrant ?? '?'}</strong>, then press{' '}
+              <strong>TAP</strong> to fire.
+              {state.fired && ' · fired ✓'}
+            </>
+          ) : (
+            <>
+              ⏱️ <strong>SHOT CLOCK</strong> — press <strong>TAP</strong> when
+              the sweep hits the green zone.
+              {state.fired && ' · fired ✓'}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Bottom action row */}
       <div className="mt-4 flex flex-wrap gap-2">
