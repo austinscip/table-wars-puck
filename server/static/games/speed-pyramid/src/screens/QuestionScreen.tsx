@@ -100,6 +100,11 @@ export default function QuestionScreen() {
   // overlapping Audio elements that play in echo.
   const narrationAudioRef = useRef<HTMLAudioElement | null>(null)
   const narratedQidRef = useRef<number | null>(null)
+  // R022b: pending narration timers (the 600ms delayed play + the
+  // metadata-duration fallback). These MUST be cleared on unmount/reveal,
+  // otherwise a delayed play() can fire AFTER the screen navigated away
+  // and the host voice bleeds into the next screen.
+  const narrationTimersRef = useRef<number[]>([])
 
   useEffect(() => {
     if (!sessionCode) return
@@ -228,6 +233,9 @@ export default function QuestionScreen() {
         } else {
           narratedQidRef.current = args.question.id
           // Kill any narration still in flight from a previous question.
+          // R022b: clear pending delayed-play timers too.
+          narrationTimersRef.current.forEach((id) => window.clearTimeout(id))
+          narrationTimersRef.current = []
           if (narrationAudioRef.current) {
             try {
               narrationAudioRef.current.pause()
@@ -273,6 +281,7 @@ export default function QuestionScreen() {
           const dur = isFinite(a.duration) && a.duration > 0 ? a.duration : 0
           if (dur > 0) {
             metadataTimer = window.setTimeout(handoff, dur * 1000 + 1000)
+            narrationTimersRef.current.push(metadataTimer)
           }
         })
         // R021: delay narration playback by 600ms so the question card
@@ -285,6 +294,7 @@ export default function QuestionScreen() {
           if (started) return
           void a.play().catch(handoff)
         }, PLAY_DELAY_MS)
+        narrationTimersRef.current.push(playTimer)
         // If the question rotates before we even started playing, kill
         // the delayed start so it doesn't bleed into the next phase.
         a.addEventListener('emptied', () => window.clearTimeout(playTimer))
@@ -383,7 +393,10 @@ export default function QuestionScreen() {
       }
       // R022: if narration is still playing (both pucks answered
       // before the host finished reading the setup), kill it so it
-      // doesn't bleed into the reveal audio.
+      // doesn't bleed into the reveal audio. R022b: clear pending
+      // delayed-play timers too.
+      narrationTimersRef.current.forEach((id) => window.clearTimeout(id))
+      narrationTimersRef.current = []
       if (narrationAudioRef.current) {
         try {
           narrationAudioRef.current.pause()
@@ -492,7 +505,10 @@ export default function QuestionScreen() {
       }
       // R022: stop narration on unmount so it doesn't bleed into the
       // next screen (lobby_cancelled, match_ended, navigate to
-      // /category-pick or /minigame).
+      // /category-pick or /minigame). R022b: also clear any pending
+      // delayed-play timer so a play() can't fire after we've left.
+      narrationTimersRef.current.forEach((id) => window.clearTimeout(id))
+      narrationTimersRef.current = []
       if (narrationAudioRef.current) {
         try {
           narrationAudioRef.current.pause()
