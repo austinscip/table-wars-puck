@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api, type LobbyPlayer } from '../lib/api'
 import { getSocket } from '../lib/socket'
+import { audio } from '../lib/audio'
 
 interface PlayerJoinedEvent {
   puck_id: number
@@ -74,6 +75,8 @@ export default function LobbyScreen() {
       .catch((e) => setError((e as Error).message))
 
     function onPlayerJoined(p: PlayerJoinedEvent) {
+      // R016: cue each new puck joining the lobby.
+      audio.joined()
       setPlayers(p.players)
     }
     function onMatchStarted(p: MatchStartedEvent) {

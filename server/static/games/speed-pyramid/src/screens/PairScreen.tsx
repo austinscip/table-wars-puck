@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { api, type LobbyPlayer } from '../lib/api'
 import { getSocket } from '../lib/socket'
 import PairCodeDisplay from '../components/PairCodeDisplay'
+import { audio } from '../lib/audio'
 
 interface DialProgressEvent {
   puck_id: number
@@ -82,6 +83,8 @@ export default function PairScreen() {
 
     function onProgress(payload: DialProgressEvent) {
       if (payload.puck_id !== puckId) return
+      // R015: each locked digit gets a confirmation blip.
+      audio.digitLock()
       setProgress(payload.progress)
       setPreviewDigit(null)
     }
@@ -93,6 +96,9 @@ export default function PairScreen() {
       // Read code from ref because this closure was created before setCode ran.
       const c = codeRef.current
       if (payload.puck_id === puckId && c) {
+        // R015: full pair confirmation cue once all 6 digits land and
+        // the host transitions to lobby.
+        audio.joined()
         const qs = isDemo ? `?demo=1&puck_id=${puckId}` : ''
         navigate(`/lobby/${c}${qs}`)
       }

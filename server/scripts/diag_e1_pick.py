@@ -130,10 +130,14 @@ def run() -> int:
     qid2 = lq3["question"]["id"]
     actual2 = sqlite3.connect("tablewars.db").execute(
         "SELECT correct_answer FROM trivia_questions WHERE id = ?", (qid2,)).fetchone()[0]
-    post("/api/sp/answer", {"session_code": sc, "puck_id": 901, "question_id": qid2,
-                             "answer": "A", "response_time_ms": 2500})
+    # Server overrides response_time_ms when puck-claimed differs >2s
+    # from server-measured. Insert a real sleep between POSTs so the
+    # server clock reflects the intended difference.
     post("/api/sp/answer", {"session_code": sc, "puck_id": 902, "question_id": qid2,
                              "answer": actual2, "response_time_ms": 1200})
+    time.sleep(1.3)  # ~1.3s gap so 902 is genuinely faster server-side
+    post("/api/sp/answer", {"session_code": sc, "puck_id": 901, "question_id": qid2,
+                             "answer": "A", "response_time_ms": 2500})
     time.sleep(0.2)
 
     # Round 3 — should be pick. Picker should be the winner of the

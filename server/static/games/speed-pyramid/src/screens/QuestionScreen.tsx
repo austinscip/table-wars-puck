@@ -180,8 +180,16 @@ export default function QuestionScreen() {
       // call it after the MP3 ends instead of running the countdown
       // concurrent with the narration.
       const beginAnswering = (at: number) => {
+        // R022 fix: do NOT override phase if reveal already arrived.
+        // The narration handoff can fire AFTER both pucks have
+        // already answered (when narration is long or when REST
+        // shortcuts answer-post). Without this guard, beginAnswering
+        // sets phase='answering' over the existing phase='reveal',
+        // which makes the commentary motion.div unmount via
+        // AnimatePresence. Symptom: commentary text appears for ~500ms
+        // and then vanishes.
+        setPhase((cur) => (cur === 'reveal' ? cur : 'answering'))
         setStartedAt(at)
-        setPhase('answering')
         if (forceRevealTimerRef.current) {
           window.clearTimeout(forceRevealTimerRef.current)
         }
@@ -238,14 +246,19 @@ export default function QuestionScreen() {
         narrationAudioRef.current = a
         let started = false
         let metadataTimer: number | null = null
+        // R023: small gap between narration end and countdown start so
+        // the user gets a "breath" before they need to answer.
+        const HANDOFF_BREATH_MS = 800
         const handoff = () => {
           if (started) return
           started = true
           if (metadataTimer !== null) window.clearTimeout(metadataTimer)
-          api.sp
-            .startTimer(sc)
-            .then((resp) => beginAnswering(resp.started_at))
-            .catch(() => beginAnswering(Date.now() / 1000))
+          window.setTimeout(() => {
+            api.sp
+              .startTimer(sc)
+              .then((resp) => beginAnswering(resp.started_at))
+              .catch(() => beginAnswering(Date.now() / 1000))
+          }, HANDOFF_BREATH_MS)
         }
         a.addEventListener('ended', handoff)
         a.addEventListener('error', handoff)
@@ -262,9 +275,19 @@ export default function QuestionScreen() {
             metadataTimer = window.setTimeout(handoff, dur * 1000 + 1000)
           }
         })
-        // If autoplay rejects, hand off immediately (silent narration
-        // means there's nothing to wait on).
-        void a.play().catch(handoff)
+        // R021: delay narration playback by 600ms so the question card
+        // finishes its 450ms framer-motion slide-in before the host
+        // starts reading. Otherwise audio fires the moment React
+        // commits the new card and feels like it leaked from the
+        // previous transition.
+        const PLAY_DELAY_MS = 600
+        const playTimer = window.setTimeout(() => {
+          if (started) return
+          void a.play().catch(handoff)
+        }, PLAY_DELAY_MS)
+        // If the question rotates before we even started playing, kill
+        // the delayed start so it doesn't bleed into the next phase.
+        a.addEventListener('emptied', () => window.clearTimeout(playTimer))
         }  // end narration-not-yet-started branch
       } else {
         // No narration — start countdown immediately, using the
@@ -357,6 +380,18 @@ export default function QuestionScreen() {
       if (forceRevealTimerRef.current) {
         window.clearTimeout(forceRevealTimerRef.current)
         forceRevealTimerRef.current = null
+      }
+      // R022: if narration is still playing (both pucks answered
+      // before the host finished reading the setup), kill it so it
+      // doesn't bleed into the reveal audio.
+      if (narrationAudioRef.current) {
+        try {
+          narrationAudioRef.current.pause()
+          narrationAudioRef.current.src = ''
+        } catch {
+          /* swallow */
+        }
+        narrationAudioRef.current = null
       }
       setReveal(p)
       setPhase('reveal')
@@ -454,6 +489,18 @@ export default function QuestionScreen() {
       if (advanceTimerRef.current) {
         window.clearTimeout(advanceTimerRef.current)
         advanceTimerRef.current = null
+      }
+      // R022: stop narration on unmount so it doesn't bleed into the
+      // next screen (lobby_cancelled, match_ended, navigate to
+      // /category-pick or /minigame).
+      if (narrationAudioRef.current) {
+        try {
+          narrationAudioRef.current.pause()
+          narrationAudioRef.current.src = ''
+        } catch {
+          /* swallow */
+        }
+        narrationAudioRef.current = null
       }
     }
   }, [sessionCode, navigate, isDemo, demoPuckId])

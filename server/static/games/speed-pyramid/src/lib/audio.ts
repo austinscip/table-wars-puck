@@ -267,6 +267,43 @@ export const audio = {
     })
   },
 
+  /** A pair-code digit just locked in. Short blip. */
+  digitLock() {
+    _play('sfx_digit', () => {
+      _voice({ freq: 740, durationMs: 80, peak: 0.12, type: 'triangle' })
+    })
+  },
+
+  /** A puck joined the lobby. Two ascending notes. */
+  joined() {
+    _play('sfx_joined', () => {
+      _chord([
+        { freq: 660, durationMs: 120, peak: 0.18, type: 'triangle' },
+        { freq: 990, durationMs: 140, peak: 0.14, type: 'sine', delayMs: 90 },
+      ])
+    })
+  },
+
+  /** Category-pick phase opened. Hello-and-wait chord. */
+  pickShow() {
+    _play('sfx_pick_show', () => {
+      _chord([
+        { freq: 523, durationMs: 220, peak: 0.16, type: 'triangle' },
+        { freq: 659, durationMs: 220, peak: 0.12, type: 'sine', delayMs: 60 },
+      ])
+    })
+  },
+
+  /** Picker locked their choice. */
+  pickLocked() {
+    _play('sfx_pick_locked', () => {
+      _chord([
+        { freq: 880, endFreq: 1320, durationMs: 200, peak: 0.18, type: 'triangle' },
+        { freq: 1320, durationMs: 200, peak: 0.10, type: 'sine', delayMs: 80 },
+      ])
+    })
+  },
+
   /** Question card reveal sweep. */
   questionShow() {
     _play('sfx_question_show', () => {

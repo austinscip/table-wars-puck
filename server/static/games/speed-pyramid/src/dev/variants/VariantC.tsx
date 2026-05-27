@@ -40,7 +40,7 @@ function questionId(s: PuckState): string {
 }
 function pending(s: PuckState): string {
   if (s.kind === 'IN_GAME_ANSWERING') return s.pending ?? '—'
-  if (s.kind === 'IN_GAME_LOCKED') return s.chosen
+  if (s.kind === 'IN_GAME_LOCKED') return s.chosen ?? 'TIMEOUT'
   return '—'
 }
 function isHost(s: PuckState): string {

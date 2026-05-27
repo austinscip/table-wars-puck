@@ -134,7 +134,7 @@ export default function ScoreboardScreen() {
                         {p.tier}
                       </span>
                       <span className={`font-body text-text/60 ${compact ? 'text-sm' : 'text-xl'}`}>
-                        Puck #{p.puck_id} · {p.correct}/{p.answered} correct
+                        Puck #{p.puck_id} · {p.correct}/{results.total_rounds} correct
                       </span>
                     </div>
                     <CountUpScore

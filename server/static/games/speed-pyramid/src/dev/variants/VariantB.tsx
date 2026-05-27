@@ -42,7 +42,7 @@ function shortState(s: PuckState): string {
     case 'IN_GAME_ANSWERING':
       return `Q${s.question_id}`
     case 'IN_GAME_LOCKED':
-      return `locked ${s.chosen}`
+      return s.chosen === null ? 'timeout' : `locked ${s.chosen}`
     case 'CATEGORY_PICKING':
       return 'pick category'
     case 'MINIGAME':

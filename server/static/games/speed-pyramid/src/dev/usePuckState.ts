@@ -38,7 +38,13 @@ export type PuckState =
       kind: 'IN_GAME_LOCKED'
       session_code: string
       question_id: number
-      chosen: Letter
+      // chosen is null when the puck didn't actually tap an answer
+      // (the question rotated away while in ANSWERING and we
+      // transitioned via polling). The variant should render this
+      // as TIMEOUT, not as "→A". Cosmetic distinction only — the
+      // server records this as a TIMEOUT regardless because there
+      // was no /api/sp/answer POST. See regression_log.md R013.
+      chosen: Letter | null
     }
   | { kind: 'CATEGORY_PICKING'; session_code: string; offer: CategoryOffer[] }
   | {
@@ -530,11 +536,15 @@ export function usePuckState(puck_id: number) {
           if (cq && (cq as { complete?: boolean }).complete) {
             setState({ kind: 'MATCH_ENDED', session_code: sc })
           } else {
+            // Puck reached LOCKED without a real tap (server moved
+            // on while we were still in ANSWERING). chosen=null
+            // signals TIMEOUT visually. R013 — do not default to
+            // 'A' just because the variant might want a letter.
             setState({
               kind: 'IN_GAME_LOCKED',
               session_code: sc,
               question_id: cur.question_id,
-              chosen: cur.pending ?? 'A',
+              chosen: cur.pending ?? null,
             })
           }
         }

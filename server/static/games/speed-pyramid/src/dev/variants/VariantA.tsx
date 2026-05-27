@@ -43,7 +43,9 @@ function describe(s: PuckState): string {
     case 'IN_GAME_ANSWERING':
       return `ANSWERING Q${s.question_id}${s.pending ? ` →${s.pending}` : ''}`
     case 'IN_GAME_LOCKED':
-      return `LOCKED Q${s.question_id} →${s.chosen}`
+      return s.chosen === null
+        ? `TIMEOUT Q${s.question_id}`
+        : `LOCKED Q${s.question_id} →${s.chosen}`
     case 'CATEGORY_PICKING':
       return 'PICK CATEGORY'
     case 'MINIGAME':

@@ -1463,15 +1463,25 @@ def _maybe_emit_reveal(session_code: str, force: bool = False) -> bool:
     for pid, a in answers.items():
         state["cumulative_scores"][pid] = state["cumulative_scores"].get(pid, 0) + int(a["points"])
 
-    # Slice E1: track this round's winner (highest points, ties broken
-    # by lowest puck_id). The next category-pick phase will hand the
-    # decision to this puck. Rounds where nobody earned points fall
-    # back to the lowest expected puck_id (set in _build_pick_offer).
-    best_pid, best_pts = None, -1
+    # Slice E1: track this round's winner. Speed Pyramid scoring is
+    # tier-based (LEGENDARY/EXPERT/AVERAGE in 3s bands), so two pucks
+    # in the same band get IDENTICAL points. Without a secondary
+    # sort, the next picker is picked by puck_id ascending, which
+    # feels arbitrary. Real tie-break: faster response_time_ms wins.
+    # Rounds where nobody earned points fall back to the lowest
+    # expected puck_id (set in _build_pick_offer).
+    best_pid, best_pts, best_rt = None, -1, 10**9
     for pid, a in answers.items():
         pts = int(a["points"])
-        if pts > best_pts or (pts == best_pts and (best_pid is None or pid < best_pid)):
-            best_pid, best_pts = pid, pts
+        rt = a.get("response_time_ms")
+        rt_val = int(rt) if rt is not None else 10**9
+        better = (
+            pts > best_pts
+            or (pts == best_pts and rt_val < best_rt)
+            or (pts == best_pts and rt_val == best_rt and (best_pid is None or pid < best_pid))
+        )
+        if better:
+            best_pid, best_pts, best_rt = pid, pts, rt_val
     if best_pid is not None and best_pts > 0:
         state["last_round_winner_puck_id"] = best_pid
 

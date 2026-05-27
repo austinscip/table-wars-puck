@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '../lib/api'
 import { getSocket } from '../lib/socket'
+import { audio } from '../lib/audio'
 
 /**
  * Slice E1 — Category pick phase.
@@ -63,6 +64,8 @@ export default function CategoryPickScreen() {
             started_at: p.started_at,
             round: p.round,
           })
+          // R018: audio cue when the pick screen opens.
+          audio.pickShow()
         } else {
           // Pick already resolved by the time we got here.
           navigate(`/question/${sc}`, { replace: true })
@@ -77,6 +80,9 @@ export default function CategoryPickScreen() {
     function onPicked(p: { session_code: string; category_id: number }) {
       if (p.session_code !== sc) return
       setChosenId(p.category_id)
+      // R018: audio cue when the pick locks in (either by picker or
+      // by 10s auto-default).
+      audio.pickLocked()
       // Hand off to QuestionScreen after a brief reveal beat.
       window.setTimeout(() => navigate(`/question/${sc}`, { replace: true }), 1100)
     }

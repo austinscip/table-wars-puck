@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { audio } from '../lib/audio'
 
 const STEPS = ['GET READY', '3', '2', '1', 'GO!']
 const STEP_MS = 900
@@ -26,6 +27,12 @@ export default function CountdownScreen() {
       navigate(`/question/${sessionCode}${qs}`)
       return
     }
+    // R017: audio on each countdown step. GO! gets the final-tick
+    // urgency cue; everything else is the regular soft tick.
+    const label = STEPS[stepIndex]
+    if (label === 'GO!') audio.tickFinal()
+    else if (label === 'GET READY') audio.reveal()
+    else audio.tick()
     const t = window.setTimeout(() => setStepIndex(stepIndex + 1), STEP_MS)
     return () => window.clearTimeout(t)
   }, [stepIndex, sessionCode, navigate, params])
