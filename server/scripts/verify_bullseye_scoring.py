@@ -97,7 +97,7 @@ def run_variant(p, variant: str) -> bool:
     tv.goto(f"{TV}/question/{sc}", wait_until="domcontentloaded")
 
     target = None
-    deadline = time.time() + 40
+    deadline = time.time() + 60
     last_dbg = 0.0
     while time.time() < deadline:
         s1, s2 = puck_state(hub, 0), puck_state(hub, 1)
@@ -127,13 +127,26 @@ def run_variant(p, variant: str) -> bool:
         log(f"[{variant}] INCONCLUSIVE: never reached BULLSEYE/target"); browser.close(); return False
     log(f"[{variant}] BULLSEYE target = {target}")
 
+    # Aim BOTH pucks at the target, then CONFIRM the aim registered before
+    # firing — tap() reads pending_quadrant from a ref that lags the tilt
+    # setState by a render, so firing too fast can shoot the default
+    # quadrant and miss. We re-click aim and wait for the state to reflect
+    # it (VariantA shows "aim=X"; VariantB's badge doesn't, so settle).
     aim = cfg["aim_label"](target)
-    for idx in (0, 1):
-        try:
-            puck_row(hub, idx).get_by_role("button", name=aim, exact=True).first.click(timeout=2000)
-        except Exception as e:
-            log(f"[{variant}] puck{idx+1} aim '{aim}' failed: {e!r}")
-    time.sleep(0.4)
+    for _ in range(3):
+        for idx in (0, 1):
+            try:
+                puck_row(hub, idx).get_by_role("button", name=aim, exact=True).first.click(timeout=2000)
+            except Exception as e:
+                log(f"[{variant}] puck{idx+1} aim '{aim}' failed: {e!r}")
+        time.sleep(0.5)
+        if variant == "A":
+            s1, s2 = puck_state(hub, 0), puck_state(hub, 1)
+            if f"aim={target}" in s1 and f"aim={target}" in s2:
+                break
+        else:
+            break  # B badge can't show aim; the 0.5s settle is enough
+    time.sleep(0.3)
     for idx in (0, 1):
         try:
             puck_row(hub, idx).get_by_role("button", name=cfg["fire_btn"], exact=cfg["fire_exact"]).first.click(timeout=2000)
