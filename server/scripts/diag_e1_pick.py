@@ -113,15 +113,20 @@ def run() -> int:
                              "answer": actual, "response_time_ms": 1500})
     time.sleep(0.2)
 
-    # Round 2 — should be a question, NOT a pick (pick rounds are 1/3/5/7).
+    # Round 2 — should be a minigame (Slice E2), NOT a pick.
+    # Post-E2: rounds 2/4/6 fire minigames. Skip past it to reach Q2.
     lq3 = post(f"/api/sp/load-question/{sc}")
     if lq3.get("phase") == "category_pick":
         log(f"FAIL 8: round 2 shouldn't enter pick, got {lq3.get('phase')}")
         return 1
+    if lq3.get("phase") == "minigame":
+        # Force-resolve the minigame; next call returns Q2.
+        post(f"/api/sp/minigame/finish/{sc}")
+        lq3 = post(f"/api/sp/load-question/{sc}")
     if "question" not in lq3:
-        log(f"FAIL 9: round 2 should have question, got {lq3}")
+        log(f"FAIL 9: round 2 should have question after minigame, got {lq3}")
         return 1
-    log(f"PASS 8-9: round 2 is question (not pick), id={lq3['question']['id']}")
+    log(f"PASS 8-9: round 2 reaches question (via minigame skip), id={lq3['question']['id']}")
     qid2 = lq3["question"]["id"]
     actual2 = sqlite3.connect("tablewars.db").execute(
         "SELECT correct_answer FROM trivia_questions WHERE id = ?", (qid2,)).fetchone()[0]

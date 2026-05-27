@@ -46,7 +46,7 @@ function shortState(s: PuckState): string {
     case 'CATEGORY_PICKING':
       return 'pick category'
     case 'MINIGAME':
-      return `mg/${s.kind_name}`
+      return `mg/${s.flavor}${s.fired ? '·fired' : ''}`
     case 'MATCH_ENDED':
       return 'match end'
     case 'ERROR':

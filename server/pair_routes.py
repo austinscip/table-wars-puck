@@ -566,6 +566,9 @@ def _sp_state_for(session_code: str) -> dict:
             "pending_category_pick": None,    # {picker_puck_id, offer, deadline_at, started_at}
             "next_category_id": None,         # set when picker locks an offer; consumed by next load-question
             "last_round_winner_puck_id": None,# tracked at reveal; drives subsequent picks
+            # Slice E2 — minigame state.
+            "pending_minigame": None,         # {flavor, duration_s, target_quadrant?, started_at, deadline_at, fires}
+            "minigame_resolved_round": None,  # last round we already played a minigame for (gates re-entry)
         }
         _SP_STATE[session_code] = state
     elif "expected_pucks" not in state:
@@ -580,6 +583,9 @@ def _sp_state_for(session_code: str) -> dict:
     state.setdefault("pending_category_pick", None)
     state.setdefault("next_category_id", None)
     state.setdefault("last_round_winner_puck_id", None)
+    # Slice E2 fields.
+    state.setdefault("pending_minigame", None)
+    state.setdefault("minigame_resolved_round", None)
     return state
 
 
@@ -664,6 +670,152 @@ def _maybe_auto_resolve_pick(state: dict) -> bool:
     return True
 
 
+# Slice E2 — minigame policy.
+# Minigames fire BEFORE these question rounds (next_round in 2/4/6).
+SP_MINIGAME_ROUNDS = {2, 4, 6}
+# BULLSEYE: 8s aim window. Quadrant match × speed bonus.
+SP_BULLSEYE_DURATION_S = 8.0
+# SHOT_CLOCK: 3s sweep cycle, 30% green zone in the middle.
+SP_SHOTCLOCK_DURATION_S = 8.0
+SP_SHOTCLOCK_CYCLE_MS = 3000
+SP_SHOTCLOCK_GREEN_FRAC = 0.30
+# Reward: bonus points added directly to cumulative_scores.
+SP_MINIGAME_WIN_BONUS = 500
+SP_MINIGAME_SECOND_BONUS = 200
+
+
+def _build_minigame_phase(state: dict, next_round: int) -> dict:
+    """Compose the {flavor, duration_s, target_quadrant?, started_at,
+    deadline_at, fires} record for an upcoming minigame. Flavor
+    alternates by round (2=BULLSEYE, 4=SHOT_CLOCK, 6=BULLSEYE).
+    BULLSEYE picks a target quadrant on the server so all pucks aim
+    at the same target."""
+    import random as _random
+    flavor = "BULLSEYE" if next_round in (2, 6) else "SHOT_CLOCK"
+    now = _now()
+    if flavor == "BULLSEYE":
+        duration_s = SP_BULLSEYE_DURATION_S
+        target_quadrant = _random.choice(["A", "B", "C", "D"])
+    else:
+        duration_s = SP_SHOTCLOCK_DURATION_S
+        target_quadrant = None
+    return {
+        "flavor": flavor,
+        "duration_s": duration_s,
+        "target_quadrant": target_quadrant,
+        "cycle_ms": SP_SHOTCLOCK_CYCLE_MS if flavor == "SHOT_CLOCK" else None,
+        "green_frac": SP_SHOTCLOCK_GREEN_FRAC if flavor == "SHOT_CLOCK" else None,
+        "started_at": now,
+        "deadline_at": now + duration_s,
+        "fires": {},  # puck_id -> {t_ms, quadrant, points}
+    }
+
+
+def _score_minigame_fire(mg: dict, t_ms: int, quadrant: str | None) -> int:
+    """Compute points for a single puck's fire. BULLSEYE: quadrant
+    match × speed bonus. SHOT_CLOCK: closeness to green-zone center
+    on a sweep cycle. Both top out at 1000 to slot into the existing
+    LEGENDARY-equivalent scale; final bonus to cumulative scores is
+    SP_MINIGAME_WIN_BONUS / SECOND_BONUS regardless of these per-fire
+    points, which only drive the ranking."""
+    if mg["flavor"] == "BULLSEYE":
+        if not quadrant or quadrant not in ("A", "B", "C", "D"):
+            return 0
+        duration_ms = mg["duration_s"] * 1000.0
+        if t_ms < 0 or t_ms > duration_ms:
+            return 0
+        if quadrant != mg["target_quadrant"]:
+            return 0
+        # Faster fires score higher: 1000 at t=0, linear decay to 100
+        # at t=duration. Sub-100 floor so even slow correct fires beat
+        # any wrong-quadrant fire.
+        return int(max(100, 1000 - (t_ms / duration_ms) * 900))
+    # SHOT_CLOCK: sweep modulo cycle. Green zone is centered.
+    cycle_ms = mg["cycle_ms"] or SP_SHOTCLOCK_CYCLE_MS
+    pos = (t_ms % cycle_ms) / cycle_ms  # 0..1
+    # Green band centered on 0.5 with width green_frac.
+    half_width = (mg["green_frac"] or SP_SHOTCLOCK_GREEN_FRAC) / 2.0
+    distance = abs(pos - 0.5)
+    if distance > half_width:
+        return 0
+    # 1000 at center, linear decay to ~50 at edge.
+    return int(max(50, 1000 - (distance / half_width) * 950))
+
+
+def _resolve_minigame(state: dict, session_code: str, *, force: bool = False) -> bool:
+    """If every expected puck has fired (or `force=True` for deadline
+    expiry), award bonuses and emit minigame_winner. Returns True if
+    resolved now."""
+    mg = state.get("pending_minigame")
+    if not mg:
+        return False
+    expected = state.get("expected_pucks") or set()
+    fires = mg.get("fires") or {}
+    if not force and expected and not all(pid in fires for pid in expected):
+        return False
+    # Fill non-firing pucks as zero-point fires.
+    for pid in expected:
+        if pid not in fires:
+            fires[pid] = {"t_ms": None, "quadrant": None, "points": 0}
+    # Rank by points descending, ties broken by lowest puck_id (same
+    # policy as _maybe_emit_reveal — see comment near line 942).
+    ranked = sorted(
+        fires.items(),
+        key=lambda kv: (-int(kv[1]["points"]), int(kv[0])),
+    )
+    # Bonus to cumulative_scores: 500 to #1 (if they scored > 0), 200
+    # to #2 (if they scored > 0).
+    awarded = {}
+    if ranked and ranked[0][1]["points"] > 0:
+        winner_pid = ranked[0][0]
+        state["cumulative_scores"][winner_pid] = (
+            state["cumulative_scores"].get(winner_pid, 0) + SP_MINIGAME_WIN_BONUS
+        )
+        awarded[winner_pid] = SP_MINIGAME_WIN_BONUS
+    if len(ranked) > 1 and ranked[1][1]["points"] > 0:
+        second_pid = ranked[1][0]
+        state["cumulative_scores"][second_pid] = (
+            state["cumulative_scores"].get(second_pid, 0) + SP_MINIGAME_SECOND_BONUS
+        )
+        awarded[second_pid] = SP_MINIGAME_SECOND_BONUS
+    # Build results payload for the TV.
+    results = [
+        {
+            "puck_id": pid,
+            "t_ms": f.get("t_ms"),
+            "quadrant": f.get("quadrant"),
+            "points": int(f.get("points", 0)),
+            "bonus": int(awarded.get(pid, 0)),
+            "cumulative_total": state["cumulative_scores"].get(pid, 0),
+        }
+        for pid, f in ranked
+    ]
+    if _socketio is not None:
+        _socketio.emit(
+            "minigame_winner",
+            {
+                "session_code": session_code,
+                "flavor": mg["flavor"],
+                "target_quadrant": mg.get("target_quadrant"),
+                "results": results,
+            },
+            room=session_code,
+        )
+    state["minigame_resolved_round"] = state["round"] + 1
+    state["pending_minigame"] = None
+    return True
+
+
+def _maybe_auto_resolve_minigame(state: dict, session_code: str) -> bool:
+    """Force-resolve a minigame if past its deadline."""
+    mg = state.get("pending_minigame")
+    if not mg:
+        return False
+    if _now() < mg.get("deadline_at", 0):
+        return False
+    return _resolve_minigame(state, session_code, force=True)
+
+
 def _difficulty_for_round(r: int) -> str:
     if r <= 2:
         return "easy"
@@ -716,15 +868,85 @@ def sp_load_question(session_code: str):
             {"error": "match_complete", "rounds": SP_TOTAL_ROUNDS}
         ), 409
 
+    # Slice E2 — minigame phase. Fires BEFORE rounds 2/4/6. Runs
+    # after the pick phase (rounds 1/3/5/7 get picks; 2/4/6 get
+    # minigames) and is gated by minigame_resolved_round so it
+    # doesn't re-fire on retries.
+    next_round = state["round"] + 1
+    mg_pending = state.get("pending_minigame")
+    # Don't open a pick/minigame phase if there's an outstanding
+    # unrevealed question — the previous round needs to finish first.
+    # This guards against a TV reload mid-question accidentally
+    # triggering the next-round phase early.
+    cur_qid_local = state.get("current_question_id")
+    ready_for_next_phase = (
+        cur_qid_local is None
+        or state.get("revealed_for_question_id") == cur_qid_local
+    )
+    if (ready_for_next_phase
+            and next_round in SP_MINIGAME_ROUNDS
+            and state.get("minigame_resolved_round") != next_round):
+        if mg_pending:
+            # Auto-resolve on deadline, then fall through to the
+            # question advance.
+            if _maybe_auto_resolve_minigame(state, session_code):
+                mg_pending = None
+            else:
+                return jsonify({
+                    "phase": "minigame",
+                    "flavor": mg_pending["flavor"],
+                    "duration_s": mg_pending["duration_s"],
+                    "target_quadrant": mg_pending.get("target_quadrant"),
+                    "cycle_ms": mg_pending.get("cycle_ms"),
+                    "green_frac": mg_pending.get("green_frac"),
+                    "started_at": mg_pending["started_at"],
+                    "deadline_at": mg_pending["deadline_at"],
+                    "round": next_round,
+                    "total_rounds": SP_TOTAL_ROUNDS,
+                })
+        else:
+            mg_pending = _build_minigame_phase(state, next_round)
+            state["pending_minigame"] = mg_pending
+            if _socketio is not None:
+                _socketio.emit(
+                    "minigame_start",
+                    {
+                        "session_code": session_code,
+                        "flavor": mg_pending["flavor"],
+                        "duration_s": mg_pending["duration_s"],
+                        "target_quadrant": mg_pending.get("target_quadrant"),
+                        "cycle_ms": mg_pending.get("cycle_ms"),
+                        "green_frac": mg_pending.get("green_frac"),
+                        "started_at": mg_pending["started_at"],
+                        "deadline_at": mg_pending["deadline_at"],
+                        "round": next_round,
+                    },
+                    room=session_code,
+                )
+            return jsonify({
+                "phase": "minigame",
+                "flavor": mg_pending["flavor"],
+                "duration_s": mg_pending["duration_s"],
+                "target_quadrant": mg_pending.get("target_quadrant"),
+                "cycle_ms": mg_pending.get("cycle_ms"),
+                "green_frac": mg_pending.get("green_frac"),
+                "started_at": mg_pending["started_at"],
+                "deadline_at": mg_pending["deadline_at"],
+                "round": next_round,
+                "total_rounds": SP_TOTAL_ROUNDS,
+            })
+
     # Slice E1 — category pick phase.
     # Before each pick-round (state["round"]+1 in SP_PICK_ROUNDS), the
     # winner of the previous question round picks a category from a
     # random offer. The pick phase blocks the question advance until
     # /api/sp/select-category is called OR the 10-second deadline
     # expires (auto-default to the first offer).
-    next_round = state["round"] + 1
+    # next_round and ready_for_next_phase already computed above.
     pp = state.get("pending_category_pick")
-    if next_round in SP_PICK_ROUNDS and state.get("next_category_id") is None:
+    if (ready_for_next_phase
+            and next_round in SP_PICK_ROUNDS
+            and state.get("next_category_id") is None):
         if pp:
             # Auto-resolve if the picker missed the deadline. Then fall
             # through to the question advance using the defaulted
@@ -952,6 +1174,19 @@ def sp_match_state(session_code: str):
             "deadline_at": pp["deadline_at"],
             "started_at": pp["started_at"],
         }
+    # Slice E2: same idea for the minigame phase.
+    mg = state.get("pending_minigame")
+    mg_payload = None
+    if mg:
+        mg_payload = {
+            "flavor": mg["flavor"],
+            "duration_s": mg["duration_s"],
+            "target_quadrant": mg.get("target_quadrant"),
+            "cycle_ms": mg.get("cycle_ms"),
+            "green_frac": mg.get("green_frac"),
+            "started_at": mg["started_at"],
+            "deadline_at": mg["deadline_at"],
+        }
     return jsonify(
         {
             "exists": True,
@@ -960,6 +1195,7 @@ def sp_match_state(session_code: str):
             "questions_asked": len(state["asked_ids"]),
             "complete": bool(state.get("complete", False)),
             "pending_category_pick": pick_payload,
+            "pending_minigame": mg_payload,
         }
     )
 
@@ -1158,6 +1394,90 @@ def _maybe_emit_reveal(session_code: str, force: bool = False) -> bool:
             room=session_code,
         )
     return True
+
+
+@sp_bp.route("/minigame/state/<session_code>", methods=["GET"])
+def sp_minigame_state(session_code: str):
+    """Slice E2 — return current minigame state for late-joiners.
+    Returns 200 with {active: false} when no minigame is pending."""
+    state = _SP_STATE.get(session_code)
+    if not state:
+        return jsonify({"active": False})
+    mg = state.get("pending_minigame")
+    if not mg:
+        return jsonify({"active": False})
+    return jsonify({
+        "active": True,
+        "flavor": mg["flavor"],
+        "duration_s": mg["duration_s"],
+        "target_quadrant": mg.get("target_quadrant"),
+        "cycle_ms": mg.get("cycle_ms"),
+        "green_frac": mg.get("green_frac"),
+        "started_at": mg["started_at"],
+        "deadline_at": mg["deadline_at"],
+        "fires": mg.get("fires") or {},
+    })
+
+
+@sp_bp.route("/minigame/fire", methods=["POST"])
+def sp_minigame_fire():
+    """Slice E2 — record one puck's fire in the active minigame.
+    Body: {session_code, puck_id, t_ms, quadrant?}. Resolves the
+    minigame if every expected puck has now fired. Emits
+    minigame_fire socket so the TV can render per-puck markers as
+    they land."""
+    data = request.get_json(silent=True) or {}
+    try:
+        sc = str(data["session_code"])
+        pid = int(data["puck_id"])
+        t_ms = int(data.get("t_ms") or 0)
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"ok": False, "reason": "bad payload"}), 400
+    quadrant = data.get("quadrant")
+    state = _SP_STATE.get(sc)
+    if state is None:
+        return jsonify({"ok": False, "reason": "no session"}), 404
+    mg = state.get("pending_minigame")
+    if not mg:
+        return jsonify({"ok": False, "reason": "no pending minigame"}), 409
+    if pid in (mg.get("fires") or {}):
+        # Idempotent: already fired. Return current points.
+        return jsonify({"ok": True, "already": True,
+                        "points": int(mg["fires"][pid]["points"])})
+    points = _score_minigame_fire(mg, t_ms, quadrant)
+    mg.setdefault("fires", {})[pid] = {
+        "t_ms": t_ms,
+        "quadrant": quadrant,
+        "points": points,
+    }
+    if _socketio is not None:
+        _socketio.emit(
+            "minigame_fire",
+            {
+                "session_code": sc,
+                "puck_id": pid,
+                "t_ms": t_ms,
+                "quadrant": quadrant,
+                "points": points,
+            },
+            room=sc,
+        )
+    # Resolve immediately if every expected puck has now fired.
+    emitted = _resolve_minigame(state, sc)
+    return jsonify({"ok": True, "points": points, "resolved": emitted})
+
+
+@sp_bp.route("/minigame/finish/<session_code>", methods=["POST"])
+def sp_minigame_finish(session_code: str):
+    """Slice E2 — TV-side belt-and-suspenders. Forces resolution at
+    the deadline so a missed puck fire doesn't strand the match."""
+    state = _SP_STATE.get(session_code)
+    if state is None:
+        return jsonify({"ok": False, "reason": "no session"}), 404
+    if not state.get("pending_minigame"):
+        return jsonify({"ok": True, "noop": True})
+    emitted = _resolve_minigame(state, session_code, force=True)
+    return jsonify({"ok": True, "emitted": emitted})
 
 
 @sp_bp.route("/select-category/<session_code>", methods=["POST"])
@@ -1362,6 +1682,24 @@ def sp_current_question(session_code: str):
     state = _SP_STATE.get(session_code)
     if state is not None and state.get("complete"):
         return jsonify({"active": False, "complete": True})
+    # Slice E1/E2: same rationale for pending-pick / pending-minigame
+    # phases. Until the phase resolves and the next question loads,
+    # there is no active question to point pucks at — they must
+    # transition through CATEGORY_PICKING / MINIGAME and back to IDLE,
+    # not stay pinned on the prior round's revealed question.
+    if state is not None and (
+        state.get("pending_category_pick") or state.get("pending_minigame")
+    ):
+        return jsonify({"active": False})
+    # Also: if the previous question has been revealed and we're
+    # between rounds (no new question loaded yet), there's nothing
+    # active. The cached _QUESTION_TRACKER entry is stale once
+    # revealed_for_question_id matches; only the next sp_load_question
+    # call advances state to the next question.
+    if state is not None and state.get("current_question_id") is not None and (
+        state.get("revealed_for_question_id") == state.get("current_question_id")
+    ):
+        return jsonify({"active": False})
 
     sst = _QUESTION_TRACKER.get(session_code)
     if not sst:

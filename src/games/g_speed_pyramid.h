@@ -34,6 +34,7 @@ enum class State : uint8_t {
   LOBBY_WAITING,      // v2: joined lobby, waiting for host to start
   IN_GAME_IDLE,       // session bound, no question active yet
   IN_GAME_CATEGORY_PICKING,  // Slice E1: picker is choosing 1 of 3 offers
+  IN_GAME_MINIGAME,   // Slice E2: BULLSEYE or SHOT_CLOCK minigame active
   IN_GAME_ANSWERING,  // question active, tilt-aim + tap
   IN_GAME_LOCKED,     // tap fired, awaiting server reveal
   MATCH_ENDED,        // all 7 rounds done — TAP=PlayAgain, HOLD_3S=NewPlayer
@@ -46,6 +47,15 @@ inline int  _pick_offer_ids[3] = {0, 0, 0};
 inline int  _pick_picker = 0;
 inline int  _pick_idx = 0;
 inline char _last_pick_quadrant = 0;
+
+// Slice E2 — minigame state. _mg_flavor: 'B' = BULLSEYE, 'S' =
+// SHOT_CLOCK. _mg_target is the BULLSEYE target letter ('A'/'B'/'C'
+// /'D'). _mg_started_ms is local-millis at minigame entry — used to
+// compute t_ms when the puck fires.
+inline char     _mg_flavor = 0;
+inline char     _mg_target = 0;
+inline uint32_t _mg_started_ms = 0;
+inline bool     _mg_fired = false;
 
 inline State _state = State::IDLE;
 inline uint8_t _dial_digits[6] = {0, 0, 0, 0, 0, 0};
@@ -272,6 +282,51 @@ inline bool _post_select_category(int category_id) {
       ",\"category_id\":" + category_id + "}";
   String path = "/api/sp/select-category/" + _session_code;
   return sp_net::post_json(path.c_str(), body, nullptr) == 200;
+}
+
+// Slice E2 — peek into match-state for a pending minigame phase.
+// Sets _mg_flavor ('B'/'S') and _mg_target (BULLSEYE only, else 0).
+// Returns true if a minigame is pending.
+inline bool _poll_pending_minigame() {
+  if (_session_code.length() == 0) return false;
+  String path = "/api/sp/match-state/" + _session_code;
+  String body;
+  const int code = sp_net::get_json(path.c_str(), &body);
+  if (code != 200) return false;
+  const int mg_at = body.indexOf("\"pending_minigame\":");
+  if (mg_at < 0) return false;
+  int probe = mg_at + 19;
+  while (probe < (int)body.length() && (body[probe] == ' ' || body[probe] == '\t')) probe++;
+  if (probe < (int)body.length() && body[probe] == 'n') return false;  // "null"
+  String slice = body.substring(mg_at);
+  String flavor;
+  if (!_extract_string(slice, "flavor", &flavor)) return false;
+  _mg_flavor = flavor.length() > 0 ? flavor[0] : 0;  // 'B' or 'S'
+  String target;
+  if (_extract_string(slice, "target_quadrant", &target) && target.length() > 0
+      && target != "null") {
+    _mg_target = target[0];
+  } else {
+    _mg_target = 0;
+  }
+  return _mg_flavor == 'B' || _mg_flavor == 'S';
+}
+
+// POST /api/sp/minigame/fire. Returns true on 200.
+inline bool _post_minigame_fire(uint32_t t_ms, char quadrant) {
+  if (_session_code.length() == 0) return false;
+  String body =
+      String("{\"session_code\":\"") + _session_code +
+      "\",\"puck_id\":" + PUCK_ID +
+      ",\"t_ms\":" + t_ms;
+  if (quadrant) {
+    body += ",\"quadrant\":\"";
+    body += quadrant;
+    body += "\"}";
+  } else {
+    body += ",\"quadrant\":null}";
+  }
+  return sp_net::post_json("/api/sp/minigame/fire", body, nullptr) == 200;
 }
 
 // POST /api/sp/reset/<session_code>. Clears the round counter for a
@@ -559,21 +614,22 @@ inline bool pair_mode_loop() {
   }
 
   // -----------------------------
-  // In-game state machine (slice 1C)
+  // In-game state machine (slice 1C + E1 + E2)
   // -----------------------------
   if (_state == State::IN_GAME_IDLE ||
       _state == State::IN_GAME_CATEGORY_PICKING ||
+      _state == State::IN_GAME_MINIGAME ||
       _state == State::IN_GAME_ANSWERING ||
       _state == State::IN_GAME_LOCKED) {
 
-    // Poll for active question every 500ms while idle / locked / pick.
-    // Also check match-state to detect end-of-match (server's explicit
-    // `complete` flag, set only after the post-Q7 load attempt fails)
-    // and to detect a pending category-pick phase (Slice E1).
+    // Poll for active question every 500ms while idle / locked / pick
+    // / minigame. Also check match-state for end-of-match, pending
+    // category-pick (E1), pending minigame (E2).
     const uint32_t now = millis();
     if ((_state == State::IN_GAME_IDLE ||
          _state == State::IN_GAME_LOCKED ||
-         _state == State::IN_GAME_CATEGORY_PICKING) &&
+         _state == State::IN_GAME_CATEGORY_PICKING ||
+         _state == State::IN_GAME_MINIGAME) &&
         now - _last_poll_ms > 500) {
       _last_poll_ms = now;
 
@@ -583,9 +639,6 @@ inline bool pair_mode_loop() {
         sp_led::victory_sweep(1500);
         sp_feedback::victory();
       } else if (_poll_pending_pick()) {
-        // Server is in a category-pick phase. Every puck visits this
-        // state, but only the picker can commit. The pick_offer_ids
-        // and pick_picker were populated by _poll_pending_pick.
         if (_state != State::IN_GAME_CATEGORY_PICKING) {
           Serial.print("[STATE] -> IN_GAME_CATEGORY_PICKING picker=");
           Serial.println(_pick_picker);
@@ -594,9 +647,21 @@ inline bool pair_mode_loop() {
           _last_pick_quadrant = 0;
         }
       } else if (_state == State::IN_GAME_CATEGORY_PICKING) {
-        // Pick was resolved (server cleared pending_category_pick).
-        // Drop to IN_GAME_IDLE so the next tick picks up the question.
         Serial.println("[STATE] IN_GAME_CATEGORY_PICKING -> IN_GAME_IDLE");
+        _state = State::IN_GAME_IDLE;
+        sp_led::clear();
+      } else if (_poll_pending_minigame()) {
+        if (_state != State::IN_GAME_MINIGAME) {
+          Serial.print("[STATE] -> IN_GAME_MINIGAME flavor=");
+          Serial.print(_mg_flavor);
+          Serial.print(" target=");
+          Serial.println(_mg_target);
+          _state = State::IN_GAME_MINIGAME;
+          _mg_started_ms = millis();
+          _mg_fired = false;
+        }
+      } else if (_state == State::IN_GAME_MINIGAME) {
+        Serial.println("[STATE] IN_GAME_MINIGAME -> IN_GAME_IDLE");
         _state = State::IN_GAME_IDLE;
         sp_led::clear();
       } else if (_poll_current_question()) {
@@ -639,6 +704,36 @@ inline bool pair_mode_loop() {
       } else {
         // Not the picker — just glow softly while waiting.
         _show_pair_mode_glow();
+      }
+      return true;
+    }
+
+    // Slice E2 — minigame interaction. BULLSEYE: render current tilt
+    // quadrant on the LED ring (mirrors ANSWERING aim). SHOT_CLOCK:
+    // ignore tilt; tap fires with t_ms only (server scores from
+    // sweep position).
+    if (_state == State::IN_GAME_MINIGAME) {
+      if (_mg_fired) {
+        // Already locked in — soft glow until server resolves.
+        _show_pair_mode_glow();
+        return true;
+      }
+      const SpQuadrant q = sp_imu::read_quadrant();
+      const int8_t ring_q = _quadrant_to_ring(q);
+      if (_mg_flavor == 'B') {
+        sp_led::show_quadrant(ring_q, sp_led::color_accent());
+      } else {
+        // SHOT_CLOCK — pulse the ring in accent to signal "tap now".
+        _show_pair_mode_glow();
+      }
+      if (be == SpButtonEvent::TAP) {
+        const uint32_t t_ms = millis() - _mg_started_ms;
+        const char quadrant = (_mg_flavor == 'B') ? _quadrant_to_letter(q) : 0;
+        sp_feedback::lock_in();
+        sp_led::flash(sp_led::color_for_puck(PUCK_ID), 300);
+        if (_post_minigame_fire(t_ms, quadrant)) {
+          _mg_fired = true;
+        }
       }
       return true;
     }

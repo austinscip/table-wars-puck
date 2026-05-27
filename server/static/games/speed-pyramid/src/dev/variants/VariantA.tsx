@@ -47,7 +47,7 @@ function describe(s: PuckState): string {
     case 'CATEGORY_PICKING':
       return 'PICK CATEGORY'
     case 'MINIGAME':
-      return `MINIGAME ${s.kind_name}`
+      return `MINIGAME ${s.flavor}${s.target_quadrant ? ` →${s.target_quadrant}` : ''}${s.pending_quadrant ? ` aim=${s.pending_quadrant}` : ''}${s.fired ? ' fired' : ''}`
     case 'MATCH_ENDED':
       return 'MATCH ENDED'
     case 'ERROR':

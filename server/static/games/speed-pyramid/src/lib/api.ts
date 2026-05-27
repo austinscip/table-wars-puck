@@ -189,7 +189,39 @@ export const api = {
         `/api/sp/select-category/${session_code}`,
         { puck_id, category_id },
       ),
+    minigameState: async (session_code: string) => {
+      const res = await fetch(`/api/sp/minigame/state/${session_code}`)
+      if (!res.ok) return { active: false } as MinigameStateResponse
+      return res.json() as Promise<MinigameStateResponse>
+    },
+    minigameFire: (
+      session_code: string,
+      puck_id: number,
+      t_ms: number,
+      quadrant?: 'A' | 'B' | 'C' | 'D' | null,
+    ) =>
+      postJson<{ ok: boolean; points: number; resolved: boolean }>(
+        `/api/sp/minigame/fire`,
+        { session_code, puck_id, t_ms, quadrant: quadrant ?? null },
+      ),
+    minigameFinish: (session_code: string) =>
+      postJson<{ ok: boolean; emitted?: boolean; noop?: boolean }>(
+        `/api/sp/minigame/finish/${session_code}`,
+        {},
+      ),
   },
+}
+
+export interface MinigameStateResponse {
+  active: boolean
+  flavor?: 'BULLSEYE' | 'SHOT_CLOCK'
+  duration_s?: number
+  target_quadrant?: 'A' | 'B' | 'C' | 'D' | null
+  cycle_ms?: number | null
+  green_frac?: number | null
+  started_at?: number
+  deadline_at?: number
+  fires?: Record<string, { t_ms: number; quadrant: string | null; points: number }>
 }
 
 export interface FinalResultsPlayer {

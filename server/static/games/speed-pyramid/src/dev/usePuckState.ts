@@ -41,7 +41,16 @@ export type PuckState =
       chosen: Letter
     }
   | { kind: 'CATEGORY_PICKING'; session_code: string; offer: CategoryOffer[] }
-  | { kind: 'MINIGAME'; session_code: string; kind_name: string }
+  | {
+      kind: 'MINIGAME'
+      session_code: string
+      flavor: 'BULLSEYE' | 'SHOT_CLOCK'
+      target_quadrant: Letter | null
+      started_at: number
+      deadline_at: number
+      pending_quadrant?: Letter
+      fired?: boolean
+    }
   | { kind: 'MATCH_ENDED'; session_code: string }
   | { kind: 'ERROR'; msg: string }
 
@@ -69,6 +78,16 @@ interface MatchStateResp {
     offer: CategoryOffer[]
     deadline_at: number
     started_at: number
+  } | null
+  // Slice E2 — set when the server is in a minigame phase.
+  pending_minigame?: {
+    flavor: 'BULLSEYE' | 'SHOT_CLOCK'
+    duration_s: number
+    target_quadrant: Letter | null
+    cycle_ms: number | null
+    green_frac: number | null
+    started_at: number
+    deadline_at: number
   } | null
 }
 
@@ -215,22 +234,35 @@ export function usePuckState(puck_id: number) {
       await api.sp.reset(cur.session_code)
       setState({ kind: 'IN_GAME_IDLE', session_code: cur.session_code })
     } else if (cur.kind === 'MINIGAME') {
-      // Lean MVP: minigame TAP = fire with A quadrant + a mid-time t_ms.
-      // Good enough to clear the phase; aim accuracy isn't the bug we're
-      // chasing here. Firmware tilt-aim would be wired in v1.1.
+      if (cur.fired) return
+      // Slice E2: TAP fires the minigame. BULLSEYE uses the puck's
+      // pending_quadrant (set by tilt) or defaults to 'A'; SHOT_CLOCK
+      // doesn't need a quadrant — server scores from t_ms only.
+      const t_ms = Math.max(0, Date.now() - cur.started_at * 1000)
+      const quadrant = cur.flavor === 'BULLSEYE'
+        ? (cur.pending_quadrant ?? 'A')
+        : null
+      setState({ ...cur, fired: true })
       await POST('/api/sp/minigame/fire', {
         session_code: cur.session_code,
         puck_id,
-        t_ms: 2500,
-        quadrant: 'A',
+        t_ms: Math.round(t_ms),
+        quadrant,
       })
     }
   }, [puck_id])
 
-  // Tilt sets the "pending" letter while in IN_GAME_ANSWERING; otherwise
-  // currently a no-op (dial doesn't use tilt under pragmatic model).
+  // Tilt sets the "pending" letter while in IN_GAME_ANSWERING (or
+  // pending_quadrant for BULLSEYE minigames); otherwise a no-op
+  // (dial doesn't use tilt under pragmatic model).
   const tilt = useCallback((dir: 'N' | 'E' | 'S' | 'W') => {
     const cur = stateRef.current
+    const dirMap: Record<typeof dir, Letter> = { N: 'A', E: 'B', S: 'C', W: 'D' }
+    if (cur.kind === 'MINIGAME') {
+      if (cur.flavor !== 'BULLSEYE' || cur.fired) return
+      setState({ ...cur, pending_quadrant: dirMap[dir] })
+      return
+    }
     if (cur.kind !== 'IN_GAME_ANSWERING') return
     const map: Record<typeof dir, Letter> = { N: 'A', E: 'B', S: 'C', W: 'D' }
     const letter = map[dir]
@@ -387,6 +419,28 @@ export function usePuckState(puck_id: number) {
         } else if (!cancelled && cur.kind === 'CATEGORY_PICKING' && !pp) {
           // Pick resolved — drop to IN_GAME_IDLE; the next tick picks
           // up the new question via current-question.
+          setState({ kind: 'IN_GAME_IDLE', session_code: sc })
+        }
+
+        // Slice E2 — same pattern for minigame phase.
+        const mgp = ms?.pending_minigame
+        if (!cancelled && mgp) {
+          const already =
+            cur.kind === 'MINIGAME' &&
+            cur.flavor === mgp.flavor &&
+            cur.started_at === mgp.started_at
+          if (!already) {
+            setState({
+              kind: 'MINIGAME',
+              session_code: sc,
+              flavor: mgp.flavor,
+              target_quadrant: mgp.target_quadrant,
+              started_at: mgp.started_at,
+              deadline_at: mgp.deadline_at,
+            })
+          }
+        } else if (!cancelled && cur.kind === 'MINIGAME' && !mgp) {
+          // Minigame resolved — drop to IN_GAME_IDLE.
           setState({ kind: 'IN_GAME_IDLE', session_code: sc })
         }
         // Then check current question. If active and we're not already

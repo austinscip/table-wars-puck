@@ -107,17 +107,30 @@ def get_sc() -> str | None:
 
 
 def drive_full_match_rest(sc: str, fresh_start: bool = True) -> None:
-    """Drive 7 questions via REST. Fast path to MATCH_ENDED.
+    """Drive a 7-round match via REST. Now (E1/E2) the flow alternates
+    question rounds with category picks (rounds 1/3/5/7) and minigames
+    (rounds 2/4/6), so the drive loop iterates more than 7 times.
 
-    fresh_start: call sp_reset first to zero round counters. Skip only if
-    you intentionally want to continue mid-match from whatever state.
+    fresh_start: call sp_reset first to zero round counters.
     """
     if fresh_start:
         requests.post(f"{BASE}/api/sp/reset/{sc}", timeout=5)
-    for r in range(7):
+    # Up to ~18 phases: 4 picks + 7 questions + 3 minigames + slop.
+    for _ in range(25):
         lq = requests.post(f"{BASE}/api/sp/load-question/{sc}", timeout=5).json()
+        phase = lq.get("phase")
+        if phase == "category_pick":
+            picker = lq["picker_puck_id"]
+            cat = lq["offer"][0]["id"]
+            requests.post(f"{BASE}/api/sp/select-category/{sc}", json={
+                "puck_id": picker, "category_id": cat
+            }, timeout=5)
+            continue
+        if phase == "minigame":
+            requests.post(f"{BASE}/api/sp/minigame/finish/{sc}", timeout=5)
+            continue
         if "question" not in lq:
-            log(f"  drive aborting at r={r}: unexpected response {lq!r}")
+            log(f"  drive aborting: unexpected response {lq!r}")
             return
         qid = lq["question"]["id"]
         requests.post(f"{BASE}/api/sp/answer", json={
@@ -250,8 +263,16 @@ def run() -> int:
                 match_loop_ok = False
                 break
             time.sleep(1.2)
-            # Drive Q1 of the new match (TV is on /title in this harness).
-            requests.post(f"{BASE}/api/sp/load-question/{sc_persist}", timeout=5)
+            # Drive Q1 of the new match. Post-E1 the first load-question
+            # returns a category-pick phase, not a question. Auto-select
+            # the first offer so the puck flow continues to a Q.
+            lq = requests.post(f"{BASE}/api/sp/load-question/{sc_persist}", timeout=5).json()
+            if lq.get("phase") == "category_pick":
+                requests.post(f"{BASE}/api/sp/select-category/{sc_persist}", json={
+                    "puck_id": lq["picker_puck_id"],
+                    "category_id": lq["offer"][0]["id"],
+                }, timeout=5)
+                requests.post(f"{BASE}/api/sp/load-question/{sc_persist}", timeout=5)
             time.sleep(1.5)
             s1 = puck_state_text(hub, 0)
             s2 = puck_state_text(hub, 1)
