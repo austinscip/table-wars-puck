@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '../lib/api'
@@ -40,6 +40,8 @@ export default function CategoryPickScreen() {
   const [pick, setPick] = useState<CategoryPickState | null>(null)
   const [chosenId, setChosenId] = useState<number | null>(null)
   const [remainingMs, setRemainingMs] = useState(10_000)
+  // R024: guards the one-shot deadline kick (see countdown effect).
+  const kickedRef = useRef(false)
 
   // Bootstrap the pick state via REST (idempotent: load-question
   // returns the same pending pick on every call). Subscribe to
@@ -97,15 +99,41 @@ export default function CategoryPickScreen() {
 
   // Tick the countdown so the picker sees the deadline.
   useEffect(() => {
-    if (!pick) return
+    if (!pick || !sessionCode) return
+    const sc = sessionCode
     const tick = () => {
       const ms = Math.max(0, pick.deadline_at * 1000 - Date.now())
       setRemainingMs(ms)
+      // R024: when the deadline expires with no pick locked in, the TV
+      // MUST re-issue loadQuestion. The server only auto-defaults the
+      // category (and advances to the question) when load-question is
+      // called after the deadline — and pucks never call it (ADR-0002).
+      // Without this kick, nobody calls load-question on a timeout, the
+      // server never auto-resolves, and the match hangs at 0s forever.
+      if (ms <= 0 && chosenId === null && !kickedRef.current) {
+        kickedRef.current = true
+        api.sp
+          .loadQuestion(sc)
+          .then((resp) => {
+            const phase = (resp as unknown as { phase?: string }).phase
+            if (phase === 'category_pick') {
+              // Server clock hasn't passed the deadline yet (skew) —
+              // allow the next tick to retry rather than navigating into
+              // a still-pending pick.
+              kickedRef.current = false
+            } else {
+              navigate(`/question/${sc}`, { replace: true })
+            }
+          })
+          .catch(() => {
+            kickedRef.current = false
+          })
+      }
     }
     tick()
     const id = window.setInterval(tick, 100)
     return () => window.clearInterval(id)
-  }, [pick])
+  }, [pick, chosenId, sessionCode, navigate])
 
   if (!pick) {
     return (

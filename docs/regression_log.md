@@ -35,6 +35,7 @@ with a gate-assertion name, it's not fixed.
 | R021 | 2026-05-27 | TBD | Q1 commentator audio starts before question card fully renders | commentary-fires-during-reveal-not-question-show |
 | R022 | 2026-05-27 | TBD | Commentator keeps talking onto next screen when both pucks answer quickly | reveal-audio-stops-on-navigate-away |
 | R023 | 2026-05-27 | TBD | Countdown starts immediately after narration ends with no breath | TBD-gap-between-narration-end-and-countdown |
+| R024 | 2026-05-27 | 2026-05-27 | Category pick HANGS at 0s — TV never re-calls load-question on deadline expiry, so the server's auto-default (which only fires when load-question is called after the deadline; pucks never call it) never runs and the whole match freezes. Surfaced by ground-truth diag (diag_narration.py) + user report. CategoryPickScreen countdown now kicks loadQuestion on expiry. | pick-timeout-auto-advances-to-question (gate_r024_pick_timeout.py — proven to FAIL on pre-fix build, PASS on fix) |
 
 ## How to add a new bug
 
