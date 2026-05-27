@@ -1419,6 +1419,33 @@ def sp_minigame_state(session_code: str):
     })
 
 
+@sp_bp.route("/minigame/preview", methods=["POST"])
+def sp_minigame_preview():
+    """Slice F — broadcast a puck's aim quadrant during BULLSEYE.
+    Body: {session_code, puck_id, quadrant?}. No-ops if no minigame
+    pending. The TV's MinigameScreen subscribes to
+    minigame_aim_preview and renders a faint per-puck reticle on the
+    target board so players see where they're aiming before they
+    tap. Mirrors pair_dial_preview."""
+    data = request.get_json(silent=True) or {}
+    try:
+        sc = str(data["session_code"])
+        pid = int(data["puck_id"])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"ok": False}), 400
+    quadrant = data.get("quadrant")
+    state = _SP_STATE.get(sc)
+    if state is None or not state.get("pending_minigame"):
+        return jsonify({"ok": True, "noop": True})
+    if _socketio is not None:
+        _socketio.emit(
+            "minigame_aim_preview",
+            {"session_code": sc, "puck_id": pid, "quadrant": quadrant},
+            room=sc,
+        )
+    return jsonify({"ok": True})
+
+
 @sp_bp.route("/minigame/fire", methods=["POST"])
 def sp_minigame_fire():
     """Slice E2 — record one puck's fire in the active minigame.

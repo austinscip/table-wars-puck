@@ -51,11 +51,14 @@ inline char _last_pick_quadrant = 0;
 // Slice E2 — minigame state. _mg_flavor: 'B' = BULLSEYE, 'S' =
 // SHOT_CLOCK. _mg_target is the BULLSEYE target letter ('A'/'B'/'C'
 // /'D'). _mg_started_ms is local-millis at minigame entry — used to
-// compute t_ms when the puck fires.
+// compute t_ms when the puck fires. Slice F: _mg_last_preview_quad
+// is the last quadrant sent via /api/sp/minigame/preview — used to
+// edge-trigger preview POSTs on tilt change.
 inline char     _mg_flavor = 0;
 inline char     _mg_target = 0;
 inline uint32_t _mg_started_ms = 0;
 inline bool     _mg_fired = false;
+inline char     _mg_last_preview_quad = 0;
 
 inline State _state = State::IDLE;
 inline uint8_t _dial_digits[6] = {0, 0, 0, 0, 0, 0};
@@ -310,6 +313,25 @@ inline bool _poll_pending_minigame() {
     _mg_target = 0;
   }
   return _mg_flavor == 'B' || _mg_flavor == 'S';
+}
+
+// Slice F — POST /api/sp/minigame/preview. Best-effort aim broadcast
+// during BULLSEYE so the TV can render per-puck reticles in real
+// time. Throttled by the caller (~100ms) so the puck doesn't flood
+// the server with HTTP requests on every IMU sample.
+inline void _post_minigame_preview(char quadrant) {
+  if (_session_code.length() == 0) return;
+  String body =
+      String("{\"session_code\":\"") + _session_code +
+      "\",\"puck_id\":" + PUCK_ID;
+  if (quadrant) {
+    body += ",\"quadrant\":\"";
+    body += quadrant;
+    body += "\"}";
+  } else {
+    body += ",\"quadrant\":null}";
+  }
+  sp_net::post_json("/api/sp/minigame/preview", body, nullptr);
 }
 
 // POST /api/sp/minigame/fire. Returns true on 200.
@@ -659,6 +681,7 @@ inline bool pair_mode_loop() {
           _state = State::IN_GAME_MINIGAME;
           _mg_started_ms = millis();
           _mg_fired = false;
+          _mg_last_preview_quad = 0;
         }
       } else if (_state == State::IN_GAME_MINIGAME) {
         Serial.println("[STATE] IN_GAME_MINIGAME -> IN_GAME_IDLE");
@@ -722,6 +745,14 @@ inline bool pair_mode_loop() {
       const int8_t ring_q = _quadrant_to_ring(q);
       if (_mg_flavor == 'B') {
         sp_led::show_quadrant(ring_q, sp_led::color_accent());
+        // Slice F — broadcast aim preview on tilt change. Edge-
+        // triggered so we only POST when the quadrant actually
+        // shifts; held-tilt at a stable quadrant doesn't spam.
+        const char preview_q = _quadrant_to_letter(q);
+        if (preview_q != _mg_last_preview_quad) {
+          _mg_last_preview_quad = preview_q;
+          _post_minigame_preview(preview_q);
+        }
       } else {
         // SHOT_CLOCK — pulse the ring in accent to signal "tap now".
         _show_pair_mode_glow();

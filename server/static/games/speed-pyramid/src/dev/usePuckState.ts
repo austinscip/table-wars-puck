@@ -260,7 +260,16 @@ export function usePuckState(puck_id: number) {
     const dirMap: Record<typeof dir, Letter> = { N: 'A', E: 'B', S: 'C', W: 'D' }
     if (cur.kind === 'MINIGAME') {
       if (cur.flavor !== 'BULLSEYE' || cur.fired) return
-      setState({ ...cur, pending_quadrant: dirMap[dir] })
+      const newQuadrant = dirMap[dir]
+      setState({ ...cur, pending_quadrant: newQuadrant })
+      // Slice F — broadcast aim preview so the TV reticle tracks
+      // every puck's hover quadrant in real time. Best-effort, no
+      // need to await.
+      void POST('/api/sp/minigame/preview', {
+        session_code: cur.session_code,
+        puck_id,
+        quadrant: newQuadrant,
+      })
       return
     }
     if (cur.kind !== 'IN_GAME_ANSWERING') return

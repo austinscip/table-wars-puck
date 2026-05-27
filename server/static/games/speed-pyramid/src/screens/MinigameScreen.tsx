@@ -60,6 +60,18 @@ interface MinigameWinnerEvent {
   results: MinigameResult[]
 }
 
+interface MinigameAimPreviewEvent {
+  session_code: string
+  puck_id: number
+  quadrant: 'A' | 'B' | 'C' | 'D' | null
+}
+
+// Mirror of server's PUCK_COLORS for per-puck reticle coloring.
+const PUCK_COLOR: Record<number, string> = {
+  1: '#3B82F6', 2: '#EC4899', 3: '#FBBF24', 4: '#10B981',
+  5: '#A855F7', 6: '#F97316', 7: '#06B6D4', 8: '#EF4444',
+}
+
 const POST_RESOLVE_HOLD_MS = 2500
 
 export default function MinigameScreen() {
@@ -67,6 +79,7 @@ export default function MinigameScreen() {
   const { sessionCode } = useParams<{ sessionCode: string }>()
   const [mg, setMg] = useState<MinigameStartPayload | null>(null)
   const [fires, setFires] = useState<MinigameFireEvent[]>([])
+  const [aims, setAims] = useState<Record<number, 'A' | 'B' | 'C' | 'D'>>({})
   const [winner, setWinner] = useState<MinigameWinnerEvent | null>(null)
   const [remainingMs, setRemainingMs] = useState(8_000)
   const finishedRef = useRef(false)
@@ -109,7 +122,22 @@ export default function MinigameScreen() {
     function onFire(p: MinigameFireEvent) {
       if (p.session_code !== sc) return
       setFires((prev) => [...prev, p])
+      // Once a puck fires, its aim reticle should disappear.
+      setAims((prev) => {
+        const next = { ...prev }
+        delete next[p.puck_id]
+        return next
+      })
       audio.lockIn()
+    }
+    function onAimPreview(p: MinigameAimPreviewEvent) {
+      if (p.session_code !== sc) return
+      setAims((prev) => {
+        const next = { ...prev }
+        if (p.quadrant) next[p.puck_id] = p.quadrant
+        else delete next[p.puck_id]
+        return next
+      })
     }
     function onWinner(p: MinigameWinnerEvent) {
       if (p.session_code !== sc) return
@@ -125,11 +153,13 @@ export default function MinigameScreen() {
     socket.on('minigame_start', onStart)
     socket.on('minigame_fire', onFire)
     socket.on('minigame_winner', onWinner)
+    socket.on('minigame_aim_preview', onAimPreview)
     return () => {
       alive = false
       socket.off('minigame_start', onStart)
       socket.off('minigame_fire', onFire)
       socket.off('minigame_winner', onWinner)
+      socket.off('minigame_aim_preview', onAimPreview)
     }
   }, [sessionCode, navigate])
 
@@ -190,6 +220,7 @@ export default function MinigameScreen() {
         <BullseyeBoard
           target={mg.target_quadrant ?? 'A'}
           fires={fires}
+          aims={aims}
         />
       )}
       {mg.flavor === 'SHOT_CLOCK' && !winner && (
@@ -209,9 +240,11 @@ export default function MinigameScreen() {
 function BullseyeBoard({
   target,
   fires,
+  aims,
 }: {
   target: 'A' | 'B' | 'C' | 'D'
   fires: MinigameFireEvent[]
+  aims: Record<number, 'A' | 'B' | 'C' | 'D'>
 }) {
   const quads: Array<{ key: 'A' | 'B' | 'C' | 'D'; label: string }> = [
     { key: 'A', label: '▲ A' },
@@ -220,17 +253,20 @@ function BullseyeBoard({
     { key: 'D', label: '◀ D' },
   ]
   return (
-    <div className="grid grid-cols-2 gap-4 [grid-template-areas:'a_a''d_b''c_c'] sm:[grid-template-areas:'a_a''d_b''c_c'] w-[clamp(20rem,40vw,32rem)]">
-      {/* Simpler: 2x2 grid placing A top, B right, C bottom, D left. */}
+    <div className="grid grid-cols-2 gap-4 w-[clamp(20rem,40vw,32rem)]">
       {quads.map((q) => {
         const isTarget = q.key === target
         const firesHere = fires.filter((f) => f.quadrant === q.key)
+        // Slice F — per-puck live aim reticles.
+        const aimedBy = Object.entries(aims)
+          .filter(([, quadrant]) => quadrant === q.key)
+          .map(([pid]) => Number(pid))
         return (
           <motion.div
             key={q.key}
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className={`flex aspect-square flex-col items-center justify-center rounded-3xl border-4 ${
+            className={`relative flex aspect-square flex-col items-center justify-center rounded-3xl border-4 ${
               isTarget ? 'border-correct bg-correct/15' : 'border-text/15 bg-text/5'
             }`}
             style={
@@ -239,6 +275,23 @@ function BullseyeBoard({
                 : undefined
             }
           >
+            {/* Live aim reticles — faint per-puck halos */}
+            <div className="absolute inset-2 flex flex-wrap items-start justify-end gap-1">
+              <AnimatePresence>
+                {aimedBy.map((pid) => (
+                  <motion.span
+                    key={`aim-${pid}`}
+                    initial={{ scale: 0.4, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 0.85 }}
+                    exit={{ scale: 0.4, opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="inline-block h-4 w-4 rounded-full ring-2 ring-bg"
+                    style={{ backgroundColor: PUCK_COLOR[pid] ?? '#F8FAFC' }}
+                    title={`Puck ${pid} aiming here`}
+                  />
+                ))}
+              </AnimatePresence>
+            </div>
             <span
               className={`font-display text-[clamp(2.5rem,5vw,4.5rem)] ${
                 isTarget ? 'text-correct' : 'text-text/60'

@@ -209,6 +209,15 @@ export const api = {
         `/api/sp/minigame/finish/${session_code}`,
         {},
       ),
+    minigamePreview: (
+      session_code: string,
+      puck_id: number,
+      quadrant?: 'A' | 'B' | 'C' | 'D' | null,
+    ) =>
+      postJson<{ ok: boolean }>(
+        `/api/sp/minigame/preview`,
+        { session_code, puck_id, quadrant: quadrant ?? null },
+      ),
   },
 }
 
