@@ -157,6 +157,22 @@ function _chord(notes: VoiceOptions[]) {
 // ---------- Public API ----------
 
 function _play(name: string, fallback: () => void) {
+  // Dev-only side channel for the verification harness. Stored in
+  // sessionStorage so events persist across cross-document navigations
+  // (Title -> Lobby -> Countdown -> Question -> Scoreboard) — a plain
+  // window-global would be wiped each time add_init_script re-ran.
+  // The harness opts in by writing __sfxLog='[]' before the app boots;
+  // production never sets the key so this branch returns immediately
+  // (one getItem call, no parse/stringify).
+  try {
+    const raw = sessionStorage.getItem('__sfxLog')
+    if (raw !== null) {
+      let cur: Array<{ name: string; t: number; route: string }> = []
+      try { cur = JSON.parse(raw) } catch { cur = [] }
+      cur.push({ name, t: Date.now(), route: location.pathname })
+      sessionStorage.setItem('__sfxLog', JSON.stringify(cur))
+    }
+  } catch { /* SSR / storage disabled */ }
   // Sample first; if it isn't there, the procedural fallback runs.
   if (_playSample(name)) return
   fallback()

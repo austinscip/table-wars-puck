@@ -26,10 +26,10 @@ with a gate-assertion name, it's not fixed.
 | R012 | 2026-05-27 | TBD | "1/2 correct" on scoreboard — denominator was answered count, not total_rounds | scoreboard-denominator-is-total-rounds |
 | R013 | 2026-05-27 | TBD | Hub showed "LOCKED →A" cosmetically when no real POST (puck timed out) | hub-shows-TIMEOUT-not-LOCKED-on-no-tap |
 | R014 | 2026-05-27 | TBD | Server claimed pucks "correct" on Q7 when they timed out | timed-out-puck-not-marked-correct |
-| R015 | 2026-05-27 | TBD | No audio at pair-code confirm | sfx-pair-confirmed-fires-at-confirm |
-| R016 | 2026-05-27 | TBD | No audio when puck joins lobby | sfx-player-joined-fires-on-each-join |
-| R017 | 2026-05-27 | TBD | No audio for countdown 3-2-1-GO | sfx-tick-fires-on-each-countdown-step |
-| R018 | 2026-05-27 | TBD | No audio on category pick screen | sfx-category-pick-fires-on-screen-show |
+| R015 | 2026-05-27 | 2026-05-28 | No audio at pair-code confirm. Verified: sfx_digit fires 6× (one per dial) + sfx_joined fires on confirm. Captured by `gate_audio_events.py` via a dev-only sessionStorage tap in lib/audio.ts `_play()`. | every-named-sfx-fires-during-a-match |
+| R016 | 2026-05-27 | 2026-05-28 | No audio when puck joins lobby. Verified: sfx_joined fires ≥3 (host + joiners, ×2 for StrictMode double-mount). The previous "TBD" hid a real testing gap: the harness was navigating the TV straight to /question, skipping Pair/Lobby screens entirely. Now exercises the natural Title→Lobby→Countdown→Question cascade. | every-named-sfx-fires-during-a-match |
+| R017 | 2026-05-27 | 2026-05-28 | No audio for countdown 3-2-1-GO. Verified: sfx_tick ×3 + sfx_tick_final ×1 captured during the countdown phase. | every-named-sfx-fires-during-a-match |
+| R018 | 2026-05-27 | 2026-05-28 | No audio on category pick screen. Verified: sfx_pick_show fires ≥3 (once per pick round) + sfx_pick_locked fires ≥1. | every-named-sfx-fires-during-a-match |
 | R019 | 2026-05-27 | TBD | Category pick timeout: no visible/audible response | TBD-pick-timeout-shows-default-locked |
 | R020 | 2026-05-27 | 2026-05-27 | Minigame Hub controls (◀ A, ▶ B etc.) don't respond — Variant B D-pad was `disabled` during MINIGAME (`tiltActive` excluded minigames); fix enables the D-pad for BULLSEYE aim + adds on-screen minigame instructions | hub-minigame-tilt-buttons-fire |
 | R021 | 2026-05-27 | TBD | Q1 commentator audio starts before question card fully renders | commentary-fires-during-reveal-not-question-show |
