@@ -2228,6 +2228,66 @@ def sp_answer():
     })
 
 
+@sp_bp.route("/leave-match", methods=["POST"])
+def sp_leave_match():
+    """R034 — a puck that holds-3s to leave POSTs here. Prune the puck
+    from the session so the remaining pucks can still complete rounds
+    (its absence must not wedge _maybe_emit_reveal / _resolve_minigame
+    on the all-expected-answered gate). Emits player_left_match so the
+    TV can drop the departed lane, then re-checks the reveal / minigame
+    so a round already waiting only on the leaver resolves immediately."""
+    data = request.get_json(silent=True) or {}
+    session_code = data.get("session_code")
+    puck_id_raw = data.get("puck_id")
+    if not session_code or puck_id_raw is None:
+        return jsonify({"error": "session_code and puck_id required"}), 400
+
+    state = _SP_STATE.get(session_code)
+    if state is None:
+        # No live state for this session — nothing to prune. Idempotent.
+        return jsonify({"ok": True, "noop": True})
+
+    puck_id = int(puck_id_raw)
+
+    # Drop the puck from every per-puck structure so it is no longer
+    # expected to answer / fire and can't keep a round open.
+    state["expected_pucks"].discard(puck_id)
+    state["current_round_answers"].pop(puck_id, None)
+    state.get("power_up_inventories", {}).pop(puck_id, None)
+    state.get("power_up_arms", {}).pop(puck_id, None)
+    # Remove any incoming STEAL aimed by/at the leaver from remaining arms.
+    for arms in state.get("power_up_arms", {}).values():
+        steals = arms.get("incoming_steals")
+        if steals:
+            arms["incoming_steals"] = [f for f in steals if f != puck_id]
+    mg = state.get("pending_minigame")
+    if mg and isinstance(mg.get("fires"), dict):
+        mg["fires"].pop(puck_id, None)
+    if state.get("last_round_winner_puck_id") == puck_id:
+        state["last_round_winner_puck_id"] = None
+
+    if _socketio is not None:
+        _socketio.emit(
+            "player_left_match",
+            {"session_code": session_code, "puck_id": puck_id},
+            room=session_code,
+        )
+
+    # The leaver may have been the last puck a round/minigame was waiting
+    # on. Re-check both so the remaining pucks aren't stuck until the
+    # TV's force-reveal / deadline.
+    reveal_emitted = _maybe_emit_reveal(session_code)
+    minigame_resolved = _resolve_minigame(state, session_code)
+
+    return jsonify({
+        "ok": True,
+        "puck_id": puck_id,
+        "expected_pucks": sorted(state["expected_pucks"]),
+        "reveal_emitted": reveal_emitted,
+        "minigame_resolved": minigame_resolved,
+    })
+
+
 @sp_bp.route("/current-question/<session_code>", methods=["GET"])
 def sp_current_question(session_code: str):
     # When the match is complete, callers must see active=false so
