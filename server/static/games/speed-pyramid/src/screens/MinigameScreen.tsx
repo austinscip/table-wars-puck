@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '../lib/api'
 import { getSocket } from '../lib/socket'
 import { audio } from '../lib/audio'
+import AmbientBackground from '../components/AmbientBackground'
 
 /**
  * Slice E2 — Minigame phase.
@@ -192,16 +193,34 @@ export default function MinigameScreen() {
   }
 
   return (
-    <main className="flex h-full w-full flex-col items-center justify-center gap-8 px-12 py-12">
-      <div className="flex flex-col items-center gap-2">
-        <span className="font-body text-base font-medium uppercase tracking-widest text-text/40">
+    <main className="relative flex h-full w-full flex-col items-center justify-center gap-8 overflow-hidden px-12 py-12">
+      {/* Tense color palette for the minigame phase — orange + magenta
+          glow, more energetic than the calm pick/lobby blues. */}
+      <AmbientBackground
+        glowA="rgba(249,115,22,0.20)"
+        glowB="rgba(236,72,153,0.18)"
+      />
+      <div className="relative z-10 flex flex-col items-center gap-2">
+        <span className="font-body text-base font-medium uppercase tracking-widest text-text/50">
           {mg.flavor === 'BULLSEYE' ? 'Bullseye' : 'Shot Clock'} · Minigame
         </span>
         <motion.h1
           initial={{ scale: 0.7, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.45, ease: [0.34, 1.56, 0.64, 1] }}
+          animate={{
+            scale: winner ? 1 : [1, 1.04, 1],
+            opacity: 1,
+          }}
+          transition={{
+            scale: winner
+              ? { duration: 0.45, ease: [0.34, 1.56, 0.64, 1] }
+              : { duration: 1.2, repeat: Infinity, ease: 'easeInOut' },
+            opacity: { duration: 0.45 },
+          }}
           className="font-display text-[clamp(2.5rem,6vw,5rem)] leading-none text-accent"
+          style={{
+            textShadow:
+              '0 0 30px rgba(236,72,153,0.45), 0 0 70px rgba(236,72,153,0.18)',
+          }}
         >
           {winner
             ? 'RESULTS'
@@ -210,29 +229,44 @@ export default function MinigameScreen() {
             : 'TAP IN THE GREEN'}
         </motion.h1>
         {!winner && (
-          <span className="font-mono text-3xl text-primary">
+          <motion.span
+            className="font-mono text-3xl text-primary"
+            // Pulse the timer in the final 3s as the room gets nervous.
+            animate={{
+              color: remainingMs < 3000 ? '#ef4444' : '#3b82f6',
+              scale: remainingMs < 3000 ? [1, 1.12, 1] : 1,
+            }}
+            transition={{
+              color: { duration: 0.2 },
+              scale: remainingMs < 3000
+                ? { duration: 0.55, repeat: Infinity, ease: 'easeInOut' }
+                : { duration: 0.2 },
+            }}
+          >
             {(remainingMs / 1000).toFixed(1)}s
-          </span>
+          </motion.span>
         )}
       </div>
 
-      {mg.flavor === 'BULLSEYE' && !winner && (
-        <BullseyeBoard
-          target={mg.target_quadrant ?? 'A'}
-          fires={fires}
-          aims={aims}
-        />
-      )}
-      {mg.flavor === 'SHOT_CLOCK' && !winner && (
-        <ShotClockBar
-          startedAtMs={mg.started_at * 1000}
-          cycleMs={mg.cycle_ms ?? 3000}
-          greenFrac={mg.green_frac ?? 0.3}
-          fires={fires}
-        />
-      )}
+      <div className="relative z-10">
+        {mg.flavor === 'BULLSEYE' && !winner && (
+          <BullseyeBoard
+            target={mg.target_quadrant ?? 'A'}
+            fires={fires}
+            aims={aims}
+          />
+        )}
+        {mg.flavor === 'SHOT_CLOCK' && !winner && (
+          <ShotClockBar
+            startedAtMs={mg.started_at * 1000}
+            cycleMs={mg.cycle_ms ?? 3000}
+            greenFrac={mg.green_frac ?? 0.3}
+            fires={fires}
+          />
+        )}
 
-      {winner && <WinnerPanel winner={winner} />}
+        {winner && <WinnerPanel winner={winner} />}
+      </div>
     </main>
   )
 }
@@ -265,15 +299,28 @@ function BullseyeBoard({
           <motion.div
             key={q.key}
             initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
+            animate={{
+              // Target quadrant pulses; non-targets stay still.
+              scale: isTarget ? [1, 1.06, 1] : 1,
+              opacity: 1,
+            }}
+            transition={
+              isTarget
+                ? { scale: { duration: 1.4, repeat: Infinity, ease: 'easeInOut' } }
+                : { duration: 0.35 }
+            }
             className={`relative flex aspect-square flex-col items-center justify-center rounded-3xl border-4 ${
               isTarget ? 'border-correct bg-correct/15' : 'border-text/15 bg-text/5'
             }`}
-            style={
-              isTarget
-                ? { boxShadow: '0 0 60px rgba(251,191,36,0.45)' }
-                : undefined
-            }
+            style={{
+              // Inner gradient on every card; only the target gets the
+              // golden glow.
+              backgroundImage:
+                'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0) 60%)',
+              boxShadow: isTarget
+                ? '0 0 60px rgba(251,191,36,0.55), 0 0 12px rgba(251,191,36,0.4) inset'
+                : '0 4px 16px rgba(0,0,0,0.25)',
+            }}
           >
             {/* Live aim reticles — faint per-puck halos */}
             <div className="absolute inset-2 flex flex-wrap items-start justify-end gap-1">
