@@ -5,6 +5,7 @@ import { api, type FinalResults } from '../lib/api'
 import { getSocket } from '../lib/socket'
 import { audio } from '../lib/audio'
 import CountUpScore from '../components/CountUpScore'
+import AmbientBackground from '../components/AmbientBackground'
 
 const TIER_COLOR: Record<string, string> = {
   LEGENDARY: 'text-correct',
@@ -59,7 +60,8 @@ export default function ScoreboardScreen() {
   }, [sessionCode, navigate])
 
   return (
-    <main className="flex h-full w-full flex-col items-center justify-center gap-12 px-12 py-12">
+    <main className="relative flex h-full w-full flex-col items-center justify-center gap-12 overflow-hidden px-12 py-12">
+      <AmbientBackground glowA="rgba(251,191,36,0.22)" glowB="rgba(16,185,129,0.16)" />
       <motion.h1
         initial={{ scale: 0.6, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}

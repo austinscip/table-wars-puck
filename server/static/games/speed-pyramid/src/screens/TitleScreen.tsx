@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { audio } from '../lib/audio'
 import { getSocket } from '../lib/socket'
+import AmbientBackground from '../components/AmbientBackground'
 
 interface PairStartedEvent {
   puck_id: number
@@ -39,29 +40,7 @@ export default function TitleScreen() {
 
   return (
     <main className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden px-8 py-16">
-      {/* Atmospheric background. Radial gradient from center + subtle
-          accent glows in primary / accent so the title room feels alive
-          instead of flat navy. Pointer-events none so nothing blocks the
-          dev-mode demo button below. */}
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            'radial-gradient(ellipse at center, #1A2238 0%, #0A0E1A 65%, #050811 100%)',
-        }}
-      />
-      <motion.div
-        className="pointer-events-none absolute left-[-10%] top-[-10%] h-[40vw] w-[40vw] rounded-full"
-        style={{ background: 'radial-gradient(circle, rgba(59,130,246,0.18), transparent 60%)' }}
-        animate={{ scale: [1, 1.15, 1], opacity: [0.6, 0.9, 0.6] }}
-        transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}
-      />
-      <motion.div
-        className="pointer-events-none absolute right-[-10%] bottom-[-15%] h-[45vw] w-[45vw] rounded-full"
-        style={{ background: 'radial-gradient(circle, rgba(236,72,153,0.16), transparent 65%)' }}
-        animate={{ scale: [1.1, 1, 1.1], opacity: [0.5, 0.85, 0.5] }}
-        transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
-      />
+      <AmbientBackground />
 
       {/* Wordmark — glow + breathing scale so it feels animated rather
           than printed. Stacked text-shadow gives depth at TV viewing

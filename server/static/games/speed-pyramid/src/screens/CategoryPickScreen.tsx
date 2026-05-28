@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '../lib/api'
 import { getSocket } from '../lib/socket'
 import { audio } from '../lib/audio'
+import AmbientBackground from '../components/AmbientBackground'
 
 /**
  * Slice E1 — Category pick phase.
@@ -144,7 +145,8 @@ export default function CategoryPickScreen() {
   }
 
   return (
-    <main className="flex h-full w-full flex-col items-center justify-center gap-10 px-12 py-12">
+    <main className="relative flex h-full w-full flex-col items-center justify-center gap-10 overflow-hidden px-12 py-12">
+      <AmbientBackground glowA="rgba(168,85,247,0.18)" glowB="rgba(251,191,36,0.14)" />
       <div className="flex flex-col items-center gap-2">
         <span className="font-body text-base font-medium uppercase tracking-widest text-text/40">
           Round {pick.round} · Category Pick

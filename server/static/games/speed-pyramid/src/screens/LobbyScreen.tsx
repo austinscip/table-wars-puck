@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { api, type LobbyPlayer } from '../lib/api'
 import { getSocket } from '../lib/socket'
 import { audio } from '../lib/audio'
+import AmbientBackground from '../components/AmbientBackground'
 
 interface PlayerJoinedEvent {
   puck_id: number
@@ -117,18 +118,20 @@ export default function LobbyScreen() {
   }, [isDemo, players.length, hostPuckId])
 
   return (
-    <main className="flex h-full w-full flex-col items-center justify-center gap-12 px-8 py-12">
+    <main className="relative flex h-full w-full flex-col items-center justify-center gap-12 overflow-hidden px-8 py-12">
+      <AmbientBackground />
       <motion.h1
         initial={{ y: 40, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.6, ease: [0.34, 1.56, 0.64, 1] }}
-        className="font-display text-[clamp(3rem,8vw,7rem)] leading-none tracking-tight text-text"
+        className="relative z-10 font-display text-[clamp(3rem,8vw,7rem)] leading-none tracking-tight text-text"
+        style={{ textShadow: '0 0 40px rgba(251,191,36,0.2), 0 4px 20px rgba(0,0,0,0.5)' }}
       >
         LOBBY
       </motion.h1>
 
       {/* Shared pair code — kept visible so additional pucks can join. */}
-      <div className="flex flex-col items-center gap-3">
+      <div className="relative z-10 flex flex-col items-center gap-3">
         <span className="font-body text-base font-medium uppercase tracking-widest text-text/40">
           Code to join
         </span>
@@ -138,7 +141,7 @@ export default function LobbyScreen() {
       </div>
 
       {/* Joined players strip */}
-      <div className="flex flex-col items-center gap-3">
+      <div className="relative z-10 flex flex-col items-center gap-3">
         <span className="font-body text-base font-medium uppercase tracking-widest text-text/40">
           {players.length === 0
             ? 'Waiting for first player…'
@@ -179,7 +182,7 @@ export default function LobbyScreen() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.6, duration: 0.4 }}
-          className="flex flex-col items-center gap-2 font-body text-xl"
+          className="relative z-10 flex flex-col items-center gap-2 font-body text-xl"
         >
           <span className="text-text/70">
             Host (
