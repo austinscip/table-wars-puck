@@ -2094,6 +2094,8 @@ def sp_answer():
     state = _sp_state_for(session_code)
     if state["current_question_id"] != int(question_id):
         return jsonify({"error": "question_id does not match active round"}), 409
+    if state.get("revealed_for_question_id") == int(question_id):
+        return jsonify({"error": "round already revealed"}), 409
     if puck_id in state["current_round_answers"]:
         return jsonify({"error": "already answered"}), 409
 
