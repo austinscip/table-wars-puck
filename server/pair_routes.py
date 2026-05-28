@@ -716,8 +716,19 @@ def _apply_power_up_arms(state: dict, session_code: str, qid: int, answers: dict
             ans["points"] = int(ans.get("points", 0)) * 2
     # STEAL: process AFTER reveal/double so the stolen amount reflects
     # any reveal/double on the target. For each target with incoming
-    # steals that aren't shielded, transfer half their points to each
-    # firer.
+    # steals that aren't shielded, transfer half their points to the
+    # firers. Two correctness guarantees (R035):
+    #   1. Snapshot every target's points BEFORE any transfer mutates the
+    #      dict, so a mutual steal (p1<->p2) is order-independent — the
+    #      amount stolen from a target never depends on whether that
+    #      target was already drained as a firer this pass.
+    #   2. The total taken from a target == target_points // 2 exactly:
+    #      distribute the remainder of an uneven split so floor-division
+    #      across N firers never under-transfers (100/3 -> 17+17+16=50,
+    #      not 16+16+16=48).
+    # A firer that did not answer this round (no entry, or a TIMEOUT fill
+    # whose answer is None) must NOT profit — it steals 0.
+    points_snapshot = {pid: int(a.get("points", 0)) for pid, a in answers.items()}
     for target_pid, ans in answers.items():
         arms = arms_table.get(target_pid)
         if not arms:
@@ -729,22 +740,32 @@ def _apply_power_up_arms(state: dict, session_code: str, qid: int, answers: dict
             # Single shield blocks ALL incoming steals this round.
             # (Simpler than per-source; matches the catalog blurb.)
             incoming = []
-        target_points = int(ans.get("points", 0))
+        # Only firers that actually answered this round may steal.
+        eligible = [
+            f for f in incoming
+            if (answers.get(f) is not None
+                and answers[f].get("answer") is not None
+                and answers[f].get("tier") != "TIMEOUT")
+        ]
+        if not eligible:
+            continue
+        target_points = points_snapshot.get(target_pid, int(ans.get("points", 0)))
         if target_points <= 0:
             continue
-        stolen_each = target_points // 2 // max(1, len(incoming))
-        if stolen_each <= 0:
+        total_steal = target_points // 2
+        if total_steal <= 0:
             continue
-        for firer_pid in incoming:
+        n = len(eligible)
+        base = total_steal // n
+        remainder = total_steal - base * n
+        for idx, firer_pid in enumerate(eligible):
+            # Hand the remainder to the leading firers so the per-target
+            # total comes out to exactly total_steal.
+            stolen_each = base + (1 if idx < remainder else 0)
+            if stolen_each <= 0:
+                continue
             firer_ans = answers.get(firer_pid)
-            if firer_ans is None:
-                # Firer didn't answer this round — credit directly to
-                # cumulative_scores via a side-channel ledger.
-                state["cumulative_scores"][firer_pid] = (
-                    state["cumulative_scores"].get(firer_pid, 0) + stolen_each
-                )
-            else:
-                firer_ans["points"] = int(firer_ans.get("points", 0)) + stolen_each
+            firer_ans["points"] = int(firer_ans.get("points", 0)) + stolen_each
             ans["points"] = int(ans.get("points", 0)) - stolen_each
             if _socketio is not None:
                 _socketio.emit(
