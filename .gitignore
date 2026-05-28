@@ -60,3 +60,8 @@ docker-compose.override.yml
 
 # Piper TTS voice models (large .onnx weights — download via generate_narration.py)
 server/voices/piper/*.onnx
+
+# Kokoro TTS model files (337MB, downloaded by scripts/sample_kokoro.py)
+server/voices/kokoro/kokoro-v1.0.onnx
+server/voices/kokoro/voices-v1.0.bin
+server/voices/kokoro/samples/
