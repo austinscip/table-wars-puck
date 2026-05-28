@@ -935,6 +935,12 @@ def _score_minigame_fire(mg: dict, t_ms: int, quadrant: str | None) -> int:
         # any wrong-quadrant fire.
         return int(max(100, 1000 - (t_ms / duration_ms) * 900))
     # SHOT_CLOCK: sweep modulo cycle. Green zone is centered.
+    # Same time-window guard as BULLSEYE: a fire before t=0 or past the
+    # deadline scores zero (otherwise t_ms % cycle could land on the
+    # green-zone center long after the round is over).
+    duration_ms = (mg["duration_s"] or SP_SHOTCLOCK_DURATION_S) * 1000.0
+    if t_ms < 0 or t_ms > duration_ms:
+        return 0
     cycle_ms = mg["cycle_ms"] or SP_SHOTCLOCK_CYCLE_MS
     pos = (t_ms % cycle_ms) / cycle_ms  # 0..1
     # Green band centered on 0.5 with width green_frac.

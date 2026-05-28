@@ -37,6 +37,10 @@ import time
 
 import requests
 
+# Ensure the server package dir is importable (scripts/ lives under it).
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from verify_lib import BASE, log, Verifier
 
 SP = f"{BASE}/api/sp"
