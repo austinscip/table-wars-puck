@@ -270,12 +270,17 @@ export default function QuestionScreen() {
           if (started) return
           started = true
           if (metadataTimer !== null) window.clearTimeout(metadataTimer)
-          window.setTimeout(() => {
+          // R048: track the breath timer in narrationTimersRef like the
+          // metadata/play timers, otherwise the unmount/reveal cleanup
+          // can't cancel it — an orphaned breath fires beginAnswering()
+          // (POST /api/sp/start-timer) on a dead screen.
+          const breathTimer = window.setTimeout(() => {
             api.sp
               .startTimer(sc)
               .then((resp) => beginAnswering(resp.started_at))
               .catch(() => beginAnswering(Date.now() / 1000))
           }, HANDOFF_BREATH_MS)
+          narrationTimersRef.current.push(breathTimer)
         }
         a.addEventListener('ended', handoff)
         a.addEventListener('error', handoff)

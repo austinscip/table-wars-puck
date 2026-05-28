@@ -139,26 +139,41 @@ def run() -> int:
         # audio_url the breath-gap code path never runs and the gate
         # would not exercise the bug — that must be inconclusive, not a
         # false pass. (We do NOT touch the mp3 files; just read the API.)
-        cq = requests.get(f"{BASE}/api/sp/current-question/{sc}",
-                          timeout=5).json()
+        #
+        # Round 1 is a category-pick round (SP_PICK_ROUNDS), so the first
+        # load-question returns a 'category_pick' phase with no audio_url.
+        # Drive past any pick/minigame phase by re-calling load-question:
+        # the pick auto-resolves at its 10s deadline, after which
+        # load-question falls through to the narrated round-1 question.
+        # (We never touch the mp3 files; just read the API.)
+        audio_url = ""
         has_narration = False
-        try:
-            ln = requests.post(f"{BASE}/api/sp/load-question/{sc}",
-                               json={}, timeout=5)
-            # load-question is idempotent-ish for the current round; we
-            # only use its audio_url to confirm narration is wired.
-            audio_url = (ln.json() or {}).get("audio_url") or ""
-            has_narration = bool(audio_url)
-        except Exception:
-            audio_url = ""
+        last_resp: dict = {}
+        for _ in range(40):  # up to ~24s, covers the 10s pick deadline
+            try:
+                ln = requests.post(f"{BASE}/api/sp/load-question/{sc}",
+                                   json={}, timeout=5)
+                last_resp = ln.json() or {}
+            except Exception:
+                last_resp = {}
+            phase = last_resp.get("phase")
+            if phase in ("category_pick", "minigame"):
+                # Blocking phase — wait for its auto-resolve deadline and
+                # re-poll. Nothing to drive from the gate side.
+                time.sleep(0.6)
+                continue
+            audio_url = last_resp.get("audio_url") or ""
+            if audio_url:
+                has_narration = True
+                break
+            time.sleep(0.6)
         if not has_narration:
-            # Fall back: the question_show socket carries audio_url too;
-            # if the API gave us nothing, we cannot guarantee the breath
-            # path executes.
+            cq = requests.get(f"{BASE}/api/sp/current-question/{sc}",
+                              timeout=5).json()
             v.inconclusive(
                 "question carries narration audio_url",
-                f"current_question={cq} audio_url={audio_url!r} — breath "
-                "path not exercised")
+                f"current_question={cq} last_resp={last_resp} "
+                f"audio_url={audio_url!r} — breath path not exercised")
             return v.report()
         log(f"narration confirmed: audio_url={audio_url}")
 
