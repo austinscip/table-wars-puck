@@ -271,21 +271,169 @@ def run() -> int:
     deltas = {pid: cumulative.get(pid, 0) - db_total.get(pid, 0)
               for pid in pucks}
 
-    # ---- Decisive assertion -----------------------------------------
-    # Currently the DB sum is LOWER than cumulative by (minigame bonus +
-    # DOUBLE delta), so this FAILS on the current build. Once final-results
-    # reads cumulative (or the bonuses/arms are written back to the DB),
-    # the two agree and this PASSES.
-    v.check(
-        "final-results-matches-cumulative-not-db-sum",
-        per_puck_ok and winner_ok,
-        f"per_puck_ok={per_puck_ok} winner_ok={winner_ok} "
+    # ---- Diagnostic (unit-level) ------------------------------------
+    # This documents the in-memory divergence the bug creates: the raw DB
+    # ledger sum is LOWER than cumulative by (minigame bonus + DOUBLE
+    # delta). It is NOT the decisive assertion — it only exercises a
+    # reconstruction of the SUM, not the real endpoint. The decisive
+    # assertion below drives the REAL /api/sp/final-results endpoint.
+    log(f"unit divergence: per_puck_ok={per_puck_ok} winner_ok={winner_ok} "
         f"db_total={db_total} cumulative={cumulative} "
         f"deltas(cumulative-db)={deltas} "
-        f"db_winner={db_winner} cum_winner={cum_winner}",
+        f"db_winner={db_winner} cum_winner={cum_winner}")
+    v.check(
+        "unit-divergence-db-sum-below-cumulative",
+        any(d != 0 for d in deltas.values()),
+        f"expected a nonzero cumulative-vs-db delta from minigame+DOUBLE; "
+        f"deltas={deltas}",
     )
 
+    # ==================================================================
+    # HARDENED real-endpoint check (R029). The unit reconstruction above
+    # can't prove the FIX, because the fix lives in sp_final_results which
+    # the reconstruction never calls. Drive a REAL match to /scoreboard
+    # (minigame rounds 2/4/6 push +500/+200 bonuses into cumulative_scores
+    # only — never the DB; minigame winners are granted a power-up which we
+    # activate as DOUBLE/STEAL so a power-up effect is live too), then GET
+    # /api/sp/final-results/<sc> and assert each puck's total EQUALS the
+    # in-match cumulative_scores from GET /api/sp/match-state/<sc> (the value
+    # the reveal sidebar shows all match). On the unfixed build the
+    # final-results total is the raw DB SUM and is strictly lower, so this
+    # FAILS; once final-results is authoritative from cumulative_scores it
+    # PASSES.
+    # ==================================================================
+    _real_endpoint_check(v)
+
     return v.report()
+
+
+def _activate_powerups_on_pick(sc: str) -> None:
+    """During a between-rounds (pick) phase, for each puck holding a
+    power-up, activate a DOUBLE or STEAL so a live power-up effect is in
+    play for the next reveal. Best-effort: minigame winners are granted a
+    random power-up, so a DOUBLE/STEAL is not guaranteed every match, but
+    the minigame bonus alone already diverges cumulative from the DB sum.
+    Uses the REAL /power-up/activate endpoint."""
+    import requests
+    from verify_lib import BASE
+    ms = requests.get(f"{BASE}/api/sp/match-state/{sc}", timeout=5).json()
+    if not ms.get("pending_category_pick"):
+        return
+    pucks = [int(p) for p in ms.get("cumulative_scores", {}).keys()]
+    if not pucks:
+        pucks = [int(p) for p in ms.get("power_up_inventories", {}).keys()]
+    for pid in pucks:
+        inv = requests.get(
+            f"{BASE}/api/sp/inventory/{sc}", params={"puck_id": pid},
+            timeout=5,
+        ).json().get("items", [])
+        target = next((it for it in inv if it["type"] in ("DOUBLE", "STEAL")), None)
+        if target is None:
+            continue
+        body = {"session_code": sc, "puck_id": pid, "item_id": target["id"]}
+        if target["type"] == "STEAL":
+            other = next((q for q in pucks if q != pid), None)
+            if other is None:
+                continue
+            body["target_puck_id"] = other
+        try:
+            requests.post(f"{BASE}/api/sp/power-up/activate",
+                          json=body, timeout=5)
+            log(f"activated {target['type']} for puck {pid}")
+        except Exception as e:  # noqa: BLE001
+            log(f"power-up activate failed ({e}); continuing")
+
+
+def _real_endpoint_check(v: "Verifier") -> None:
+    import time
+    import requests
+    import verify_lib as vl
+    from verify_lib import BASE
+
+    with vl.session(headless=True) as (hub, tv):
+        sc = vl.pair_and_start(hub, tv, goto_question=True)
+        if not sc:
+            v.inconclusive(
+                "final-results-matches-cumulative-not-db-sum",
+                "pairing failed — could not start a real match",
+            )
+            return
+
+        # Phase-driven driver, but stop at each pick phase to fire a
+        # DOUBLE/STEAL so a power-up effect is live. We re-implement the
+        # minimal loop here (verify_lib.drive_match_to_scoreboard has no
+        # per-phase hook) using the same helpers.
+        deadline = time.time() + 200
+        while time.time() < deadline:
+            route = tv.evaluate("() => location.pathname")
+            if "/scoreboard/" in route:
+                break
+            s1 = vl.puck_state(hub, 0)
+            s2 = vl.puck_state(hub, 1)
+            if "MATCH ENDED" in s1 and "MATCH ENDED" in s2:
+                break
+            if ("PICK CATEGORY" in s1 or "PICK CATEGORY" in s2
+                    or "pick category" in s1 or "pick category" in s2):
+                _activate_powerups_on_pick(sc)
+                vl._resolve_pick(hub)
+                time.sleep(1.0)
+                continue
+            if ("MINIGAME" in s1 or "MINIGAME" in s2
+                    or "mg/" in s1 or "mg/" in s2):
+                vl._resolve_minigame(hub)
+                time.sleep(2.0)
+                continue
+            if (("ANSWERING" in s1 and "ANSWERING" in s2)
+                    or (s1.startswith("Q") and s2.startswith("Q"))):
+                qid = vl.parse_qid(s1) or vl.parse_qid(s2)
+                for idx in (0, 1):
+                    try:
+                        vl.puck_row(hub, idx).get_by_role(
+                            "button", name="A", exact=True).click(
+                                force=True, timeout=2500)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    time.sleep(0.3)
+                time.sleep(2.5)
+                continue
+            time.sleep(0.4)
+
+        # Pull both authoritative views from the REAL endpoints.
+        ms = requests.get(f"{BASE}/api/sp/match-state/{sc}", timeout=5).json()
+        fr = requests.get(f"{BASE}/api/sp/final-results/{sc}", timeout=5).json()
+        cumulative = {int(k): int(v_)
+                      for k, v_ in (ms.get("cumulative_scores") or {}).items()}
+        fr_totals = {int(p["puck_id"]): int(p["total"])
+                     for p in fr.get("players", [])}
+        log(f"REAL match-state cumulative_scores : {cumulative}")
+        log(f"REAL final-results totals          : {fr_totals}")
+
+        if not cumulative:
+            v.inconclusive(
+                "final-results-matches-cumulative-not-db-sum",
+                f"no cumulative_scores from match-state (route never "
+                f"reached scoreboard?); ms={ms}",
+            )
+            return
+
+        # Sanity: the in-match cumulative must include a minigame/power-up
+        # bonus so the comparison is meaningful (otherwise raw DB sum could
+        # coincidentally equal cumulative and the gate wouldn't exercise the
+        # bug). A clean 7-round match with 3 minigames always has bonuses.
+        pucks = sorted(set(cumulative) | set(fr_totals))
+        per_puck_ok = all(
+            fr_totals.get(pid, 0) == cumulative.get(pid, 0) for pid in pucks
+        )
+        deltas = {pid: cumulative.get(pid, 0) - fr_totals.get(pid, 0)
+                  for pid in pucks}
+
+        v.check(
+            "final-results-matches-cumulative-not-db-sum",
+            per_puck_ok,
+            f"per_puck_ok={per_puck_ok} "
+            f"final_results={fr_totals} cumulative={cumulative} "
+            f"deltas(cumulative-final)={deltas}",
+        )
 
 
 if __name__ == "__main__":

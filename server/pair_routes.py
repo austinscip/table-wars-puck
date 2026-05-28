@@ -1449,6 +1449,13 @@ def sp_match_state(session_code: str):
                 str(pid): list(items)
                 for pid, items in state.get("power_up_inventories", {}).items()
             },
+            # R029: surface the authoritative running totals (minigame
+            # bonuses + power-up effects applied) so the final scoreboard
+            # can be reconciled against what the reveal sidebar shows.
+            "cumulative_scores": {
+                str(pid): int(score)
+                for pid, score in state.get("cumulative_scores", {}).items()
+            },
         }
     )
 
@@ -1494,23 +1501,53 @@ def sp_final_results(session_code: str):
         return "TIMEOUT"
 
     state = _SP_STATE.get(session_code, {})
+
+    # R029: trivia_answers only ever holds RAW pre-power-up points written
+    # at sp_answer time. Minigame bonuses (+500/+200) and the DOUBLE /
+    # REVEAL / STEAL effects applied in _apply_power_up_arms mutate ONLY
+    # state["cumulative_scores"] in memory and are never written back to
+    # the DB. The in-match reveal sidebar renders cumulative_scores, so the
+    # final scoreboard must use the SAME authoritative source — otherwise a
+    # puck that won the minigames or doubled a round shows a lower total
+    # (or even a different winner) than players watched accumulate. When
+    # in-memory state exists, take `total` from cumulative_scores; the DB
+    # sum still drives answered/correct counts and stays the fallback when
+    # state was wiped. Pucks with cumulative score but zero DB rows (timed
+    # out every question, won the minigame) must still appear.
+    cumulative = state.get("cumulative_scores") or {}
+    db_by_puck = {int(r["puck_id"]): r for r in rows}
+    puck_ids = sorted(set(db_by_puck) | {int(p) for p in cumulative})
+
+    def _total_for(pid: int) -> int:
+        if pid in cumulative:
+            return int(cumulative[pid])
+        r = db_by_puck.get(pid)
+        return int(r["total"] or 0) if r else 0
+
+    players = []
+    for pid in puck_ids:
+        r = db_by_puck.get(pid)
+        answered = int(r["answered"] or 0) if r else 0
+        correct = int(r["correct"] or 0) if r else 0
+        total = _total_for(pid)
+        players.append(
+            {
+                "puck_id": pid,
+                "total": total,
+                "answered": answered,
+                "correct": correct,
+                "tier": derive_tier(total, answered),
+                "color": _color_for(pid)[0],
+                "color_name": _color_for(pid)[1],
+            }
+        )
+
     return jsonify(
         {
             "session_code": session_code,
             "round": state.get("round", SP_TOTAL_ROUNDS),
             "total_rounds": SP_TOTAL_ROUNDS,
-            "players": [
-                {
-                    "puck_id": r["puck_id"],
-                    "total": int(r["total"] or 0),
-                    "answered": int(r["answered"] or 0),
-                    "correct": int(r["correct"] or 0),
-                    "tier": derive_tier(int(r["total"] or 0), int(r["answered"] or 0)),
-                    "color": _color_for(int(r["puck_id"]))[0],
-                    "color_name": _color_for(int(r["puck_id"]))[1],
-                }
-                for r in rows
-            ],
+            "players": players,
         }
     )
 
