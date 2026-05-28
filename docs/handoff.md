@@ -66,6 +66,41 @@ The user explicitly said: "i'm tired of fixing the same mistakes. you
 make sure anything you do is planned in development such that no bug
 keeps persisting EVER — for both past, present, and future bugs."
 
+## 2026-05-28 — end-to-end audit batch (R029–R048)
+
+A multi-agent audit swept every screen, all 1–8 player counts, every
+power-up combination (incl. SHIELD-blocks-STEAL), lifecycle controls
+(Reset-all / Back-to-start / leave-match), narrator timing, audio
+cleanup, and the full state machine. 73 raw findings → 20 confirmed →
+**18 fixed + committed**, R039 dropped (VariantC fire-only is by-design),
+R041 left open (audio-bleed: real `audio.ts` has no `stopAll`, but the
+gate can't be exercised — no `sfx_*.mp3` sample assets exist; do not
+fake-green it). Highlights: R029 final-results now uses in-match
+`cumulative_scores` not DB-SUM; R031 closes R014 (REVEAL no longer
+force-corrects a timed-out puck); R046 closes R019; R048 closes R023;
+R040 adds a server-computed deterministic tie-break. Each fix has a
+fail-on-current gate in `server/scripts/gate_r0XX_*.py` and a row in
+`docs/regression_log.md`. Full report: `docs/audit/sp_audit_2026-05-28_findings.md`.
+
+**Process lesson (important):** per-bug gates each verified against the
+build *at their own commit*, so they missed a cross-fix interaction —
+R044's gate (committed early) contradicted R031 (committed later). The
+sequential **green-together** sweep (`/tmp/sp_green_together.sh` runs the
+whole suite one-at-a-time) caught it; R044's gate was then reconciled to
+the answered-REVEAL invariant. **Always run the whole gate suite together
+after a batch, sequentially** (parallel Playwright runs cause CPU
+contention → false greens).
+
+**Still open after the audit:** R041 (needs SFX sample assets + a
+`stopAll`), R012 (scoreboard X/N denominator — not separately gated),
+R013 (Hub LOCKED-vs-TIMEOUT cosmetic, dev-tool only), R021 (commentary
+fires before question card renders — needs a browser-truth gate). Letter
+pronunciation (R011 family) is the Kokoro voice thread, separate.
+
+**Caveat — uncommitted:** the 1,296 Kokoro-regenerated `audio/questions/*.mp3`
+are unstaged on purpose (big binary change tied to the Piper→Kokoro voice
+decision). Per-bug commits stage explicit paths only — never `git add -A`.
+
 ## What's done (commits since start of this work)
 
 ```
