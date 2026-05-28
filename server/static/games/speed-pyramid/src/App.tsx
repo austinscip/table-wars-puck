@@ -92,10 +92,14 @@ function GlobalLobbyResetListener() {
 }
 
 // Tiny build marker so we can tell from across the room whether a tab
-// has the latest bundle loaded. Skipped on /dev/hub (the Hub has its
-// own chip in the header).
+// has the latest bundle loaded. Hidden by default — the bar TV shouldn't
+// show dev clutter to customers. Visible only with ?debug=1 in the URL,
+// and never on /dev/hub (the Hub has its own chip in its header).
 function BuildChip() {
   if (window.location.pathname.startsWith('/tv/speed-pyramid/dev/')) {
+    return null
+  }
+  if (!new URLSearchParams(window.location.search).has('debug')) {
     return null
   }
   return (
