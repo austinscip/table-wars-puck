@@ -1653,6 +1653,15 @@ def sp_reset(session_code: str):
         (session_code,),
         fetch_one=True,
     )
+    # Guard against fabricating phantom state. A reset is only valid for a
+    # session that was actually paired — i.e. it has a trivia_sessions DB
+    # row, or it already has an in-memory _SP_STATE entry from a live match.
+    # Without this, a reset against a never-paired (or already-wiped) code
+    # writes a fresh _SP_STATE entry, flipping match-state exists:false ->
+    # exists:true. A polling puck then recovers to IN_GAME_IDLE and waits
+    # forever for a current-question that never arrives (R043).
+    if not session and session_code not in _SP_STATE:
+        return jsonify({"error": "unknown session"}), 404
     if session:
         sid = session["id"]
         execute_query(
