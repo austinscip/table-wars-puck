@@ -93,11 +93,12 @@ def _between_rounds(sc: str) -> bool:
     return bool(st.get("pending_category_pick") or st.get("pending_minigame"))
 
 
-def _resolve_phase(sc: str) -> None:
+def _resolve_phase(sc: str, pucks: list[int] | None = None) -> None:
     """Clear any pending pick / minigame so load-question can advance.
-    Picks: select the first offered category. Minigames: just let the
-    deadline lapse (load-question auto-resolves). Both are driven purely
-    via REST."""
+    Picks: select the first offered category. Minigames: FIRE a winning
+    shot for the pucks so a winner is declared and a power-up is granted
+    (without a winning fire no power-up is ever granted and the REVEAL
+    path can never be exercised). Both are driven purely via REST."""
     st = _match_state(sc)
     pp = st.get("pending_category_pick")
     if pp:
@@ -107,11 +108,32 @@ def _resolve_phase(sc: str) -> None:
                   {"puck_id": pp["picker_puck_id"],
                    "category_id": offer[0]["id"]})
         return
-    # minigame: load-question auto-resolves once past the deadline; nothing
-    # to POST here.
+    mg = st.get("pending_minigame")
+    if mg and pucks:
+        flavor = mg.get("flavor")
+        for i, pid in enumerate(pucks):
+            if flavor == "BULLSEYE":
+                # Perfect fire: target quadrant at t=0 -> 1000 pts. Give the
+                # second puck a wrong quadrant so a clear winner emerges.
+                tq = mg.get("target_quadrant") or "A"
+                quad = tq if i == 0 else ("B" if tq != "B" else "A")
+                _post(f"{PH}/minigame/fire",
+                      {"session_code": sc, "puck_id": pid,
+                       "t_ms": 0, "quadrant": quad})
+            else:
+                # SHOT_CLOCK: fire at the green-zone center (cycle/2) -> 1000.
+                cycle = int(mg.get("cycle_ms") or 2000)
+                t = cycle // 2 if i == 0 else int(cycle * 0.01)
+                _post(f"{PH}/minigame/fire",
+                      {"session_code": sc, "puck_id": pid, "t_ms": t})
+        # Belt-and-suspenders resolve in case a fire was rejected.
+        _post(f"{PH}/minigame/finish/{sc}")
+        return
+    # minigame with no pucks known yet: load-question auto-resolves once
+    # past the deadline; nothing to POST here.
 
 
-def _load_question(sc: str):
+def _load_question(sc: str, pucks: list[int] | None = None):
     """Drive load-question past any pick/minigame phase. Returns the question
     dict (with 'id' and 'answers') once a real question is active, else None.
     Resolves between-rounds phases as needed."""
@@ -122,7 +144,7 @@ def _load_question(sc: str):
             return None
         phase = j.get("phase")
         if phase in ("category_pick", "minigame"):
-            _resolve_phase(sc)
+            _resolve_phase(sc, pucks)
             time.sleep(1.2)
             continue
         q = j.get("question")
@@ -143,70 +165,36 @@ def _force_reveal(sc: str):
     return _post(f"{PH}/force-reveal/{sc}")
 
 
-def run() -> int:  # noqa: C901
-    v = Verifier()
+def _drive_one_match(sc: str, pucks: list[int]) -> dict:
+    """Play one full match driving rounds via REST. Fires the minigames so
+    power-up grants happen; arms the FIRST granted REVEAL and times its puck
+    out on the next round so the REVEAL forces an in-memory correct with no
+    matching DB row. Returns a dict describing what was exercised:
+        {"reveal_puck": int|None, "db_correct": int, "forced": int}
+    The power-up grant TYPE is random (1 of 4), so a single match may grant
+    no REVEAL; the caller retries until one is granted."""
+    _post(f"{PH}/reset/{sc}")
+    time.sleep(0.4)
 
-    # Pure server-rest: we still pair via the Hub helper to register two
-    # real expected pucks (load_expected_pucks reads the DB rows pairing
-    # creates). No match driving via the browser past that point.
-    with session() as (hub, tv):
-        sc = pair_and_start(hub, tv, goto_question=False)
-        if not sc:
-            v.inconclusive("setup", "no session_code after pairing")
-            return v.report()
-        log(f"session_code={sc}")
+    # We always engineer pucks[0] to win the minigames (perfect fire), so the
+    # power-up — and thus the REVEAL we arm — always lands on pucks[0]. Track
+    # that puck's DB-correct answers across EVERY round (not just after the
+    # REVEAL is armed) so expected_correct = real DB-correct + forced rounds.
+    tracked_puck = pucks[0]
+    reveal_puck: int | None = None
+    reveal_armed_round: int | None = None
+    db_correct_for_reveal_puck = 0
+    forced_correct_rounds = 0
 
-        # Reset SP state to a clean round-0 match for this session.
-        _post(f"{PH}/reset/{sc}")
-        time.sleep(0.4)
+    first_q = _load_question(sc, pucks)
+    if not first_q:
+        return {"reveal_puck": None, "db_correct": 0, "forced": 0,
+                "error": "no first question"}
 
-        st = _match_state(sc)
-        # expected_pucks isn't in match-state; infer from inventories later.
-        # We know pairing registered pucks 1 and 2 typically; discover the
-        # two puck ids from the answer flow instead. Pair helper pairs puck
-        # rows 0 and 1 -> puck_ids are whatever the DB assigned. We learn
-        # them from the first round's answer responses.
-        pucks: list[int] = []
-
-        reveal_puck: int | None = None
-        reveal_armed_round: int | None = None
-        # Per-puck running tally of how many rounds the REVEAL feed would
-        # mark correct for that puck = DB-correct answers + REVEAL-forced
-        # rounds. We only need it for reveal_puck.
-        db_correct_for_reveal_puck = 0
-        forced_correct_rounds = 0
-
-        # We must learn the two puck ids. Probe candidate ids 1..8 by
-        # checking which ones the /answer endpoint accepts (it 409s on a
-        # wrong question but 400/ok tells us the puck is in the round). We
-        # instead derive pucks from expected via a throwaway question.
-        first_q = _load_question(sc)
-        if not first_q:
-            v.inconclusive("first load-question", "no question returned")
-            return v.report()
-
-        # Discover puck ids: try answering as ids 1..8; the SP answer
-        # endpoint records by puck_id with no membership check, but only
-        # expected pucks matter for reveal. Read expected from load-question
-        # payload via a fresh state poll is not exposed; instead use the two
-        # ids that pairing creates. Pull them from the lobby state.
-        _, lobby = _get(f"{BASE}/api/pair/lobby-state")
-        for key in ("pucks", "members", "players"):
-            arr = lobby.get(key) if isinstance(lobby, dict) else None
-            if isinstance(arr, list):
-                for m in arr:
-                    pid = m.get("puck_id") if isinstance(m, dict) else None
-                    if isinstance(pid, int):
-                        pucks.append(pid)
-        pucks = sorted(set(pucks))
-        if len(pucks) < 2:
-            # Fall back to the conventional 1,2 assignment.
-            pucks = [1, 2]
-        log(f"pucks={pucks}")
-
-        # ---- Round loop -------------------------------------------------
-        cur_q = first_q
-        guard = 0
+    # ---- Round loop ----------------------------------------------------
+    cur_q = first_q
+    guard = 0
+    if True:
         while cur_q is not None and guard < 30:
             guard += 1
             qid = int(cur_q["id"])
@@ -214,21 +202,23 @@ def run() -> int:  # noqa: C901
             rnd = int(st.get("round", 0))
             log(f"round {rnd}: qid={qid}")
 
-            # If this is the round AFTER we armed REVEAL on reveal_puck,
-            # deliberately let reveal_puck TIME OUT (skip its answer) so the
-            # bug surfaces: REVEAL forces is_correct=True in memory but no
-            # DB row exists.
+            # If this is the round AFTER we armed REVEAL on the tracked puck,
+            # deliberately let it TIME OUT (skip its answer) so the bug
+            # surfaces: REVEAL forces is_correct=True in memory but no DB row
+            # exists.
             timeout_target = (reveal_puck is not None
                               and reveal_armed_round == rnd)
 
             for pid in pucks:
-                if timeout_target and pid == reveal_puck:
+                if timeout_target and pid == tracked_puck:
                     log(f"  puck {pid}: TIMING OUT (REVEAL armed) — no answer")
                     continue
-                # Answer 'A'. We don't need correctness for non-reveal pucks;
-                # for reveal_puck on non-timeout rounds, track DB correctness.
+                # Answer 'A'. Track the tracked puck's DB-correct answers on
+                # every round it actually answers (the only rounds that write
+                # a DB row); the timed-out forced round writes none on the
+                # buggy build.
                 code, ar = _answer(sc, pid, qid, "A")
-                if code == 200 and pid == reveal_puck and ar.get("is_correct"):
+                if code == 200 and pid == tracked_puck and ar.get("is_correct"):
                     db_correct_for_reveal_puck += 1
 
             # Force the reveal (covers the timed-out puck path too).
@@ -243,53 +233,124 @@ def run() -> int:  # noqa: C901
                     f"{reveal_puck} on round {rnd} (no DB row)")
                 reveal_armed_round = None  # one-shot consumed
 
-            # Between-rounds: look for a REVEAL we can arm (only if we
-            # haven't already set one up).
-            # Advance toward the next round; load-question opens the phase.
-            nxt = _load_question(sc)
-            if reveal_puck is None:
-                # After load-question opened a pick/minigame phase OR before
-                # it advanced, inventories may hold a REVEAL grant.
-                pid, item_id = _find_reveal(sc)
-                if pid is not None and _between_rounds(sc):
-                    code, res = _post(
-                        f"{PH}/power-up/activate",
-                        {"session_code": sc, "puck_id": pid,
-                         "item_id": item_id})
-                    if code == 200 and res.get("ok", True) is not False:
-                        reveal_puck = pid
-                        # It arms for the NEXT question's reveal.
-                        reveal_armed_round = int(
-                            _match_state(sc).get("round", 0)) + 1
-                        log(f"  ARMED REVEAL for puck {pid}; will time out "
-                            f"on round {reveal_armed_round}")
-                        # Resolve the phase so the armed round actually loads.
-                        nxt = _load_question(sc)
+            # Between-rounds: advance one step at a time so we can FIRE the
+            # minigame (granting power-ups) and ARM a granted REVEAL while
+            # the between-rounds phase is still open. Each load-question
+            # either opens a phase, returns a question, or completes.
+            nxt = None
+            adv_deadline = time.time() + 40
+            while time.time() < adv_deadline:
+                code, j = _post(f"{PH}/load-question/{sc}")
+                if code == 409 and j.get("error") == "match_complete":
+                    nxt = None
+                    break
+                phase = j.get("phase")
+                if phase in ("category_pick", "minigame"):
+                    # FIRST, while this between-rounds phase is still open,
+                    # try to ARM a REVEAL that an EARLIER minigame granted
+                    # (the grant lands during a minigame, which resolves
+                    # immediately on firing, so it can only be armed during a
+                    # SUBSEQUENT pick/minigame window).
+                    if reveal_puck is None:
+                        pid, item_id = _find_reveal(sc)
+                        if pid is not None and pid == tracked_puck:
+                            ac, res = _post(
+                                f"{PH}/power-up/activate",
+                                {"session_code": sc, "puck_id": pid,
+                                 "item_id": item_id})
+                            if ac == 200 and res.get("ok", True) is not False:
+                                reveal_puck = pid
+                                reveal_armed_round = int(
+                                    _match_state(sc).get("round", 0)) + 1
+                                log(f"  ARMED REVEAL for puck {pid}; will "
+                                    f"time out on round {reveal_armed_round}")
+                    # Then resolve the phase (picks: select; minigames: FIRE
+                    # so a winner is granted a power-up for a later window).
+                    _resolve_phase(sc, pucks)
+                    time.sleep(0.8)
+                    continue
+                q = j.get("question")
+                if q and q.get("id"):
+                    nxt = q
+                    break
+                time.sleep(0.4)
             cur_q = nxt
 
-        # ---- Finish + assert -------------------------------------------
-        # Make sure the match completed so final-results is stable.
-        for _ in range(8):
-            if _match_state(sc).get("complete"):
-                break
-            if _load_question(sc) is None:
-                break
-            time.sleep(0.3)
+    # ---- Finish the match so final-results is stable -------------------
+    for _ in range(8):
+        if _match_state(sc).get("complete"):
+            break
+        if _load_question(sc, pucks) is None:
+            break
+        time.sleep(0.3)
 
-        if reveal_puck is None:
+    return {
+        "reveal_puck": reveal_puck,
+        "db_correct": db_correct_for_reveal_puck,
+        "forced": forced_correct_rounds,
+    }
+
+
+def run() -> int:  # noqa: C901
+    v = Verifier()
+
+    # Pure server-rest: we still pair via the Hub helper to register two
+    # real expected pucks (load_expected_pucks reads the DB rows pairing
+    # creates). No match driving via the browser past that point.
+    with session() as (hub, tv):
+        sc = pair_and_start(hub, tv, goto_question=False)
+        if not sc:
+            v.inconclusive("setup", "no session_code after pairing")
+            return v.report()
+        log(f"session_code={sc}")
+
+        # Discover the two paired puck ids from the lobby (pairing creates
+        # them; ids are whatever the DB assigned, conventionally 1 and 2).
+        pucks: list[int] = []
+        _, lobby = _get(f"{BASE}/api/pair/lobby-state")
+        for key in ("pucks", "members", "players"):
+            arr = lobby.get(key) if isinstance(lobby, dict) else None
+            if isinstance(arr, list):
+                for m in arr:
+                    pid = m.get("puck_id") if isinstance(m, dict) else None
+                    if isinstance(pid, int):
+                        pucks.append(pid)
+        pucks = sorted(set(pucks))
+        if len(pucks) < 2:
+            pucks = [1, 2]
+        log(f"pucks={pucks}")
+
+        # The minigame-winner power-up grant is a random 1-of-4 type, so a
+        # single match may never grant a REVEAL. Retry full matches until a
+        # REVEAL is granted+armed and a forced-correct timeout round runs.
+        # P(no REVEAL in 3 grants) = (3/4)^3 ~= 0.42, so ~8 attempts gives
+        # >99.99% reliability.
+        result = None
+        for attempt in range(1, 9):
+            log(f"== match attempt {attempt} ==")
+            result = _drive_one_match(sc, pucks)
+            if result.get("reveal_puck") is not None and result.get("forced"):
+                break
+            log(f"  (no armed+forced REVEAL this match: {result})")
+
+        if not result or result.get("reveal_puck") is None:
             v.inconclusive(
                 "scoreboard-correct-matches-reveals",
-                "no REVEAL power-up was ever granted across the match, so "
-                "the REVEAL-forced-correct path could not be exercised "
-                "(inconclusive = fail per discipline)")
+                "no REVEAL power-up was granted+armed across repeated "
+                "matches, so the REVEAL-forced-correct path could not be "
+                "exercised (inconclusive = fail per discipline)")
             return v.report()
 
-        if forced_correct_rounds == 0:
+        if not result.get("forced"):
             v.inconclusive(
                 "scoreboard-correct-matches-reveals",
                 "REVEAL armed but the forced-correct timeout round was not "
                 "exercised (no reveal feed correct to compare)")
             return v.report()
+
+        reveal_puck = int(result["reveal_puck"])
+        db_correct_for_reveal_puck = int(result["db_correct"])
+        forced_correct_rounds = int(result["forced"])
 
         code, fr = _get(f"{PH}/final-results/{sc}")
         if code != 200 or not isinstance(fr, dict):
@@ -298,7 +359,7 @@ def run() -> int:  # noqa: C901
             return v.report()
 
         players = {int(p["puck_id"]): p for p in fr.get("players", [])}
-        rp = players.get(int(reveal_puck))
+        rp = players.get(reveal_puck)
         if rp is None:
             v.inconclusive(
                 "scoreboard-correct-matches-reveals",

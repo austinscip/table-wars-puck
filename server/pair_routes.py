@@ -623,6 +623,66 @@ def _grant_power_up(state: dict, session_code: str, puck_id: int) -> dict | None
     return item
 
 
+def _persist_reveal_correct(session_code: str, qid: int, puck_id: int, ans: dict) -> None:
+    """Write a REVEAL-forced result back to trivia_answers so
+    final-results (which derives `correct` from the DB) reflects what
+    the reveal feed showed. The in-memory ans["is_correct"]=True set by
+    a REVEAL arm is otherwise never persisted: a wrong answer leaves a
+    stale is_correct=False row, and a timed-out puck has no row at all,
+    so SUM(is_correct) under-counts the corrects players actually saw.
+
+    There is no UNIQUE constraint on (session_id, question_id, puck_id),
+    so UPDATE the existing row if present, else INSERT one. A timed-out
+    puck (answer=None) stores the question's correct_answer letter so
+    the row satisfies the A/B/C/D CHECK and shows as a correct answer."""
+    ph = get_placeholder()
+    sess = execute_query(
+        f"SELECT id FROM trivia_sessions WHERE session_code = {ph}",
+        (session_code,),
+        fetch_one=True,
+    )
+    if not sess:
+        return
+    sid = sess["id"]
+    answer_letter = ans.get("answer")
+    if answer_letter is None:
+        q = execute_query(
+            f"SELECT correct_answer FROM trivia_questions WHERE id = {ph}",
+            (qid,),
+            fetch_one=True,
+        )
+        answer_letter = q["correct_answer"] if q else "A"
+    points = int(ans.get("points", 0))
+    rt = ans.get("response_time_ms")
+    existing = execute_query(
+        f"SELECT id, points_earned FROM trivia_answers "
+        f"WHERE session_id = {ph} AND question_id = {ph} AND puck_id = {ph}",
+        (sid, qid, puck_id),
+        fetch_one=True,
+    )
+    if existing:
+        # Correct the stale row and reconcile the cached player score by
+        # the points delta so totals stay consistent.
+        delta = points - int(existing["points_earned"] or 0)
+        execute_query(
+            f"UPDATE trivia_answers SET is_correct = {ph}, points_earned = {ph}, "
+            f"answer_given = {ph} WHERE id = {ph}",
+            (True, points, answer_letter, existing["id"]),
+        )
+        if delta:
+            execute_query(
+                f"UPDATE trivia_session_players SET total_score = total_score + {ph} "
+                f"WHERE session_id = {ph} AND puck_id = {ph}",
+                (delta, sid, puck_id),
+            )
+    else:
+        from trivia_database import record_answer
+        record_answer(
+            sid, qid, puck_id, answer_letter, True,
+            int(rt) if rt is not None else 0, points,
+        )
+
+
 def _apply_power_up_arms(state: dict, session_code: str, qid: int, answers: dict) -> None:
     """Apply armed power-up effects to this question's answers BEFORE
     cumulative scoring. Called from _maybe_emit_reveal once all pucks
@@ -637,6 +697,7 @@ def _apply_power_up_arms(state: dict, session_code: str, qid: int, answers: dict
     if not arms_table:
         return
     # Apply REVEAL + DOUBLE first (affects each puck's own score).
+    revealed_pucks: list[int] = []
     for pid, ans in answers.items():
         arms = arms_table.get(pid)
         if not arms:
@@ -646,6 +707,7 @@ def _apply_power_up_arms(state: dict, session_code: str, qid: int, answers: dict
             ans["is_correct"] = True
             ans["points"] = 1000
             ans["tier"] = "LEGENDARY"
+            revealed_pucks.append(pid)
         if arms.get("double"):
             ans["points"] = int(ans.get("points", 0)) * 2
     # STEAL: process AFTER reveal/double so the stolen amount reflects
@@ -692,6 +754,16 @@ def _apply_power_up_arms(state: dict, session_code: str, qid: int, answers: dict
                     },
                     room=session_code,
                 )
+    # Persist REVEAL-forced corrects to the DB so final-results (which
+    # derives `correct` from trivia_answers) matches the reveal feed.
+    # Done after DOUBLE/STEAL so the persisted points reflect the final
+    # per-round value the players saw.
+    for pid in revealed_pucks:
+        try:
+            _persist_reveal_correct(session_code, qid, pid, answers[pid])
+        except Exception as e:  # noqa: BLE001
+            print(f"[sp/reveal] persist REVEAL correct failed: {e}")
+
     # Clear all arms (one-shot per round).
     state["power_up_arms"] = {}
 
