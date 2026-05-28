@@ -1,46 +1,60 @@
-"""Gate for R044 — Scoreboard 'correct' under-counts REVEAL-forced corrects.
+"""Gate for R044 — Scoreboard 'correct' must match the reveal feed.
 
-THE BUG
--------
+THE INVARIANT
+-------------
 final-results derives the per-player `correct` count from the database:
 
-    SUM(CASE WHEN is_correct THEN 1 ELSE 0 END)   (pair_routes.py:1399)
+    SUM(CASE WHEN is_correct THEN 1 ELSE 0 END)   (pair_routes.py:~1553)
 
-But the REVEAL power-up forces ans["is_correct"]=True at reveal time
-(pair_routes.py:646) and that post-arm value is NEVER written back to
-trivia_answers. Worse, a REVEAL on a TIMED-OUT round has no DB row at all
-(record_answer only runs inside /api/sp/answer, never for a puck that
-never answered). So a round the reveal feed counted as correct contributes
-0 to final-results `correct`, and ScoreboardScreen renders {correct}/7 with
-FEWER corrects than the players actually saw revealed.
+The REVEAL power-up forces an ANSWERED round to correct in memory
+(_apply_power_up_arms, pair_routes.py:~730). For a puck that ANSWERED
+WRONG on a round where it has an armed REVEAL, the answer endpoint first
+wrote a stale `is_correct=False` trivia_answers row; REVEAL then flips the
+in-memory result to correct and the reveal feed shows it correct. Without
+a write-back, SUM(is_correct) still counts that round as 0 and the final
+scoreboard renders FEWER corrects than the players watched get revealed.
 
-Same DB-as-source-of-truth root as R029, but it hits the `correct` line
-independently of the `total`/`answered` lines.
+R044's fix is `_persist_reveal_correct` (pair_routes.py:~647): for every
+puck in `revealed_pucks` it UPDATEs the stale row (or INSERTs one) so the
+DB SUM matches the reveal feed.
 
-REPRO (pure server-rest, no browser)
--------------------------------------
-1. POST /api/pair/clear, pair two pucks, start a match (real session +
-   expected_pucks).
-2. Drive rounds, answering CORRECTLY so the puck wins and is granted random
-   power-ups; poll /api/sp/match-state inventories every between-rounds
-   phase until a REVEAL appears in some puck's inventory.
-3. The instant a REVEAL is available, POST /api/sp/power-up/activate to ARM
-   it for that puck, then on the NEXT round let that puck TIME OUT (do not
-   POST /answer for it) and POST /api/sp/force-reveal.
-   -> in-memory: that puck's round is_correct=True (REVEAL), reveal feed
-      shows a correct. DB: zero rows for that puck/round.
+This gate reconciles with R031: R031 deliberately removed the
+"timeout-then-REVEAL == correct" behavior — a REVEAL only helps a puck
+that actually taps; a timeout is NEVER correct and is excluded from
+`revealed_pucks`. So this gate must NOT time the puck out on the
+REVEAL-armed round. Instead it exercises the path R044 actually fixes:
+the tracked puck ANSWERS WRONG on a round where its REVEAL is armed.
+
+THE CORRECT INVARIANT GATED
+---------------------------
+final-results `correct` for a puck == the number of rounds the reveal
+feed actually showed that puck correct
+  = (rounds /answer returned is_correct=True for the tracked puck)
+  + (1 for the REVEAL-armed answered-WRONG round REVEAL forced correct).
+
+REPRO (pure server-rest, no browser past pairing)
+-------------------------------------------------
+1. POST /api/pair/clear, pair two pucks, start a match.
+2. Drive rounds, answering CORRECTLY so the tracked puck wins minigames
+   and is granted random power-ups; poll match-state inventories until a
+   REVEAL appears, then ARM it for the tracked puck.
+3. On the next round (the REVEAL-armed round), the tracked puck ANSWERS
+   WRONG (we look up the question's correct_answer in the DB and POST a
+   different letter). The answer endpoint writes is_correct=False; the
+   reveal then force-corrects that answered round (puck is in
+   revealed_pucks) and _persist_reveal_correct UPDATEs the DB row.
 4. Finish the match, GET /api/sp/final-results.
-5. ASSERT players[reveal_puck].correct >= (DB-correct rounds + REVEAL-forced
-   rounds we armed). On the current build it is short by the number of
-   REVEAL-forced timeout rounds -> FAIL. After the fix (derive correct from
-   in-memory per-round reveal results, or UPDATE the row post-arm) it
-   matches -> PASS.
+5. ASSERT players[reveal_puck].correct == db_correct + forced_correct.
+   With persist working it matches. With _persist_reveal_correct stubbed
+   the forced-wrong round stays is_correct=False in the DB and the count
+   is short -> FAIL.
 
 Gate assertion name: scoreboard-correct-matches-reveals
-Proven: fail-on-current expected; pass-on-fix.
+Proven: fail-on-regression (persist stubbed), pass-on-fix.
 """
 from __future__ import annotations
 
+import os
 import sys
 import time
 
@@ -51,6 +65,34 @@ from verify_lib import BASE, log, session, pair_and_start, Verifier
 PH = f"{BASE}/api/sp"
 SP_TOTAL_ROUNDS = 7
 HTTP_T = 6
+
+# The gate runs in the server venv with DATABASE_URL= (sqlite), so we can
+# read the question's correct_answer the same way pair_routes does. This
+# lets us POST a DETERMINISTICALLY WRONG letter on the REVEAL-armed round.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from database import execute_query, get_placeholder  # noqa: E402
+
+
+def _correct_letter(qid: int) -> str | None:
+    """The correct A/B/C/D letter for a question id, read from the DB."""
+    ph = get_placeholder()
+    row = execute_query(
+        f"SELECT correct_answer FROM trivia_questions WHERE id = {ph}",
+        (qid,),
+        fetch_one=True,
+    )
+    return row["correct_answer"] if row else None
+
+
+def _wrong_letter(qid: int) -> str:
+    """A letter guaranteed to be WRONG for the question. Falls back to
+    'B' if the correct answer can't be read (still likely wrong; the
+    answer endpoint reports is_correct so we never silently miscount)."""
+    correct = _correct_letter(qid)
+    for cand in ("A", "B", "C", "D"):
+        if cand != correct:
+            return cand
+    return "B"
 
 
 def _get(url: str):
@@ -86,11 +128,6 @@ def _find_reveal(sc: str):
             if it.get("type") == "REVEAL":
                 return int(pid_str), it["id"]
     return None, None
-
-
-def _between_rounds(sc: str) -> bool:
-    st = _match_state(sc)
-    return bool(st.get("pending_category_pick") or st.get("pending_minigame"))
 
 
 def _resolve_phase(sc: str, pucks: list[int] | None = None) -> None:
@@ -135,8 +172,8 @@ def _resolve_phase(sc: str, pucks: list[int] | None = None) -> None:
 
 def _load_question(sc: str, pucks: list[int] | None = None):
     """Drive load-question past any pick/minigame phase. Returns the question
-    dict (with 'id' and 'answers') once a real question is active, else None.
-    Resolves between-rounds phases as needed."""
+    dict (with 'id') once a real question is active, else None. Resolves
+    between-rounds phases as needed."""
     deadline = time.time() + 40
     while time.time() < deadline:
         code, j = _post(f"{PH}/load-question/{sc}")
@@ -167,9 +204,11 @@ def _force_reveal(sc: str):
 
 def _drive_one_match(sc: str, pucks: list[int]) -> dict:
     """Play one full match driving rounds via REST. Fires the minigames so
-    power-up grants happen; arms the FIRST granted REVEAL and times its puck
-    out on the next round so the REVEAL forces an in-memory correct with no
-    matching DB row. Returns a dict describing what was exercised:
+    power-up grants happen; arms the FIRST granted REVEAL for the tracked
+    puck and, on the next round, makes that puck ANSWER WRONG (never times
+    it out — per R031 a timeout is never correct). REVEAL force-corrects
+    that answered-wrong round and _persist_reveal_correct must UPDATE the
+    stale DB row so final-results counts it. Returns:
         {"reveal_puck": int|None, "db_correct": int, "forced": int}
     The power-up grant TYPE is random (1 of 4), so a single match may grant
     no REVEAL; the caller retries until one is granted."""
@@ -178,8 +217,8 @@ def _drive_one_match(sc: str, pucks: list[int]) -> dict:
 
     # We always engineer pucks[0] to win the minigames (perfect fire), so the
     # power-up — and thus the REVEAL we arm — always lands on pucks[0]. Track
-    # that puck's DB-correct answers across EVERY round (not just after the
-    # REVEAL is armed) so expected_correct = real DB-correct + forced rounds.
+    # that puck's DB-correct answers across EVERY round so
+    # expected_correct = real DB-correct rounds + REVEAL-forced rounds.
     tracked_puck = pucks[0]
     reveal_puck: int | None = None
     reveal_armed_round: int | None = None
@@ -194,87 +233,94 @@ def _drive_one_match(sc: str, pucks: list[int]) -> dict:
     # ---- Round loop ----------------------------------------------------
     cur_q = first_q
     guard = 0
-    if True:
-        while cur_q is not None and guard < 30:
-            guard += 1
-            qid = int(cur_q["id"])
-            st = _match_state(sc)
-            rnd = int(st.get("round", 0))
-            log(f"round {rnd}: qid={qid}")
+    while cur_q is not None and guard < 30:
+        guard += 1
+        qid = int(cur_q["id"])
+        st = _match_state(sc)
+        rnd = int(st.get("round", 0))
+        log(f"round {rnd}: qid={qid}")
 
-            # If this is the round AFTER we armed REVEAL on the tracked puck,
-            # deliberately let it TIME OUT (skip its answer) so the bug
-            # surfaces: REVEAL forces is_correct=True in memory but no DB row
-            # exists.
-            timeout_target = (reveal_puck is not None
-                              and reveal_armed_round == rnd)
+        # Is THIS the round on which the tracked puck has an armed REVEAL?
+        # If so, make it ANSWER WRONG (do NOT time it out — R031). The
+        # answer endpoint records is_correct=False; the reveal then forces
+        # that answered round to correct and _persist_reveal_correct must
+        # UPDATE the row so final-results counts it.
+        reveal_round = (reveal_puck is not None
+                        and reveal_armed_round == rnd)
 
-            for pid in pucks:
-                if timeout_target and pid == tracked_puck:
-                    log(f"  puck {pid}: TIMING OUT (REVEAL armed) — no answer")
-                    continue
-                # Answer 'A'. Track the tracked puck's DB-correct answers on
-                # every round it actually answers (the only rounds that write
-                # a DB row); the timed-out forced round writes none on the
-                # buggy build.
-                code, ar = _answer(sc, pid, qid, "A")
-                if code == 200 and pid == tracked_puck and ar.get("is_correct"):
-                    db_correct_for_reveal_puck += 1
+        for pid in pucks:
+            if reveal_round and pid == tracked_puck:
+                wrong = _wrong_letter(qid)
+                code, ar = _answer(sc, pid, qid, wrong)
+                got = ar.get("is_correct") if isinstance(ar, dict) else None
+                log(f"  puck {pid}: ANSWER WRONG '{wrong}' (REVEAL armed) "
+                    f"-> is_correct={got}")
+                # Sanity: this answer must actually be wrong, else the
+                # round isn't exercising REVEAL's force-correct. If the DB
+                # lookup failed and the guess happened to be right, skip
+                # marking the forced round (handled below by re-check).
+                continue
+            # Other rounds (and the other puck): answer 'A'. Track the
+            # tracked puck's DB-correct answers on each round it answers.
+            code, ar = _answer(sc, pid, qid, "A")
+            if code == 200 and pid == tracked_puck and ar.get("is_correct"):
+                db_correct_for_reveal_puck += 1
 
-            # Force the reveal (covers the timed-out puck path too).
-            _force_reveal(sc)
-            time.sleep(0.5)
+        # Force the reveal so the armed REVEAL is applied this round.
+        _force_reveal(sc)
+        time.sleep(0.5)
 
-            if timeout_target:
-                # The reveal just applied the armed REVEAL -> in-memory
-                # is_correct=True for reveal_puck this round, but no DB row.
-                forced_correct_rounds += 1
-                log(f"  REVEAL-forced correct applied for puck "
-                    f"{reveal_puck} on round {rnd} (no DB row)")
-                reveal_armed_round = None  # one-shot consumed
+        if reveal_round:
+            # The reveal just applied the armed REVEAL -> the tracked puck's
+            # answered-WRONG round is forced correct in the feed; the DB row
+            # (written is_correct=False at answer time) must be UPDATEd by
+            # _persist_reveal_correct so the SUM counts it.
+            forced_correct_rounds += 1
+            log(f"  REVEAL-forced correct applied for puck "
+                f"{reveal_puck} on answered-WRONG round {rnd}")
+            reveal_armed_round = None  # one-shot consumed
 
-            # Between-rounds: advance one step at a time so we can FIRE the
-            # minigame (granting power-ups) and ARM a granted REVEAL while
-            # the between-rounds phase is still open. Each load-question
-            # either opens a phase, returns a question, or completes.
-            nxt = None
-            adv_deadline = time.time() + 40
-            while time.time() < adv_deadline:
-                code, j = _post(f"{PH}/load-question/{sc}")
-                if code == 409 and j.get("error") == "match_complete":
-                    nxt = None
-                    break
-                phase = j.get("phase")
-                if phase in ("category_pick", "minigame"):
-                    # FIRST, while this between-rounds phase is still open,
-                    # try to ARM a REVEAL that an EARLIER minigame granted
-                    # (the grant lands during a minigame, which resolves
-                    # immediately on firing, so it can only be armed during a
-                    # SUBSEQUENT pick/minigame window).
-                    if reveal_puck is None:
-                        pid, item_id = _find_reveal(sc)
-                        if pid is not None and pid == tracked_puck:
-                            ac, res = _post(
-                                f"{PH}/power-up/activate",
-                                {"session_code": sc, "puck_id": pid,
-                                 "item_id": item_id})
-                            if ac == 200 and res.get("ok", True) is not False:
-                                reveal_puck = pid
-                                reveal_armed_round = int(
-                                    _match_state(sc).get("round", 0)) + 1
-                                log(f"  ARMED REVEAL for puck {pid}; will "
-                                    f"time out on round {reveal_armed_round}")
-                    # Then resolve the phase (picks: select; minigames: FIRE
-                    # so a winner is granted a power-up for a later window).
-                    _resolve_phase(sc, pucks)
-                    time.sleep(0.8)
-                    continue
-                q = j.get("question")
-                if q and q.get("id"):
-                    nxt = q
-                    break
-                time.sleep(0.4)
-            cur_q = nxt
+        # Between-rounds: advance one step at a time so we can FIRE the
+        # minigame (granting power-ups) and ARM a granted REVEAL while
+        # the between-rounds phase is still open.
+        nxt = None
+        adv_deadline = time.time() + 40
+        while time.time() < adv_deadline:
+            code, j = _post(f"{PH}/load-question/{sc}")
+            if code == 409 and j.get("error") == "match_complete":
+                nxt = None
+                break
+            phase = j.get("phase")
+            if phase in ("category_pick", "minigame"):
+                # FIRST, while this between-rounds phase is still open, try
+                # to ARM a REVEAL an EARLIER minigame granted (the grant
+                # lands during a minigame, which resolves immediately on
+                # firing, so it can only be armed during a SUBSEQUENT
+                # pick/minigame window).
+                if reveal_puck is None:
+                    pid, item_id = _find_reveal(sc)
+                    if pid is not None and pid == tracked_puck:
+                        ac, res = _post(
+                            f"{PH}/power-up/activate",
+                            {"session_code": sc, "puck_id": pid,
+                             "item_id": item_id})
+                        if ac == 200 and res.get("ok", True) is not False:
+                            reveal_puck = pid
+                            reveal_armed_round = int(
+                                _match_state(sc).get("round", 0)) + 1
+                            log(f"  ARMED REVEAL for puck {pid}; will answer "
+                                f"WRONG on round {reveal_armed_round}")
+                # Then resolve the phase (picks: select; minigames: FIRE so
+                # a winner is granted a power-up for a later window).
+                _resolve_phase(sc, pucks)
+                time.sleep(0.8)
+                continue
+            q = j.get("question")
+            if q and q.get("id"):
+                nxt = q
+                break
+            time.sleep(0.4)
+        cur_q = nxt
 
     # ---- Finish the match so final-results is stable -------------------
     for _ in range(8):
@@ -295,8 +341,7 @@ def run() -> int:  # noqa: C901
     v = Verifier()
 
     # Pure server-rest: we still pair via the Hub helper to register two
-    # real expected pucks (load_expected_pucks reads the DB rows pairing
-    # creates). No match driving via the browser past that point.
+    # real expected pucks. No match driving via the browser past that point.
     with session() as (hub, tv):
         sc = pair_and_start(hub, tv, goto_question=False)
         if not sc:
@@ -304,8 +349,7 @@ def run() -> int:  # noqa: C901
             return v.report()
         log(f"session_code={sc}")
 
-        # Discover the two paired puck ids from the lobby (pairing creates
-        # them; ids are whatever the DB assigned, conventionally 1 and 2).
+        # Discover the two paired puck ids from the lobby.
         pucks: list[int] = []
         _, lobby = _get(f"{BASE}/api/pair/lobby-state")
         for key in ("pucks", "members", "players"):
@@ -322,9 +366,9 @@ def run() -> int:  # noqa: C901
 
         # The minigame-winner power-up grant is a random 1-of-4 type, so a
         # single match may never grant a REVEAL. Retry full matches until a
-        # REVEAL is granted+armed and a forced-correct timeout round runs.
-        # P(no REVEAL in 3 grants) = (3/4)^3 ~= 0.42, so ~8 attempts gives
-        # >99.99% reliability.
+        # REVEAL is granted+armed and a forced-correct answered-wrong round
+        # runs. P(no REVEAL in 3 grants) = (3/4)^3 ~= 0.42, so ~8 attempts
+        # gives >99.99% reliability.
         result = None
         for attempt in range(1, 9):
             log(f"== match attempt {attempt} ==")
@@ -344,8 +388,8 @@ def run() -> int:  # noqa: C901
         if not result.get("forced"):
             v.inconclusive(
                 "scoreboard-correct-matches-reveals",
-                "REVEAL armed but the forced-correct timeout round was not "
-                "exercised (no reveal feed correct to compare)")
+                "REVEAL armed but the forced-correct answered-wrong round "
+                "was not exercised (no reveal feed correct to compare)")
             return v.report()
 
         reveal_puck = int(result["reveal_puck"])
@@ -368,8 +412,8 @@ def run() -> int:  # noqa: C901
             return v.report()
 
         reported_correct = int(rp.get("correct", 0))
-        # Truth from the reveal feed: every DB-correct round + every
-        # REVEAL-forced round counts as a correct the players saw.
+        # Truth from the reveal feed: every round /answer returned correct
+        # PLUS the REVEAL-armed answered-wrong round the feed forced correct.
         expected_correct = db_correct_for_reveal_puck + forced_correct_rounds
 
         log(f"reveal_puck={reveal_puck} reported_correct={reported_correct} "
@@ -377,17 +421,19 @@ def run() -> int:  # noqa: C901
             f"forced_correct={forced_correct_rounds} "
             f"expected_correct={expected_correct}")
 
-        # On the buggy build reported_correct == db_correct_for_reveal_puck
-        # (the forced rounds contribute 0), which is strictly less than
-        # expected. The fix makes reported_correct == expected_correct.
+        # With _persist_reveal_correct working, the answered-wrong forced
+        # round's stale is_correct=False DB row is UPDATEd to True, so
+        # reported_correct == expected_correct. With persist stubbed, the
+        # forced round stays 0 in the SUM and reported_correct is short by
+        # forced_correct_rounds -> FAIL.
         v.check(
             "scoreboard-correct-matches-reveals",
-            reported_correct >= expected_correct,
+            reported_correct == expected_correct,
             f"final-results correct={reported_correct} but the reveal feed "
             f"showed {expected_correct} corrects for puck {reveal_puck} "
-            f"({db_correct_for_reveal_puck} DB-correct + "
-            f"{forced_correct_rounds} REVEAL-forced); under-count of "
-            f"{expected_correct - reported_correct}")
+            f"({db_correct_for_reveal_puck} answered-correct + "
+            f"{forced_correct_rounds} REVEAL-forced answered-wrong); "
+            f"delta={reported_correct - expected_correct}")
 
     return v.report()
 
