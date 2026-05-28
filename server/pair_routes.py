@@ -1836,6 +1836,13 @@ def sp_power_up_activate():
             target_puck_id = int(target_puck_id)
         except (TypeError, ValueError):
             return jsonify({"ok": False, "reason": "bad target_puck_id"}), 400
+        # Target must be a real participant other than the firer. A
+        # phantom id no-ops at reveal (item lost for zero effect) and a
+        # self-steal emits a bogus firer==target resolution; reject both
+        # WITHOUT consuming the one-shot item.
+        expected = state.get("expected_pucks") or set()
+        if target_puck_id == puck_id or target_puck_id not in expected:
+            return jsonify({"ok": False, "reason": "invalid target"}), 400
         target_arms = state["power_up_arms"].setdefault(target_puck_id, _empty_arms())
         target_arms.setdefault("incoming_steals", []).append(puck_id)
     elif item_type == "DOUBLE":
