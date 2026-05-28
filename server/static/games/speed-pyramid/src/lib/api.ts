@@ -261,6 +261,13 @@ export interface FinalResultsPlayer {
   tier: string
   color?: string
   color_name?: string
+  // R040: server-computed deterministic standing. `rank` and `is_winner`
+  // apply the documented tie-break (points -> faster aggregate response ->
+  // lowest puck_id) so the scoreboard never relies on V8 sort order.
+  sum_response_time_ms?: number
+  avg_response_ms?: number
+  rank?: number
+  is_winner?: boolean
 }
 
 export interface FinalResults {

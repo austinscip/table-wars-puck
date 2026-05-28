@@ -1500,7 +1500,9 @@ def sp_final_results(session_code: str):
         f"""SELECT puck_id,
                    COALESCE(SUM(points_earned), 0) AS total,
                    COUNT(*) AS answered,
-                   SUM(CASE WHEN is_correct THEN 1 ELSE 0 END) AS correct
+                   SUM(CASE WHEN is_correct THEN 1 ELSE 0 END) AS correct,
+                   COALESCE(SUM(response_time_ms), 0) AS sum_response_ms,
+                   COALESCE(AVG(response_time_ms), 0) AS avg_response_ms
               FROM trivia_answers
              WHERE session_id = {ph}
              GROUP BY puck_id""",
@@ -1555,6 +1557,12 @@ def sp_final_results(session_code: str):
         answered = int(r["answered"] or 0) if r else 0
         correct = int(r["correct"] or 0) if r else 0
         total = _total_for(pid)
+        # R040: surface aggregate response times so the final scoreboard can
+        # break a points tie deterministically instead of relying on V8 sort
+        # order. trivia_answers carries response_time_ms per locked answer;
+        # the SUM/AVG aggregate is the documented secondary key (faster wins).
+        sum_response_ms = int(r["sum_response_ms"] or 0) if r else 0
+        avg_response_ms = int(round(float(r["avg_response_ms"] or 0))) if r else 0
         players.append(
             {
                 "puck_id": pid,
@@ -1564,8 +1572,28 @@ def sp_final_results(session_code: str):
                 "tier": derive_tier(total, answered),
                 "color": _color_for(pid)[0],
                 "color_name": _color_for(pid)[1],
+                "sum_response_time_ms": sum_response_ms,
+                "avg_response_ms": avg_response_ms,
             }
         )
+
+    # R040: compute the authoritative final standing server-side so every
+    # client renders the SAME deterministic order. Documented tie-break:
+    # higher total -> faster (smaller) aggregate response time -> lowest
+    # puck_id. Rank is dense from 1; is_winner crowns ALL co-leaders that
+    # share the top total (so a genuine total tie crowns both, never one
+    # arbitrary puck), with the response-time tie-break still ordering rank.
+    players.sort(
+        key=lambda p: (
+            -int(p["total"]),
+            int(p["sum_response_time_ms"]),
+            int(p["puck_id"]),
+        )
+    )
+    top_total = int(players[0]["total"]) if players else 0
+    for i, p in enumerate(players):
+        p["rank"] = i + 1
+        p["is_winner"] = int(p["total"]) == top_total and top_total > 0
 
     return jsonify(
         {

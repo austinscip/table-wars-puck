@@ -90,9 +90,21 @@ export default function ScoreboardScreen() {
           ) : (
             results.players
               .slice()
-              .sort((a, b) => b.total - a.total)
+              // R040: trust the server's deterministic standing (rank +
+              // is_winner apply points -> faster aggregate response ->
+              // lowest puck_id). Fall back to total-only ordering with a
+              // response-time tie-break only when an older server omits rank.
+              .sort((a, b) => {
+                if (a.rank != null && b.rank != null) return a.rank - b.rank
+                if (b.total !== a.total) return b.total - a.total
+                return (
+                  (a.sum_response_time_ms ?? 0) - (b.sum_response_time_ms ?? 0) ||
+                  a.puck_id - b.puck_id
+                )
+              })
               .map((p, i) => {
-                const isWinner = i === 0 && p.total > 0
+                const isWinner =
+                  p.is_winner != null ? p.is_winner : i === 0 && p.total > 0
                 const compact = results.players.length > 4
                 return (
                   <motion.div
