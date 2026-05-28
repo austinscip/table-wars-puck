@@ -1647,6 +1647,11 @@ def _maybe_emit_reveal(session_code: str, force: bool = False) -> bool:
             best_pid, best_pts, best_rt = pid, pts, rt_val
     if best_pid is not None and best_pts > 0:
         state["last_round_winner_puck_id"] = best_pid
+    else:
+        # Wipeout round (everyone wrong/timed out, 0 pts): clear the
+        # stale winner so the next pick falls back to the lowest
+        # expected puck_id in _build_pick_offer, per the policy above.
+        state["last_round_winner_puck_id"] = None
 
     # Reveal payload is sorted by puck_id ascending. This is the TIE-
     # BREAKER policy: when two pucks earn the same points in a round
