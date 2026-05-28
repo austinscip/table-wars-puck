@@ -876,9 +876,14 @@ def _build_pick_offer(state: dict, next_round: int) -> dict:
     }
 
 
-def _maybe_auto_resolve_pick(state: dict) -> bool:
+def _maybe_auto_resolve_pick(state: dict, session_code: str | None = None) -> bool:
     """If pending_category_pick has expired with no selection, lock in
-    the first offer. Returns True if auto-resolved."""
+    the first offer. Returns True if auto-resolved.
+
+    Emits the same 'category_picked' socket as a manual pick
+    (sp_select_category) so the TV's onPicked handler fires its lock cue
+    (sfx_pick_locked + chosen-card highlight) on a timeout default just
+    like on a real selection (R046/R019)."""
     pp = state.get("pending_category_pick")
     if not pp:
         return False
@@ -890,8 +895,19 @@ def _maybe_auto_resolve_pick(state: dict) -> bool:
         # produce a question without a category filter.
         state["pending_category_pick"] = None
         return True
-    state["next_category_id"] = int(offer[0]["id"])
+    category_id = int(offer[0]["id"])
+    state["next_category_id"] = category_id
     state["pending_category_pick"] = None
+    if _socketio is not None and session_code is not None:
+        _socketio.emit(
+            "category_picked",
+            {
+                "session_code": session_code,
+                "picker_puck_id": pp.get("picker_puck_id"),
+                "category_id": category_id,
+            },
+            room=session_code,
+        )
     return True
 
 
@@ -1236,7 +1252,7 @@ def sp_load_question(session_code: str):
             # Auto-resolve if the picker missed the deadline. Then fall
             # through to the question advance using the defaulted
             # next_category_id.
-            if _maybe_auto_resolve_pick(state):
+            if _maybe_auto_resolve_pick(state, session_code):
                 pp = None
             else:
                 # Still pending — re-emit so reconnecting clients can
