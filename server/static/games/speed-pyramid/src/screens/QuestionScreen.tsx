@@ -609,15 +609,24 @@ export default function QuestionScreen() {
         </motion.div>
 
         <div className="grid flex-1 grid-cols-1 gap-4 md:grid-cols-2">
-          {(['A', 'B', 'C', 'D'] as const).map((letter, i) => (
-            <AnswerPill
-              key={letter}
-              letter={letter}
-              text={question.answers[letter]}
-              state={pillState(letter)}
-              index={i}
-            />
-          ))}
+          {(['A', 'B', 'C', 'D'] as const).map((letter, i) => {
+            // Live "who's aiming here" — every lane currently previewing
+            // (but not yet locked on) this letter contributes a colored
+            // dot in the pill. Lets the bar see the room thinking.
+            const previewBy = laneList
+              .filter((l) => l.preview === letter && l.locked === null)
+              .map((l) => ({ puck_id: l.puck_id, color: l.color }))
+            return (
+              <AnswerPill
+                key={letter}
+                letter={letter}
+                text={question.answers[letter]}
+                state={pillState(letter)}
+                index={i}
+                previewBy={previewBy}
+              />
+            )
+          })}
         </div>
 
         <AnimatePresence>
