@@ -19,10 +19,13 @@
 
 set -e
 
-URL="${1:-http://localhost:5002/tv/speed-pyramid/}"
-# If the arg is a path (starts with /), join it to the default host.
+BASE="http://localhost:5002/tv/speed-pyramid"
+URL="${1:-$BASE/}"
+# If the arg is a path (starts with /), join it onto the speed-pyramid
+# base — NOT the bare host (the app is mounted at /tv/speed-pyramid/).
+# E.g. "/dev/hub" -> http://localhost:5002/tv/speed-pyramid/dev/hub.
 if [[ "$URL" == /* ]]; then
-  URL="http://localhost:5002${URL}"
+  URL="${BASE}${URL}"
 fi
 
 PROFILE_DIR="${TMPDIR:-/tmp}/sp-tv-profile"
@@ -34,18 +37,25 @@ echo "  profile: $PROFILE_DIR"
 
 case "$(uname -s)" in
   Darwin)
+    # --app= makes the window have NO tabs / NO address bar — looks like a
+    # dedicated app window, impossible to confuse with regular Chrome
+    # browsing. (Previously the launcher opened a normal Chrome window in
+    # a separate profile, which looked identical to regular Chrome and
+    # was easy to mix up — leading to "no audio" reports when the user
+    # was actually testing in their regular Chrome with autoplay blocked.)
     open -na "Google Chrome" --args \
       --autoplay-policy=no-user-gesture-required \
       --user-data-dir="$PROFILE_DIR" \
-      --new-window \
-      "$URL"
+      --window-size=1600,1000 \
+      --window-position=80,80 \
+      --app="$URL"
     ;;
   Linux)
     google-chrome \
       --autoplay-policy=no-user-gesture-required \
       --user-data-dir="$PROFILE_DIR" \
-      --new-window \
-      "$URL" &
+      --window-size=1600,1000 \
+      --app="$URL" &
     disown
     ;;
   *)
