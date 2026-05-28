@@ -702,7 +702,11 @@ def _apply_power_up_arms(state: dict, session_code: str, qid: int, answers: dict
         arms = arms_table.get(pid)
         if not arms:
             continue
-        if arms.get("reveal"):
+        # A puck that never answered (TIMEOUT fill: answer is None) must
+        # NOT be rewarded a correct LEGENDARY result by an armed REVEAL —
+        # REVEAL auto-corrects an attempted answer, not a no-show. (R031)
+        timed_out = ans.get("answer") is None or ans.get("tier") == "TIMEOUT"
+        if arms.get("reveal") and not timed_out:
             # Auto-correct: LEGENDARY tier (0-3s correct = 1000pt).
             ans["is_correct"] = True
             ans["points"] = 1000

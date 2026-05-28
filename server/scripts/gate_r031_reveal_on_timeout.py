@@ -118,6 +118,20 @@ def _correct_letter(sc: str, qid: int) -> str:
     return "A"
 
 
+def _resolve_pick_phase(sc: str, lq: dict) -> dict:
+    """Given a load-question payload that returned a category_pick phase,
+    pick the first offered category (so load-question can advance to the
+    real question) and return the subsequent load-question payload. The
+    build opens pick rounds (1/3/5/7) with this phase BEFORE the question.
+    """
+    offer = lq.get("offer") or []
+    picker = lq.get("picker_puck_id")
+    if offer and picker is not None:
+        _post(f"/api/sp/select-category/{sc}",
+              {"puck_id": picker, "category_id": offer[0]["id"]})
+    return _load_question(sc)
+
+
 def _resolve_question_round(sc: str, lq: dict) -> int | None:
     """Given a load-question payload that returned a real question, have
     BOTH pucks answer it (reveal fires automatically). Returns the qid."""
@@ -172,6 +186,7 @@ class RevealCatcher:
         self.client = _sio.Client(reconnection=False, logger=False,
                                    engineio_logger=False)
         self.payloads: list[dict] = []
+        self.join_cum_before = 0  # JOIN cumulative snapshot pre round-3 reveal
         self._lock = threading.Lock()
 
         @self.client.on("reveal")
@@ -220,8 +235,11 @@ def _attempt() -> tuple[str, object, object, object]:
     if not catcher.connect(sc):
         return ("setup", "could not join session room for reveal capture", None, None)
 
-    # --- Round 1: a plain question round. ---
+    # --- Round 1: a pick round (1/3/5/7). The build opens it with a
+    # category_pick phase; resolve the pick to reach the real question. ---
     lq1 = _load_question(sc)
+    if lq1.get("phase") == "category_pick":
+        lq1 = _resolve_pick_phase(sc, lq1)
     if lq1.get("phase") or not lq1.get("question"):
         catcher.close()
         return ("setup", f"round1 not a question: {lq1.get('phase') or lq1}", None, None)
@@ -286,6 +304,12 @@ def _attempt() -> tuple[str, object, object, object]:
     # --- Critical setup: HOST answers, JOIN (holding armed REVEAL) does
     # NOT answer. Then force the reveal so JOIN is filled as TIMEOUT and
     # the REVEAL arm is applied on top of it. ---
+    # Snapshot JOIN's cumulative BEFORE the round-3 reveal so the
+    # corroborating check measures the DELTA the misapplied REVEAL would
+    # add (~1000), not the legitimate points JOIN earned in rounds 1-2.
+    ms_pre = _get(f"/api/sp/match-state/{sc}")
+    cum_pre = (ms_pre.get("cumulative_scores") or {})
+    catcher.join_cum_before = cum_pre.get(str(JOIN_PUCK), cum_pre.get(JOIN_PUCK, 0))
     _answer(sc, HOST_PUCK, qid3, _correct_letter(sc, qid3))
     fr = _post(f"/api/sp/force-reveal/{sc}", {})
     if fr.status_code != 200:
@@ -361,8 +385,10 @@ def run() -> int:
             f"is_correct={is_correct} points={points} tier={tier} "
             f"(bug => True/1000/LEGENDARY)")
 
-        # Corroborate via cumulative_scores: a silent puck must not gain
-        # ~1000 from a misapplied REVEAL.
+        # Corroborate via cumulative_scores: a silent puck must not GAIN
+        # ~1000 from a misapplied REVEAL. JOIN legitimately earns points
+        # in rounds 1-2 (it answers those), so assert the round-3 reveal
+        # added ~0, not that the absolute total is small.
         ms = _get(f"/api/sp/match-state/{sc}")
         cum = (ms.get("cumulative_scores")
                or (payload and {str(r["puck_id"]): r.get("cumulative_total")
@@ -373,10 +399,13 @@ def run() -> int:
         if join_total is None and join_res is not None:
             join_total = join_res.get("cumulative_total")
         if join_total is not None:
+            before = int(catcher.join_cum_before or 0)
+            delta = int(join_total) - before
             v.check(
                 "timed-out-puck-reveal-did-not-inflate-cumulative",
-                int(join_total) < 1000,
-                f"JOIN cumulative={join_total} (bug inflates by ~1000)")
+                delta < 1000,
+                f"JOIN cumulative {before}->{join_total} (delta={delta}; "
+                f"bug inflates by ~1000)")
         else:
             v.inconclusive("timed-out-puck-reveal-did-not-inflate-cumulative",
                            "could not read JOIN cumulative score")
