@@ -1405,9 +1405,14 @@ def sp_final_results(session_code: str):
     ) or []
 
     def derive_tier(total: int, answered: int) -> str:
-        if answered == 0:
+        # Average over ROUNDS PLAYED, not the count of answered DB rows.
+        # A timed-out round writes no trivia_answers row while a wrong
+        # answer does, so dividing by `answered` makes the tier depend on
+        # HOW non-scoring rounds failed rather than on real performance.
+        rounds_played = SP_TOTAL_ROUNDS
+        if rounds_played == 0:
             return "NONE"
-        avg = total / answered
+        avg = total / rounds_played
         if avg >= 700:
             return "LEGENDARY"
         if avg >= 400:
