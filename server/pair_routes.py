@@ -528,6 +528,27 @@ _SP_STATE: dict[str, dict] = {}
 SP_TOTAL_ROUNDS = 7
 
 
+def _session_is_backed(session_code: str) -> bool:
+    """R037: a session_code is legitimate only if it was started via
+    /api/pair/start — i.e. it has a trivia_sessions DB row, or it matches
+    the active lobby's session_code, or it already has live in-memory
+    _SP_STATE (created by a prior legitimate access). Used to reject
+    load-question for arbitrary never-paired codes so they can't leak
+    orphan state into _SP_STATE."""
+    if session_code in _SP_STATE:
+        return True
+    _purge_lobby_if_expired()
+    if _LOBBY is not None and _LOBBY.get("session_code") == session_code:
+        return True
+    ph = get_placeholder()
+    row = execute_query(
+        f"SELECT id FROM trivia_sessions WHERE session_code = {ph}",
+        (session_code,),
+        fetch_one=True,
+    )
+    return bool(row)
+
+
 def _load_expected_pucks_for_session(session_code: str) -> set[int]:
     """Read trivia_session_players to learn which pucks are in this match.
     Cache result in _SP_STATE['expected_pucks']."""
@@ -1095,6 +1116,13 @@ def _has_narration(question_id: int) -> bool:
 
 @sp_bp.route("/load-question/<session_code>", methods=["POST"])
 def sp_load_question(session_code: str):
+    # R037: never auto-create _SP_STATE for an arbitrary, never-paired
+    # code. Without this guard any client can POST load-question/<anything>
+    # and leak an orphan category_pick offer into in-memory state. Only
+    # codes backed by a started session (DB row / active lobby / existing
+    # live state) may advance.
+    if not _session_is_backed(session_code):
+        return jsonify({"error": "unknown_session"}), 404
     state = _sp_state_for(session_code)
 
     # R026: the match completes only once the FINAL round's question has
