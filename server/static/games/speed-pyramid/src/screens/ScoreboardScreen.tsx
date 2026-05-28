@@ -59,6 +59,19 @@ export default function ScoreboardScreen() {
     }
   }, [sessionCode, navigate])
 
+  // UX-10: a bar kiosk must not park on a finished match forever. If no
+  // puck Play-Again (match_reset) or Reset (lobby_cancelled) arrives, the
+  // listeners above never fire. Self-navigate back to the title after 30s
+  // of inactivity so the attract loop resumes. Cleared on unmount (which
+  // also covers the case where match_reset / lobby_cancelled navigated away
+  // first, since that re-renders this screen out).
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      navigate('/', { replace: true })
+    }, 30000)
+    return () => window.clearTimeout(timer)
+  }, [navigate])
+
   return (
     <main className="relative flex h-full w-full flex-col items-center justify-center gap-12 overflow-hidden px-12 py-12">
       <AmbientBackground glowA="rgba(251,191,36,0.22)" glowB="rgba(16,185,129,0.16)" />

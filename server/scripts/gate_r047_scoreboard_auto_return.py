@@ -27,9 +27,23 @@ from __future__ import annotations
 import sys
 import time
 
+from urllib.parse import urlparse
+
 from verify_lib import (
     TV, log, session, pair_and_start, drive_match_to_scoreboard, Verifier,
 )
+
+# The SPA is served under a router basename, so the title screen's
+# location.pathname is the base path (e.g. "/tv/speed-pyramid"), not a bare
+# "/". navigate('/') resolves against the basename. Treat either the bare
+# root or the base path (with optional trailing slash) as "back at title",
+# while still rejecting deeper routes like /question or /scoreboard.
+TITLE_BASE = urlparse(TV).path.rstrip("/")  # e.g. "/tv/speed-pyramid"
+
+
+def _is_title(path: str) -> bool:
+    p = path.rstrip("/")
+    return p == "" or p == TITLE_BASE
 
 # The fix uses a 30000ms timer. Give it generous grace for the
 # navigation + count-up animation overhead before declaring failure.
@@ -77,9 +91,10 @@ def run() -> int:
         last = start_route
         while time.time() < deadline:
             last = tv.evaluate("() => location.pathname")
-            # Title screen route is exactly "/". Guard against the SPA
-            # base path so a stray "/question" etc. doesn't false-pass.
-            if last == "/" or last.rstrip("/") == "":
+            # Title screen route is the SPA base path (basename-aware).
+            # Guard against deeper routes so a stray "/question" etc.
+            # doesn't false-pass.
+            if _is_title(last):
                 returned = True
                 break
             time.sleep(POLL_S)
@@ -92,10 +107,7 @@ def run() -> int:
                 tv.wait_for_load_state("domcontentloaded", timeout=4000)
             except Exception:
                 pass
-            title_visible = tv.evaluate(
-                "() => location.pathname === '/' || "
-                "location.pathname.replace(/\\/$/, '') === ''"
-            )
+            title_visible = _is_title(tv.evaluate("() => location.pathname"))
 
         v.check(
             "scoreboard-auto-returns-to-title",
