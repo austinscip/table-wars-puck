@@ -205,13 +205,22 @@ export default function QuestionScreen() {
         )
         forceRevealTimerRef.current = window.setTimeout(() => {
           forceRevealTimerRef.current = null
+          // R036 fix: schedule the advance whether force-reveal
+          // succeeds OR fails. The server returns HTTP 400 (postJson
+          // throws) when current_question_id is None — exactly the
+          // stranded-round case a peer Play-Again/reset/restart causes,
+          // which is precisely when the fallback must rescue the TV. The
+          // old empty .catch swallowed that 400 and left the TV parked on
+          // the revealed question forever. Use .finally so the advance is
+          // armed in both branches.
           api.sp.forceReveal(sc)
-            .then(() => {
+            .catch(() => {})
+            .finally(() => {
               // Belt-and-suspenders: schedule the advance ourselves
-              // even if the socket `reveal` event is missed.
+              // even if the socket `reveal` event is missed or the
+              // force-reveal call failed (e.g. no current question).
               scheduleAdvanceToNextQuestion()
             })
-            .catch(() => {})
         }, remainingMs)
       }
 
