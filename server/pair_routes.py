@@ -1440,6 +1440,28 @@ def sp_final_results(session_code: str):
 
 @sp_bp.route("/reset/<session_code>", methods=["POST"])
 def sp_reset(session_code: str):
+    # Play-Again reuses the SAME trivia_sessions row, so the prior match's
+    # trivia_answers rows must be cleared. final-results aggregates
+    # trivia_answers filtered only by session_id; leaving the old rows in
+    # place SUMs match-1 + match-2 (answered can exceed total_rounds, totals
+    # inflated, tiers wrong). Drop them — and zero the cached per-player
+    # score — so the replay starts from a clean slate.
+    ph = get_placeholder()
+    session = execute_query(
+        f"SELECT id FROM trivia_sessions WHERE session_code = {ph}",
+        (session_code,),
+        fetch_one=True,
+    )
+    if session:
+        sid = session["id"]
+        execute_query(
+            f"DELETE FROM trivia_answers WHERE session_id = {ph}", (sid,)
+        )
+        execute_query(
+            f"UPDATE trivia_session_players SET total_score = 0 "
+            f"WHERE session_id = {ph}",
+            (sid,),
+        )
     _SP_STATE[session_code] = {
         "round": 0,
         "asked_ids": set(),
