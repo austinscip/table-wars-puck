@@ -16,3 +16,4 @@ python-dotenv==1.0.0  # Environment variable management
 gunicorn==21.2.0  # Production WSGI server
 gevent==24.2.1  # Async worker for Flask-SocketIO
 gevent-websocket==0.10.1  # WebSocket support for gevent
+zeroconf>=0.140.0

@@ -347,8 +347,7 @@ def bar_tv_dashboard(bar_slug):
     if not bar:
         return f"Bar '{bar_slug}' not found", 404
 
-    # TODO: Create bar_tv_dashboard.html template
-    return render_template('leaderboard.html')  # Use existing for now
+    return render_template('bar_tv_dashboard.html', bar=bar)
 
 @app.route('/api/leaderboard/<bar_slug>')
 def api_bar_leaderboard(bar_slug):
@@ -498,6 +497,56 @@ def api_generate_qr(bar_slug, table_num):
         'table': table_num
     })
 
+@app.route('/api/admin/bars/<bar_slug>/pucks', methods=['POST'])
+def api_register_puck_to_bar(bar_slug):
+    """Slice J — bar deployment. Register a puck to a venue + table so
+    the puck shows up under that bar's leaderboard / dashboard. Used
+    once per puck on initial install. Idempotent: re-posting updates
+    the table assignment.
+
+    Body: {puck_id: int, table_number: int, name?: str}
+    """
+    ph = get_placeholder()
+    data = request.get_json(silent=True) or {}
+    try:
+        puck_id = int(data.get('puck_id'))
+        table_number = int(data.get('table_number'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'puck_id and table_number required'}), 400
+
+    bar = execute_query(f'SELECT id, name, total_tables FROM bars WHERE slug = {ph}',
+                        (bar_slug,), fetch_one=True)
+    if not bar:
+        return jsonify({'error': f"bar '{bar_slug}' not found"}), 404
+    if table_number < 1 or table_number > bar['total_tables']:
+        return jsonify({
+            'error': f"table_number {table_number} out of range "
+                     f"(bar has {bar['total_tables']} tables)"
+        }), 400
+
+    name = data.get('name') or f"Puck_{puck_id}"
+    # register_puck upserts.
+    register_puck(puck_id, name, table_number)
+    # Pin bar_id on the puck row if the schema has the column.
+    try:
+        execute_query(
+            f'UPDATE pucks SET bar_id = {ph} WHERE id = {ph}',
+            (bar['id'], puck_id),
+        )
+    except Exception as e:
+        # Older schemas may not have bar_id on pucks; fail soft so the
+        # endpoint still answers without a 500.
+        print(f"[register_puck_to_bar] bar_id update skipped: {e}")
+
+    return jsonify({
+        'ok': True,
+        'puck_id': puck_id,
+        'bar_slug': bar_slug,
+        'bar_name': bar['name'],
+        'table_number': table_number,
+    })
+
+
 @app.route('/admin/qr-codes/<bar_slug>')
 def admin_qr_codes(bar_slug):
     """Admin page to generate all QR codes for a bar"""
@@ -507,45 +556,7 @@ def admin_qr_codes(bar_slug):
     if not bar:
         return f"Bar '{bar_slug}' not found", 404
 
-    # TODO: Create admin QR code template
-    return f"""
-    <html>
-    <head><title>QR Codes - {bar['name']}</title></head>
-    <body style="font-family: sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px;">
-        <h1>QR Codes for {bar['name']}</h1>
-        <p>Generate QR codes for each table</p>
-        <div id="qr-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
-        </div>
-        <script>
-            const totalTables = {bar['total_tables']};
-            const barSlug = '{bar_slug}';
-            const qrGrid = document.getElementById('qr-grid');
-
-            for (let i = 1; i <= totalTables; i++) {{
-                fetch(`/api/qr/${{barSlug}}/${{i}}`)
-                    .then(r => r.json())
-                    .then(data => {{
-                        const div = document.createElement('div');
-                        div.style.border = '2px solid #333';
-                        div.style.padding = '20px';
-                        div.style.textAlign = 'center';
-                        div.innerHTML = `
-                            <h3>Table ${{i}}</h3>
-                            <img src="${{data.qr_code}}" style="width: 200px; height: 200px;">
-                            <p style="font-size: 12px; word-break: break-all;">${{data.url}}</p>
-                            <button onclick="printTable(${{i}})">Print</button>
-                        `;
-                        qrGrid.appendChild(div);
-                    }});
-            }}
-
-            function printTable(tableNum) {{
-                window.print();
-            }}
-        </script>
-    </body>
-    </html>
-    """
+    return render_template('admin_qr_codes.html', bar=bar)
 
 # ============================================================================
 # CROSS-BAR COMPETITION ROUTES
@@ -825,5 +836,22 @@ if __name__ == '__main__':
     host = os.environ.get('HOST', '0.0.0.0')
     port = int(os.environ.get('PORT', 5001))
     debug = os.environ.get('DEBUG', 'True').lower() == 'true'
+
+    # Slice J — bar deployment. Advertise via mDNS so pucks find the
+    # server as `tablewars-server.local` (or `<instance>.local` if
+    # SP_MDNS_INSTANCE is set per venue) without a firmware rebuild.
+    # Sandbox + prod can coexist on the same LAN if they use different
+    # instances (e.g. SP_MDNS_INSTANCE=tablewars-sandbox).
+    # Set SP_MDNS_DISABLE=1 to skip — useful on locked-down networks
+    # or under Flask debug reloader (the child process duplicates the
+    # registration; either disable or accept the unregister-replace).
+    if os.environ.get("SP_MDNS_DISABLE") != "1":
+        try:
+            from mdns_advertise import advertise_mdns
+            instance = os.environ.get("SP_MDNS_INSTANCE",
+                                      "tablewars-server")
+            advertise_mdns(port=port, instance=instance)
+        except Exception as e:  # noqa: BLE001
+            print(f"[app] mDNS advertise failed: {e}")
 
     socketio.run(app, host=host, port=port, debug=debug, allow_unsafe_werkzeug=True)

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ bar.name }} — Table Wars</title>
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      background: #0A0E1A;
+      color: #F8FAFC;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    h1 {
+      font-size: clamp(2rem, 4vw, 3rem);
+      text-align: center;
+      margin-bottom: 4px;
+      color: #FBBF24;
+    }
+    .sub {
+      text-align: center;
+      color: #94A3B8;
+      margin-bottom: 24px;
+      font-size: 0.95rem;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 24px;
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+    .panel {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 20px;
+    }
+    .panel h2 {
+      font-size: 1.1rem;
+      color: #10B981;
+      margin-bottom: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 10px 8px; }
+    th { color: #94A3B8; font-size: 0.85rem; font-weight: 600; }
+    tbody tr { border-top: 1px solid rgba(255,255,255,0.05); }
+    tbody tr:hover { background: rgba(255,255,255,0.03); }
+    .rank { font-weight: bold; color: #FBBF24; width: 2.5rem; }
+    .score { font-family: monospace; color: #10B981; }
+    .tables-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px;
+    }
+    .table-card {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 14px;
+      text-align: center;
+    }
+    .table-card .num { font-size: 1.6rem; font-weight: bold; }
+    .table-card .status {
+      font-size: 0.75rem;
+      color: #94A3B8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-top: 4px;
+    }
+    .table-card.active { border-color: #10B981; box-shadow: 0 0 20px rgba(16,185,129,0.4); }
+    .table-card.active .status { color: #10B981; }
+    .empty { color: #64748B; font-style: italic; padding: 12px 0; }
+    .footer {
+      text-align: center;
+      color: #64748B;
+      margin-top: 32px;
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>{{ bar.name }}</h1>
+  <p class="sub">Table Wars · {{ bar.total_tables }} tables</p>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>Leaderboard</h2>
+      <table>
+        <thead>
+          <tr><th class="rank">#</th><th>Player</th><th>Score</th><th>Games</th></tr>
+        </thead>
+        <tbody id="leaderboard-body">
+          <tr><td colspan="4" class="empty">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>Tables</h2>
+      <div class="tables-grid" id="tables-grid">
+        {% for n in range(1, bar.total_tables + 1) %}
+        <div class="table-card" data-table="{{ n }}">
+          <div class="num">{{ n }}</div>
+          <div class="status">Idle</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <p class="footer">Table Wars · Updated live</p>
+
+  <script>
+    const BAR_SLUG = "{{ bar.slug }}";
+    const socket = io();
+    socket.on('connect', () => {
+      // Bar dashboards subscribe to a venue-scoped room so per-bar
+      // events stay scoped.
+      socket.emit('join_bar_room', { bar_slug: BAR_SLUG });
+    });
+    socket.on('game_started', (data) => markTable(data.table, 'Playing'));
+    socket.on('game_ended', (data) => markTable(data.table, 'Idle'));
+
+    function markTable(tableNum, status) {
+      const card = document.querySelector(`[data-table="${tableNum}"]`);
+      if (!card) return;
+      card.querySelector('.status').textContent = status;
+      card.classList.toggle('active', status === 'Playing');
+    }
+
+    async function loadLeaderboard() {
+      try {
+        const r = await fetch(`/api/leaderboard/${BAR_SLUG}?limit=10`);
+        const rows = await r.json();
+        const body = document.getElementById('leaderboard-body');
+        if (!rows.length) {
+          body.innerHTML = '<tr><td colspan="4" class="empty">No scores yet</td></tr>';
+          return;
+        }
+        body.innerHTML = rows.map((row, i) => `
+          <tr>
+            <td class="rank">${i + 1}</td>
+            <td>${row.player_name || 'Anonymous'}</td>
+            <td class="score">${row.total_score}</td>
+            <td>${row.games_played || 0}</td>
+          </tr>
+        `).join('');
+      } catch (e) {
+        document.getElementById('leaderboard-body').innerHTML =
+          `<tr><td colspan="4" class="empty">Error loading: ${e.message}</td></tr>`;
+      }
+    }
+    loadLeaderboard();
+    setInterval(loadLeaderboard, 30000);
+  </script>
+</body>
+</html>
