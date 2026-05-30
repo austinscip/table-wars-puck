@@ -420,7 +420,9 @@ export function usePuckState(puck_id: number) {
       ) {
         const sc = cur.session_code
         // First check match end.
-        const ms = await GET<MatchStateResp>(`/api/sp/match-state/${sc}`)
+        const ms = await GET<MatchStateResp>(
+          `/api/sp/match-state/${sc}?puck_id=${puck_id}`,
+        )
         if (!cancelled && ms?.complete) {
           setState({ kind: 'MATCH_ENDED', session_code: sc })
           // Fall through so polling keeps ticking. After "Play again"
@@ -560,7 +562,9 @@ export function usePuckState(puck_id: number) {
         //   - exists=true && complete=true -> still on the final
         //                      scoreboard; sit tight.
         const sc = cur.session_code
-        const ms = await GET<MatchStateResp>(`/api/sp/match-state/${sc}`)
+        const ms = await GET<MatchStateResp>(
+          `/api/sp/match-state/${sc}?puck_id=${puck_id}`,
+        )
         if (cancelled) return
         if (ms && ms.exists === false) {
           setState({ kind: 'IDLE' })

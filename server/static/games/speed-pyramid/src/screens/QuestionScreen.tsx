@@ -577,6 +577,28 @@ export default function QuestionScreen() {
 
   return (
     <main className="relative flex h-full w-full flex-row gap-8 px-8 py-8">
+      {/* Slice G — ROUND N intro card. Fires once per round during
+          host narration (phase='awaiting_question'), fades out before
+          answering begins. AnimatePresence keyed on round so the
+          spring re-fires per round. Non-blocking — pointer-events
+          off + absolute layered above content. */}
+      <AnimatePresence>
+        {phase === 'awaiting_question' && round > 0 ? (
+          <motion.div
+            key={`round-intro-${round}`}
+            initial={{ scale: 0.4, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 1.5, opacity: 0 }}
+            transition={{ duration: 0.6, ease: [0.34, 1.56, 0.64, 1] }}
+            className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center"
+          >
+            <span className="font-display text-[clamp(6rem,18vw,18rem)] leading-none tracking-tight text-primary drop-shadow-[0_0_60px_rgba(96,165,250,0.5)]">
+              ROUND {round}
+            </span>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
       {/* Main column */}
       <section className="flex flex-1 flex-col gap-6">
         <header className="flex items-center justify-between">
@@ -659,26 +681,31 @@ export default function QuestionScreen() {
           ) : null}
         </AnimatePresence>
 
-        {/* Host commentary on reveal. Show the correct-tier line if any
-            puck got it right, the wrong-tier line if any puck got it
-            wrong. Both render when answers were mixed. */}
+        {/* Slice G — commentary overlay card. Replaces the previous
+            italic-span block: semi-transparent panel, slides up on
+            reveal, holds the eye on the host's line. Same data-testid
+            anchors so e2e/audit gates keep working. */}
         <AnimatePresence>
           {phase === 'reveal' && reveal ? (
             <motion.div
-              initial={{ y: 16, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ duration: 0.35, delay: 0.45 }}
-              className="flex flex-col gap-2 font-body text-lg italic text-text/85"
+              initial={{ y: 24, opacity: 0, scale: 0.96 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: -12, opacity: 0 }}
+              transition={{
+                duration: 0.45, delay: 0.45,
+                ease: [0.34, 1.56, 0.64, 1],
+              }}
+              className="mt-4 flex w-full max-w-3xl flex-col gap-3 self-center rounded-2xl border border-text/10 bg-text/5 px-8 py-5 font-body text-2xl shadow-2xl backdrop-blur"
             >
               {reveal.commentary_correct &&
               reveal.results.some((r) => r.is_correct) ? (
-                <span data-testid="commentary-correct" className="text-correct">
+                <span data-testid="commentary-correct" className="font-display text-correct">
                   {reveal.commentary_correct}
                 </span>
               ) : null}
               {reveal.commentary_wrong &&
               reveal.results.some((r) => !r.is_correct) ? (
-                <span data-testid="commentary-wrong" className="text-wrong">
+                <span data-testid="commentary-wrong" className="font-display text-wrong">
                   {reveal.commentary_wrong}
                 </span>
               ) : null}
