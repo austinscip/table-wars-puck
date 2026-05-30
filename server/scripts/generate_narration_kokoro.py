@@ -50,18 +50,23 @@ DEFAULT_SPEED = 1.0           # natural pace; bump to 1.1 for snappier host
 def question_script(setup: str | None, q: str | None,
                     a: str | None, b: str | None,
                     c: str | None, d: str | None) -> str:
-    """Build the host's spoken script for a question. Same labelled-choice
-    format as Piper to preserve the prosody that makes letters read
-    correctly ("A: text." not "A . text"). Kokoro pronounces letters
-    cleanly anyway, but consistent formatting helps the host cadence."""
-    parts = []
-    if setup and setup.strip(): parts.append(setup.strip())
-    if q and q.strip(): parts.append(q.strip())
-    if a and a.strip(): parts.append(f"A: {a.strip()}.")
-    if b and b.strip(): parts.append(f"B: {b.strip()}.")
-    if c and c.strip(): parts.append(f"C: {c.strip()}.")
-    if d and d.strip(): parts.append(f"Or D: {d.strip()}.")
-    return "  ".join(parts)
+    """Build the host's spoken script for a question. Letters get an
+    ellipsis gap before the answer ("A ...  text.") and a longer ellipsis
+    pause BETWEEN options, so the host doesn't rush from one answer into
+    the next letter (e.g. "...predecessors. C ..."). Tuned by ear against
+    Kokoro (am_michael) on 2026-05-28; ellipses map to espeak prosodic
+    breaks. Setup + question keep the normal 2-space sentence join."""
+    head = []
+    if setup and setup.strip(): head.append(setup.strip())
+    if q and q.strip(): head.append(q.strip())
+    opts = []
+    if a and a.strip(): opts.append(f"A ...  {a.strip()}.")
+    if b and b.strip(): opts.append(f"B ...  {b.strip()}.")
+    if c and c.strip(): opts.append(f"C ...  {c.strip()}.")
+    if d and d.strip(): opts.append(f"Or D ...  {d.strip()}.")
+    body = "  ...  ...  ".join(opts)
+    head_str = "  ".join(head)
+    return f"{head_str}  {body}".strip() if body else head_str
 
 
 def synth_to_mp3(kokoro: Kokoro, voice: str, speed: float,
@@ -75,6 +80,10 @@ def synth_to_mp3(kokoro: Kokoro, voice: str, speed: float,
             [
                 "ffmpeg", "-y", "-loglevel", "error",
                 "-i", str(wav),
+                # Loudness-normalize for a noisy bar: Kokoro renders ~9 dB
+                # quieter than the old Piper output. -16 LUFS integrated is
+                # the broadcast-safe target that still cuts through bar noise.
+                "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
                 "-codec:a", "libmp3lame",
                 "-b:a", "64k",
                 "-ar", "22050",

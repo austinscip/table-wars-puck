@@ -65,3 +65,7 @@ server/voices/piper/*.onnx
 server/voices/kokoro/kokoro-v1.0.onnx
 server/voices/kokoro/voices-v1.0.bin
 server/voices/kokoro/samples/
+
+# Piper-era narration backup (~118MB) — superseded by am_michael Kokoro
+# MP3s on disk. Kept locally for A/B reference; never commit.
+server/static/games/speed-pyramid/audio/questions/.piper_backup/
