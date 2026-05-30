@@ -105,6 +105,10 @@ export default function QuestionScreen() {
   // otherwise a delayed play() can fire AFTER the screen navigated away
   // and the host voice bleeds into the next screen.
   const narrationTimersRef = useRef<number[]>([])
+  // Slice G — ROUND N intro. Show for fixed ~1.6s then unmount, never
+  // depend on phase changing to hide it (the phase 'awaiting_question'
+  // could stick if narration audio errors before handoff fires).
+  const [showRoundIntro, setShowRoundIntro] = useState(false)
 
   useEffect(() => {
     if (!sessionCode) return
@@ -174,6 +178,12 @@ export default function QuestionScreen() {
         return args.question
       })
       setRound(args.round)
+      // Show ROUND N intro for ~1.6s on every new question. Time-bounded
+      // hide guarantees it never persists over answer choices even if
+      // the narration handoff stalls.
+      setShowRoundIntro(true)
+      const introId = window.setTimeout(() => setShowRoundIntro(false), 1600)
+      narrationTimersRef.current.push(introId)
       setTotalRounds(args.total_rounds)
       setReveal(null)
       lastTickRef.current = -1
@@ -583,7 +593,7 @@ export default function QuestionScreen() {
           spring re-fires per round. Non-blocking — pointer-events
           off + absolute layered above content. */}
       <AnimatePresence>
-        {phase === 'awaiting_question' && round > 0 ? (
+        {showRoundIntro && round > 0 ? (
           <motion.div
             key={`round-intro-${round}`}
             initial={{ scale: 0.4, opacity: 0 }}
@@ -599,12 +609,34 @@ export default function QuestionScreen() {
         ) : null}
       </AnimatePresence>
 
+      {/* Slice G — animated gradient backdrop that shifts per round.
+          Pure CSS conic-gradient + Framer Motion opacity; no
+          third-party assets. */}
+      <motion.div
+        key={`bg-${round}`}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 0.35 }}
+        transition={{ duration: 1.2 }}
+        className="pointer-events-none absolute inset-0 -z-10"
+        style={{
+          background: `radial-gradient(circle at 20% 0%, rgba(96,165,250,0.20), transparent 60%),
+                       radial-gradient(circle at 80% 100%, rgba(251,191,36,0.18), transparent 55%),
+                       radial-gradient(circle at 50% 50%, rgba(168,85,247,0.10), transparent 70%)`,
+        }}
+      />
+
       {/* Main column */}
       <section className="flex flex-1 flex-col gap-6">
         <header className="flex items-center justify-between">
-          <span className="font-display text-3xl tracking-wide text-text/70">
+          <motion.span
+            key={question.category}
+            initial={{ x: -12, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ duration: 0.4, ease: [0.34, 1.56, 0.64, 1] }}
+            className="font-display text-[clamp(1.5rem,3vw,3rem)] tracking-wide text-text/90"
+          >
             {question.category}
-          </span>
+          </motion.span>
           <div className="flex items-center gap-3">
             {Array.from({ length: totalRounds }).map((_, i) => {
               const done = i + 1 < round
