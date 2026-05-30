@@ -71,6 +71,29 @@ def _read_expected(sc: str) -> set | None:
 
 def run() -> int:
     v = Verifier()
+    # Probe live Flask for its GHOST_TIMEOUT_S. If the running server
+    # was booted with the production default (30s), this gate would
+    # take 30+ s and likely fail on natural pair-flow timing.
+    # Return INCONCLUSIVE (treated as failure) with a clear "restart
+    # Flask with SP_GHOST_TIMEOUT_S=3 to run this gate" note instead
+    # of silently passing/failing for the wrong reason.
+    try:
+        r = requests.get(f"{SP}/_debug/ghost-timeout", timeout=4).json()
+        server_timeout = float(r.get("ghost_timeout_s", 30))
+    except Exception as e:  # noqa: BLE001
+        server_timeout = 30.0
+        log(f"could not probe server timeout: {e}")
+    log(f"server GHOST_TIMEOUT_S={server_timeout:.1f}s "
+        f"(gate needs <=5s)")
+    if server_timeout > 5.0:
+        v.inconclusive(
+            "ghost-puck-removed-from-expected_pucks",
+            f"Flask running with GHOST_TIMEOUT_S={server_timeout:.1f}s "
+            f"(production default). Restart Flask with "
+            f"SP_GHOST_TIMEOUT_S=3 to exercise this gate.",
+        )
+        return v.report()
+
     with session() as (hub, tv):
         sc = pair_and_start(hub, tv, goto_question=True)
         if not sc:
@@ -85,6 +108,14 @@ def run() -> int:
         for pid in (1, 2):
             requests.post(f"{SP}/heartbeat",
                           json={"puck_id": pid}, timeout=3)
+        # CRITICAL: close the Hub page. After R053, usePuckState's
+        # match-state poll includes ?puck_id=N so EVERY Hub virtual
+        # puck self-heartbeats every 500ms. Leaving the Hub open means
+        # neither puck can ghost. Closing it kills both polling loops.
+        try:
+            hub.close()
+        except Exception:  # noqa: BLE001
+            pass
         time.sleep(state_persistence.DEBOUNCE_MS / 1000.0 + 0.4)
         ep0 = _read_expected(sc)
         log(f"baseline expected_pucks={ep0}")

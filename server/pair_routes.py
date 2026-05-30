@@ -2440,6 +2440,15 @@ def sp_current_question(session_code: str):
     )
 
 
+@sp_bp.route("/_debug/ghost-timeout", methods=["GET"])
+def sp_debug_ghost_timeout():
+    """Slice I — expose the live GHOST_TIMEOUT_S so test gates can
+    detect whether the running Flask was booted with a short timeout
+    (gate-friendly ~3s) or production default (30s) without having to
+    restart Flask. Debug-only, no auth — sandbox/local use."""
+    return jsonify({"ghost_timeout_s": GHOST_TIMEOUT_S})
+
+
 @sp_bp.route("/heartbeat", methods=["POST"])
 def sp_heartbeat():
     """Slice I — explicit puck heartbeat. Firmware can call this on a
