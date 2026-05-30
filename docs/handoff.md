@@ -92,10 +92,39 @@ after a batch, sequentially** (parallel Playwright runs cause CPU
 contention → false greens).
 
 **Still open after the audit:** R041 (needs SFX sample assets + a
-`stopAll`), R012 (scoreboard X/N denominator — not separately gated),
-R013 (Hub LOCKED-vs-TIMEOUT cosmetic, dev-tool only), R021 (commentary
-fires before question card renders — needs a browser-truth gate). Letter
-pronunciation (R011 family) is the Kokoro voice thread, separate.
+`stopAll`). Letter pronunciation (R011 family) is the Kokoro voice
+thread, separate.
+
+## 2026-05-29 — R012 / R013 / R021 closed
+
+Three audit-residual rows closed with proven-fail-on-regression gates:
+
+- **R012** scoreboard `X/N` denominator. Fix was already in place at
+  `ScoreboardScreen.tsx:164` (`{p.correct}/{results.total_rounds}`);
+  `gate_r012_scoreboard_denominator.py` drives a full match via Hub +
+  TV and regex-asserts every `<n>/<d> correct` pattern has `d == 7`.
+  Stub `total_rounds-1` → `('6','6')` → FAIL.
+- **R013** Hub LOCKED-vs-TIMEOUT cosmetic on no-tap. Fix at
+  `usePuckState.ts:547` (`chosen: cur.pending ?? null`);
+  `gate_r013_hub_timeout_cosmetic.py` pairs 2 pucks, lets Q1's 10s
+  deadline pass without taps, force-reveals, asserts every Hub row
+  text shows `TIMEOUT` and never `LOCKED Q<n> →<letter>`. Stub
+  `pending ?? 'A'` → rows `LOCKED Q<n> →A` → FAIL.
+  **Pacing note**: capture state ~1.5s after force-reveal but BEFORE
+  load-question, or pucks fly past LOCKED into next phase
+  (CATEGORY_PICKING / MINIGAME).
+- **R021** narration delayed >=600ms after Audio create. Fix at
+  `QuestionScreen.tsx:306` (`PLAY_DELAY_MS=600`);
+  `gate_r021_narration_delay.py` hooks `new Audio` + `play()` with
+  init scripts, drives a full match, asserts delta >= 400ms (defensive
+  vs 600ms target). Stub `PLAY_DELAY_MS=0` → delta=0ms → FAIL.
+  **Build note**: `npm run build` strips the Hub via tree-shake
+  without `VITE_DEV_TOOLS=1` (`App.tsx:17`) — sandbox rebuilds always
+  need that env var or pair gates time out at `Hold 1s`.
+
+Sweep (`/tmp/sp_green_together.sh`) now has 30 gate scripts; only R041
+remains INCONCLUSIVE (and exits 0 — sweep treats that as GREEN by exit
+code, but the gate body reports `1 inconclusive`).
 
 **Caveat — uncommitted:** the 1,296 Kokoro-regenerated `audio/questions/*.mp3`
 are unstaged on purpose (big binary change tied to the Piper→Kokoro voice
