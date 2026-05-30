@@ -178,6 +178,28 @@ function _play(name: string, fallback: () => void) {
   fallback()
 }
 
+/**
+ * R041 — stop every in-flight SFX. Pauses + resets currentTime on
+ * each cached sample element so they don't bleed into the next route.
+ * Called from App.tsx on every route change. Cheap: O(#samples)
+ * which is ~12 (one per named SFX) regardless of session length.
+ *
+ * Does NOT touch narration (the long-form q_<id>.mp3) — that has its
+ * own lifecycle owned by QuestionScreen / narrationAudioRef. Stopping
+ * narration here would cut off the host mid-question every time the
+ * TV transitions phase, which is wrong.
+ */
+function stopAllSamples(): void {
+  _samples.forEach((el) => {
+    try {
+      el.pause()
+      el.currentTime = 0
+    } catch {
+      /* swallow — element may already be in an unrecoverable state */
+    }
+  })
+}
+
 export const audio = {
   /**
    * MUST be called from a user-gesture handler. Browsers refuse to
@@ -328,5 +350,13 @@ export const audio = {
         { freq: 880, durationMs: 180, peak: 0.06, type: 'sine', delayMs: 100 },
       ])
     })
+  },
+
+  /**
+   * R041 — stop every in-flight SFX. Called from App.tsx route-change
+   * effect. Narration is NOT touched (different ref + owner).
+   */
+  stopAll() {
+    stopAllSamples()
   },
 }

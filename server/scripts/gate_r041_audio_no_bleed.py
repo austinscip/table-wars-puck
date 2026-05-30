@@ -88,12 +88,20 @@ def _route(tv) -> str:
 
 
 def _force_route_change(tv, sc: str, away_from: str) -> str:
-    """Navigate the TV off `away_from`. Returns the new route. Goes to the
-    scoreboard if we're leaving /question, else to the lobby/title — any
-    cross-screen nav exercises the unmount cleanup that the fix must add."""
-    target = f"{TV}/scoreboard/{sc}" if "/question/" in away_from \
-        else f"{TV}/lobby/{sc}"
-    tv.goto(target, wait_until="domcontentloaded")
+    """Navigate the TV off `away_from`. Returns the new route. Goes to
+    the scoreboard if we're leaving /question, else to the lobby/title
+    — any cross-screen nav exercises the unmount cleanup that the fix
+    must add. Uses history.pushState (SPA nav) instead of tv.goto
+    (hard nav) so window.__log + window.__els survive the navigation.
+    Without this, post-nav probes/log reads see an empty window."""
+    target = f"/tv/speed-pyramid/scoreboard/{sc}" \
+        if "/question/" in away_from \
+        else f"/tv/speed-pyramid/lobby/{sc}"
+    tv.evaluate(
+        "(t) => window.history.pushState({}, '', t) || "
+        "window.dispatchEvent(new PopStateEvent('popstate'))",
+        target,
+    )
     time.sleep(0.6)
     return _route(tv)
 
@@ -187,6 +195,10 @@ def run() -> int:
             drive_match_to_scoreboard(hub, tv, deadline_s=90)
         if "/scoreboard/" in _route(tv):
             time.sleep(0.4)  # let matchEnd() fire
+            # Read log BEFORE the hard nav — tv.goto() drops the page
+            # window and wipes window.__log, so reading after wouldn't
+            # see anything that happened earlier in the match.
+            mlog_pre = read_audio_play_log(tv) or []
             tv.goto(f"{TV}/lobby/{sc}", wait_until="domcontentloaded")
             time.sleep(1.0)
             post = probe_audio_elements(tv)
@@ -199,7 +211,10 @@ def run() -> int:
             # We can always evaluate the post-bounce probe; the matchEnd
             # stinger only enters __els if a sample actually played, so this
             # only asserts when the sample layer was live.
-            mlog = read_audio_play_log(tv)
+            # Prefer the pre-nav log (captures everything that happened
+            # during the match); read_audio_play_log post-goto returns
+            # an empty list because the window was just replaced.
+            mlog = mlog_pre
             sample_plays = [
                 ev for ev in mlog
                 if ev.get("a") == "play" and _is_sample(ev.get("src", ""))

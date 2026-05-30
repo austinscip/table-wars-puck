@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react'
-import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import TitleScreen from './screens/TitleScreen'
 import PairScreen from './screens/PairScreen'
 import LobbyScreen from './screens/LobbyScreen'
@@ -91,6 +91,20 @@ function GlobalLobbyResetListener() {
   return null
 }
 
+/**
+ * R041 — kill all in-flight SFX samples on every route change so a
+ * reveal/match-end stinger fired on /question can't bleed into the
+ * next screen (or survive a Reset-all bounce). Narration is owned by
+ * QuestionScreen and intentionally NOT touched here.
+ */
+function SfxRouteGuard() {
+  const location = useLocation()
+  useEffect(() => {
+    audio.stopAll()
+  }, [location.pathname])
+  return null
+}
+
 // Tiny build marker so we can tell from across the room whether a tab
 // has the latest bundle loaded. Hidden by default — the bar TV shouldn't
 // show dev clutter to customers. Visible only with ?debug=1 in the URL,
@@ -129,6 +143,7 @@ export default function App() {
   return (
     <BrowserRouter basename="/tv/speed-pyramid">
       <AudioPrimer />
+      <SfxRouteGuard />
       <GlobalLobbyResetListener />
       <BuildChip />
       <Routes>
