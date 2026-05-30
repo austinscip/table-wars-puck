@@ -63,6 +63,32 @@ socketio = SocketIO(
     engineio_logger=False,
 )
 
+
+# Slice I — robustness: any uncaught exception returns a structured
+# back-off body instead of Flask's default 500 HTML page. Pucks that
+# poll on a tight 500ms cadence (current-question / match-state) would
+# otherwise hammer a wedged server. `retry_in_ms` tells the puck firmware
+# how long to wait before the next poll. Status 503 is more accurate
+# than 500 for "service temporarily unavailable, retry."
+@app.errorhandler(Exception)
+def _robust_exception_handler(e):
+    # Pass through Flask's own HTTPException (404, 405, etc.) — those
+    # carry intentional status codes, not server crashes.
+    from werkzeug.exceptions import HTTPException
+    if isinstance(e, HTTPException):
+        return e
+    # Log to stderr so dev still sees the trace; production should also
+    # have a real logger configured.
+    import traceback, sys
+    print(f"[robust_exception_handler] {type(e).__name__}: {e}",
+          file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
+    return jsonify({
+        "error": "server",
+        "message": "transient server error, retry",
+        "retry_in_ms": 2000,
+    }), 503
+
 # Sprint 1E: Database and route initialization moved to bottom of file (after function definitions)
 
 # ============================================================================

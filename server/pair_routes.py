@@ -27,6 +27,7 @@ Speed Pyramid endpoints (unchanged from v1.1):
 
 import random
 import string
+import os
 import time
 from typing import Optional
 
@@ -193,6 +194,7 @@ def request_code():
             "color": color_hex,
             "color_name": color_name,
             "joined_at": _now(),
+            "last_seen": _now(),  # Slice I — ghost sweep
         }
         joiner_added = True
 
@@ -334,6 +336,7 @@ def confirm_code():
             "color": color_hex,
             "color_name": color_name,
             "joined_at": _now(),
+            "last_seen": _now(),  # Slice I — ghost sweep
         }
 
     snapshot = _lobby_snapshot()
@@ -513,6 +516,59 @@ def cancel_lobby():
 # ============================================================================
 
 _SP_STATE: dict[str, dict] = {}
+
+# Slice I — robustness.
+# Seconds of polling silence after which a puck is considered "ghosted"
+# (Wi-Fi dropped, power cut, firmware crashed). Once ghosted, the puck
+# is dropped from expected_pucks so reveals proceed without it. Tuned
+# generously vs the typical 500ms poll cadence — 30s is "we'd notice
+# they're really gone" without being trigger-happy on transient hiccups.
+GHOST_TIMEOUT_S = float(os.environ.get("SP_GHOST_TIMEOUT_S", "30"))
+
+
+def _bump_last_seen(puck_id: int | None) -> None:
+    """Update last_seen for a puck. Called from polling endpoints and
+    the dedicated /api/sp/heartbeat route. Silent if no lobby or unknown
+    puck so callers don't have to gate on `if _LOBBY:`."""
+    if puck_id is None or _LOBBY is None:
+        return
+    player = _LOBBY["players"].get(int(puck_id))
+    if player is not None:
+        player["last_seen"] = _now()
+
+
+def _sweep_stale_pucks(session_code: str, state: dict) -> set[int]:
+    """Drop pucks from expected_pucks whose last_seen is older than
+    GHOST_TIMEOUT_S. Emits player_left socket per drop. Returns the set
+    of pucks dropped (empty if none)."""
+    if _LOBBY is None:
+        return set()
+    expected = state.get("expected_pucks") or set()
+    if not expected:
+        return set()
+    now = _now()
+    dropped: set[int] = set()
+    players = _LOBBY.get("players") or {}
+    for pid in list(expected):
+        p = players.get(int(pid))
+        if p is None:
+            # Puck left the lobby entirely — drop.
+            dropped.add(int(pid))
+            continue
+        last = p.get("last_seen") or p.get("joined_at") or 0
+        if (now - last) > GHOST_TIMEOUT_S:
+            dropped.add(int(pid))
+    if dropped:
+        state["expected_pucks"] = expected - dropped
+        if _socketio is not None:
+            for pid in dropped:
+                _socketio.emit(
+                    "player_left",
+                    {"session_code": session_code, "puck_id": int(pid),
+                     "reason": "ghost"},
+                    room=session_code,
+                )
+    return dropped
 # {
 #   "round": int,                 # round_number of the LATEST loaded Q
 #   "asked_ids": set[int],
@@ -1466,7 +1522,23 @@ def sp_load_question(session_code: str):
 
 @sp_bp.route("/match-state/<session_code>", methods=["GET"])
 def sp_match_state(session_code: str):
+    # Slice I — opportunistic heartbeat bump if the polling puck
+    # identifies itself. usePuckState polls match-state every 500ms in
+    # IDLE/LOCKED/CATEGORY_PICKING/MINIGAME states; that's our natural
+    # heartbeat channel.
+    try:
+        pid_q = request.args.get("puck_id")
+        if pid_q:
+            _bump_last_seen(int(pid_q))
+    except Exception:  # noqa: BLE001
+        pass
     state = _SP_STATE.get(session_code)
+    # Slice I — even before a question is loaded, poll-driven sweep
+    # ages out silent pucks so the round-1 reveal isn't blocked by a
+    # puck that ghosted during the category pick. Cheap: only runs
+    # when state exists, sweep is O(expected_pucks).
+    if state is not None:
+        _sweep_stale_pucks(session_code, state)
     if not state:
         # `exists: false` distinguishes "admin wiped this session" from
         # "session exists but match is over" — both return complete=false
@@ -1728,6 +1800,15 @@ def _maybe_emit_reveal(session_code: str, force: bool = False) -> bool:
     expiry), skip the wait-for-all gate and proceed straight to filling
     TIMEOUT entries for any silent puck."""
     state = _sp_state_for(session_code)
+    # Slice I — ghost sweep: drop stale pucks from expected so the
+    # reveal isn't blocked by a disconnected puck. Pucks bump last_seen
+    # via /api/sp/heartbeat (or the match-state poll). >GHOST_TIMEOUT_S
+    # since last bump = ghost. _sweep_stale_pucks emits player_left so
+    # TV can grey the lane. Sweep BEFORE the qid early-return so
+    # between-round force-reveals (mid-lobby pre-Q1) still age out
+    # silent pucks; otherwise a puck that ghosted before Q1 ever
+    # loaded would block the whole match.
+    _sweep_stale_pucks(session_code, state)
     qid = state["current_question_id"]
     if qid is None:
         return False
@@ -2359,9 +2440,68 @@ def sp_current_question(session_code: str):
     )
 
 
+@sp_bp.route("/heartbeat", methods=["POST"])
+def sp_heartbeat():
+    """Slice I — explicit puck heartbeat. Firmware can call this on a
+    fixed cadence independent of the match-state poll (which the Hub
+    drives). Body: {puck_id}. Always returns {ok} so a bad puck_id
+    doesn't crash a connected puck; the no-op is harmless."""
+    data = request.get_json(silent=True) or {}
+    try:
+        _bump_last_seen(int(data.get("puck_id")))
+    except (TypeError, ValueError):
+        pass
+    return jsonify({"ok": True, "ts": _now()})
+
+
 def init_pair_routes(app, socketio):
     """Wire pair_bp + sp_bp into the Flask app and stash socketio for emits."""
-    global _socketio
+    global _socketio, _LOBBY, _SP_STATE, _QUESTION_TRACKER
     _socketio = socketio
     app.register_blueprint(pair_bp)
     app.register_blueprint(sp_bp)
+
+    # Slice I — bind state-persistence so the background writer can read
+    # live state, rehydrate any snapshot from a previous boot, then
+    # install the after_request hook that fires snapshot() on every POST.
+    import state_persistence as _sp
+
+    def _peek_lobby(): return _LOBBY
+    def _peek_state(): return _SP_STATE
+    def _peek_qt(): return _QUESTION_TRACKER
+
+    _sp.bind(_peek_lobby, _peek_state, _peek_qt)
+    restored = _sp.rehydrate()
+    if restored is not None:
+        lob = restored.get("lobby")
+        sps = restored.get("sp_state") or {}
+        qt = restored.get("question_tracker") or {}
+        _sp.fix_int_keys_after_rehydrate(lob, sps, qt)
+        # Don't restore a STARTED match if it's stale (>1 day) — most
+        # likely the bar booted up the next morning. Treat that as a
+        # clean lobby instead of dragging in yesterday's match.
+        saved_at = restored.get("saved_at") or 0
+        if saved_at and (time.time() - saved_at) < 86400:
+            _LOBBY = lob
+            _SP_STATE.update(sps)
+            _QUESTION_TRACKER.update(qt)
+            print(f"[state_persistence] rehydrated "
+                  f"lobby={'yes' if lob else 'no'} "
+                  f"sessions={len(sps)}", flush=True)
+        else:
+            print("[state_persistence] snapshot >1d old, ignoring",
+                  flush=True)
+
+    _sp.start_writer()
+
+    @app.after_request
+    def _snapshot_after_post(resp):
+        try:
+            # POSTs always dirty; some GETs (match-state with ghost
+            # sweep side-effect) can too. snapshot() is just a flag
+            # bump; the writer thread debounces, so calling on every
+            # request is cheap when nothing actually changed.
+            _sp.snapshot()
+        except Exception:  # noqa: BLE001 — never fail a real request
+            pass
+        return resp

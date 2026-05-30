@@ -69,3 +69,8 @@ server/voices/kokoro/samples/
 # Piper-era narration backup (~118MB) — superseded by am_michael Kokoro
 # MP3s on disk. Kept locally for A/B reference; never commit.
 server/static/games/speed-pyramid/audio/questions/.piper_backup/
+
+# Slice I — runtime state snapshot (crash-recovery), regenerated on
+# every POST by state_persistence.py
+server/state_snapshot.json
+server/state_snapshot.json.tmp
