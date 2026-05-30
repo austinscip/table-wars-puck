@@ -2153,6 +2153,19 @@ def sp_select_category(session_code: str):
         return jsonify({"ok": False, "reason": "no pending pick"}), 409
     if puck_id != pp["picker_puck_id"]:
         return jsonify({"ok": False, "reason": "not the picker"}), 403
+    # Reject picks that arrive within 800ms of the offer opening.
+    # Hub Variant A renders pick buttons in the same row as "Start
+    # match"; a fast mouse-up landing on a newly-rendered pick button
+    # was instantly resolving the pick and making the TV /category-pick
+    # screen vanish in under a second. Real picks happen seconds after
+    # the offer renders (read offer, decide, click).
+    started_at = float(pp.get("started_at", 0))
+    if started_at and (_now() - started_at) < 0.8:
+        return jsonify({
+            "ok": False,
+            "reason": "pick too soon — likely a stray click as the "
+                      "offer appeared. wait a moment and click again.",
+        }), 429
     valid_ids = {int(o["id"]) for o in pp.get("offer") or []}
     if category_id not in valid_ids:
         return jsonify({"ok": False, "reason": "category not in offer"}), 400
