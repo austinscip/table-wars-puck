@@ -112,6 +112,9 @@ class Fighter:
     special_ready_at: float = 0.0     # match-time seconds
     kos_landed: int = 0
     eliminated: bool = False
+    # Who last dealt damage to this fighter — the KO is credited to them
+    # when this fighter rings out. None = self-destruct (no credit).
+    last_hit_by: Optional[int] = None
 
 
 class Smash(Game):
@@ -325,6 +328,10 @@ class Smash(Game):
             kb = KNOCKBACK_BASE + KNOCKBACK_PER_PCT * victim.damage_pct
             victim.knockback_vx += attacker.facing_x * kb
             victim.knockback_vy += attacker.facing_y * kb
+            # Remember who last hit them so the KO is credited correctly
+            # in free-for-alls (the old "opponent with most KOs" heuristic
+            # was wrong with 3+ fighters).
+            victim.last_hit_by = attacker.puck_index
             cues.append(
                 CueEvent(
                     cue=Cue.PLAYER_CORRECT,  # attacker landed a hit
@@ -366,27 +373,25 @@ class Smash(Game):
                 )
             )
 
-        # Credit the KO to whoever last hit them. Tracking that takes a
-        # full hitstun system; for the skeleton we credit it to the
-        # surviving opponent with the highest total damage dealt. With
-        # only 2 fighters that's always the right answer; with 3+ it's
-        # an OK heuristic until a real hit-tracker lands.
-        opponents = [
-            f for f in self.fighters.values()
-            if f.puck_index != fighter.puck_index and not f.eliminated
-        ]
-        if opponents:
-            credited = max(opponents, key=lambda f: f.kos_landed)
-            credited.kos_landed += 1
-            score_events.append(
-                ScoreEvent(
-                    puck_index=credited.puck_index,
-                    round_number=1,
-                    score_delta=200,
-                    score_total=credited.stocks * 1000 + credited.kos_landed * 200,
-                    event_type="round",
+        # Credit the KO to whoever last dealt damage to this fighter. This
+        # is correct in free-for-alls; a self-destruct (no last hitter, or
+        # the last hitter being yourself/already eliminated) credits no
+        # one. Reset the marker so a respawn starts clean.
+        killer_index = fighter.last_hit_by
+        fighter.last_hit_by = None
+        if killer_index is not None and killer_index != fighter.puck_index:
+            credited = self.fighters.get(killer_index)
+            if credited is not None and not credited.eliminated:
+                credited.kos_landed += 1
+                score_events.append(
+                    ScoreEvent(
+                        puck_index=credited.puck_index,
+                        round_number=1,
+                        score_delta=200,
+                        score_total=credited.stocks * 1000 + credited.kos_landed * 200,
+                        event_type="round",
+                    )
                 )
-            )
 
     def _finalize(
         self, winner: Optional[Fighter], cues: list[CueEvent]

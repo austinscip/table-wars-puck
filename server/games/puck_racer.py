@@ -65,6 +65,9 @@ LANES = 3
 MIN_TILT = 12.0                # lane-change threshold
 FINISH_DISTANCE = 500.0        # yards
 MAX_RACE_SECONDS = 60.0
+# TUNING: invented, not playtested. The grace window after the first
+# finisher should be validated against real races (too short cuts off
+# close finishes; too long stalls the table).
 GRACE_SECONDS_AFTER_FIRST_FINISH = 8.0
 MAX_SPEED = 60.0               # yards/sec at full throttle
 BASE_SPEED = 8.0               # idle drift forward so non-throttling pucks still move
@@ -78,7 +81,7 @@ TICK_HZ = 10                   # matches runtime.TickScheduler
 TICK_DT = 1.0 / TICK_HZ
 
 LANE_POSITIONS: dict[int, str] = {0: "left", 1: "center", 2: "right"}
-TIMER_WARNING_AT = 10.0        # seconds left when the warning fires
+TIMER_WARNING_AT = 10.0        # TUNING: seconds-left warning, unvalidated
 
 
 # ============================================================================

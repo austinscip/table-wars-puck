@@ -33,6 +33,16 @@ except ImportError:  # pragma: no cover - exercised only where the lib is absent
     ConnectionPool = None  # type: ignore[assignment, misc]
 
 
+class PuckNotProvisionedError(RuntimeError):
+    """Raised by ensure_puck when an unknown puck_index pairs and
+    auto-provisioning is disabled (production fleet management)."""
+
+
+def _autoprovision_enabled() -> bool:
+    # Default ON for dev/pilot; set PUCK_AUTOPROVISION=0 in prod.
+    return os.environ.get("PUCK_AUTOPROVISION", "1") not in ("0", "false", "False")
+
+
 class SupabaseWriter:
     def __init__(
         self,
@@ -305,9 +315,11 @@ class SupabaseWriter:
         plus its puck_assignments row. Returns the pucks.id UUID.
 
         Auto-provisioning keeps the dev / pilot flow simple — no manual
-        seeding needed before first pair. Production would gate this
-        behind explicit fleet management (admin assigns serial -> index
-        before the puck ships).
+        seeding needed before first pair. Production gates it OFF via
+        PUCK_AUTOPROVISION=0, so an unknown puck_index raises instead of
+        silently creating a row: the fleet is managed explicitly (admin
+        assigns serial -> index before the puck ships), and a stray device
+        on bar Wi-Fi can't mint itself a puck identity.
         """
         with self._connection() as conn:
             with conn.cursor() as cur:
@@ -322,6 +334,13 @@ class SupabaseWriter:
                 row = cur.fetchone()
                 if row is not None:
                     return row["id"]
+
+                if not _autoprovision_enabled():
+                    raise PuckNotProvisionedError(
+                        f"puck_index {puck_index} is not provisioned at "
+                        f"location {location_id} and auto-provisioning is "
+                        f"disabled (PUCK_AUTOPROVISION=0)"
+                    )
 
                 # Auto-provision. Serial number is a synthetic
                 # location-scoped slug — replaceable later when the real

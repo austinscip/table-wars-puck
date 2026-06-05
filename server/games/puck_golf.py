@@ -74,6 +74,8 @@ DEFAULT_COURSE: list[Hole] = [
 # ============================================================================
 
 MIN_TILT = 12.0           # tilts below this don't change aim
+# TUNING: invented stroke cap, not playtested — validate it keeps a hole
+# from dragging without cutting off a legitimately tricky putt.
 MAX_STROKES = 6           # cap per hole; ball "freezes" at this count
 POWER_PER_SHAKE = 8.0     # how much one shake unit adds to held power
 POWER_DECAY_PER_SEC = 12.0  # power drains while the player hesitates
