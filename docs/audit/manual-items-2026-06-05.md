@@ -131,10 +131,12 @@ listed so nothing's lost:
   environment, not the sandbox's. Until then the TV transparently runs on
   the cloud-Realtime fallback (i.e. today's behaviour), so nothing breaks.
   To activate:
-  1. `cd TableWarsTV && npm install socket.io-client` (commit the updated
-     `package.json` + `package-lock.json`).
-  2. Rebuild/redeploy the native TV app (`react-native run-ios` /
-     `run-android`, or your TV deploy path).
+  1. ~~`npm install socket.io-client`~~ — **DONE** (committed to
+     `package.json` + `package-lock.json`). socket.io-client is pure JS (no
+     native module), so no `pod install` / native linking is needed.
+  2. Rebuild/redeploy the TV app's JS bundle (`react-native run-ios` /
+     `run-android`, or your TV deploy path) — this is the activation step:
+     the next bundle includes the client and the local path goes live.
   3. Set each TV's `API_BASE_URL` (in `~/tablewars/.env` → `src/config.ts`)
      to the venue Flask box's LAN address (DHCP reservation or a `.local`
      hostname), not `localhost`.

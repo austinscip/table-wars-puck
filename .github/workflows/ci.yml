@@ -57,6 +57,13 @@ jobs:
         working-directory: TableWarsTV
         run: npm ci
 
+      # config.ts is gitignored (per-venue Supabase/runtime values); the
+      # checked-in example carries safe placeholders and exports the same
+      # symbols, so it's a valid drop-in for typecheck/lint/test.
+      - name: Generate config from example
+        working-directory: TableWarsTV
+        run: cp src/config.example.ts src/config.ts
+
       - name: Typecheck
         working-directory: TableWarsTV
         run: npx tsc --noEmit
