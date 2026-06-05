@@ -244,6 +244,40 @@ def get_random_question(category_id=None, difficulty=None, exclude_ids=None):
     return execute_query(query, tuple(params), fetch_one=True)
 
 
+def get_questions(count, category_id=None, difficulty=None, exclude_ids=None):
+    """Fetch `count` random questions in a single query. Used by the
+    multi-game runtime to load a full question set at match creation
+    time, avoiding `count` separate round-trips that get_random_question
+    would do per-question."""
+    ph = get_placeholder()
+
+    query = (
+        'SELECT q.*, c.name AS category_name '
+        'FROM trivia_questions q '
+        'LEFT JOIN trivia_categories c ON c.id = q.category_id '
+        'WHERE q.is_active = 1'
+    )
+    params = []
+
+    if category_id:
+        query += f' AND q.category_id = {ph}'
+        params.append(category_id)
+
+    if difficulty:
+        query += f' AND q.difficulty = {ph}'
+        params.append(difficulty)
+
+    if exclude_ids:
+        placeholders = ','.join([ph] * len(exclude_ids))
+        query += f' AND q.id NOT IN ({placeholders})'
+        params.extend(exclude_ids)
+
+    query += f' ORDER BY RANDOM() LIMIT {ph}'
+    params.append(int(count))
+
+    return execute_query(query, tuple(params), fetch_all=True) or []
+
+
 def get_category_by_name(name):
     """Get category by name"""
     ph = get_placeholder()

@@ -49,6 +49,53 @@ from runtime import (
 )
 
 
+def _load_questions_from_db(
+    count: int,
+    *,
+    difficulty: str | None = None,
+    category_id: int | None = None,
+) -> list["Question"]:
+    """Pull N questions from the trivia SQLite DB and convert each row
+    into a Question dataclass. Import is local so the games package can
+    still be imported in test environments where trivia_database
+    requires SQLite to be present.
+
+    Falls back to DEFAULT_QUESTIONS when the DB is unavailable so the
+    smoke tests + first-boot dev flow don't break."""
+    try:
+        from trivia_database import get_questions
+    except Exception:
+        return list(DEFAULT_QUESTIONS)
+
+    rows = get_questions(
+        count=count,
+        difficulty=difficulty,
+        category_id=category_id,
+    )
+    if not rows:
+        return list(DEFAULT_QUESTIONS)
+
+    questions: list[Question] = []
+    for r in rows:
+        questions.append(
+            Question(
+                id=int(r["id"]),
+                setup=(r.get("setup_text") or "").strip(),
+                question=r["question_text"],
+                answers={
+                    "A": r["answer_a"],
+                    "B": r["answer_b"],
+                    "C": r["answer_c"],
+                    "D": r["answer_d"],
+                },
+                correct=r["correct_answer"],
+                category=r.get("category_name") or "",
+                time_limit_ms=(int(r.get("time_limit") or 15) * 1000),
+            )
+        )
+    return questions
+
+
 # ============================================================================
 # Question data
 # ============================================================================
@@ -174,10 +221,24 @@ class SpeedPyramid(Game):
         self,
         players: list[Player],
         questions: list[Question] | None = None,
+        question_count: int = 5,
+        difficulty: str | None = None,
+        category_id: int | None = None,
         **_options: Any,
     ) -> None:
         self.players = players
-        self.questions = list(questions) if questions else list(DEFAULT_QUESTIONS)
+        if questions is not None:
+            # Explicit fixture, typically used by tests.
+            self.questions = list(questions)
+        else:
+            # Production path: pull from the trivia DB at match creation
+            # time. Falls back to DEFAULT_QUESTIONS when the DB is empty
+            # or unavailable.
+            self.questions = _load_questions_from_db(
+                count=question_count,
+                difficulty=difficulty,
+                category_id=category_id,
+            )
         self.scores: dict[int, int] = {p.puck_index: 0 for p in players}
         self.round_index = 0
         self.round_started_at: float = 0.0
