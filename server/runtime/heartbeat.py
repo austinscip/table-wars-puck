@@ -97,6 +97,22 @@ class HeartbeatTracker:
                     newly_stale.add(puck_index)
             return newly_stale
 
+    def all_stale(self, match_id: str, now: float | None = None) -> bool:
+        """True when every puck in the match has been silent for at least
+        the stale threshold. Used by the abandoned-match sweep: a match
+        where no puck is talking AND no input has landed for a while is a
+        table everyone walked away from. Returns False for an unknown or
+        empty match (nothing to abandon)."""
+        ts = now if now is not None else time.monotonic()
+        with self._lock:
+            beats = self._beats.get(match_id)
+            if not beats:
+                return False
+            return all(
+                ts - beat.last_seen >= self.stale_threshold_s
+                for beat in beats.values()
+            )
+
     # === Cleanup ===
 
     def drop_match(self, match_id: str) -> None:

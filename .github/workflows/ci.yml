@@ -25,3 +25,30 @@ jobs:
       - name: Run runtime test suite
         working-directory: server
         run: python -m pytest -ra
+
+  tv-tests:
+    name: TV typecheck + unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: TableWarsTV/package-lock.json
+
+      - name: Install deps
+        working-directory: TableWarsTV
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: TableWarsTV
+        run: npx tsc --noEmit
+
+      - name: Unit tests (lib)
+        working-directory: TableWarsTV
+        # Scoped to src/lib: App.test.tsx fails on a pre-existing
+        # @react-navigation jest transform issue, tracked separately.
+        run: npx jest src/lib

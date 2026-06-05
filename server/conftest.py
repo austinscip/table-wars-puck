@@ -45,12 +45,22 @@ class FakeWriter:
         self.scores: list[dict] = []
         self.snapshots: list[tuple[str, dict]] = []
         self.finished: list[tuple[str, datetime]] = []
+        self.abandoned: list[tuple[str, datetime]] = []
         self._match_seq = 0
         self._puck_seq = 0
 
-    def insert_match(
-        self, location_id: str, game_slug: str, table_number: int
-    ) -> str:
+    def create_match(
+        self,
+        location_id: str,
+        game_slug: str,
+        table_number: int,
+        pucks: list[tuple[str, str, str | None]],
+        snapshot: dict,
+    ) -> tuple[str, list[str]]:
+        # Mirrors the real writer's atomic create: one match row, N puck
+        # rows, one seed snapshot. The fake doesn't model rollback — tests
+        # that need to exercise a mid-create failure raise from a wrapper
+        # around this method.
         self._match_seq += 1
         match_id = f"match-{self._match_seq}"
         self.matches.append(
@@ -61,19 +71,14 @@ class FakeWriter:
                 "table_number": table_number,
             }
         )
-        return match_id
-
-    def upsert_match_puck(
-        self,
-        match_id: str,
-        puck_uuid: str,
-        role: str,
-        player_name: str | None,
-    ) -> str:
-        self._puck_seq += 1
-        mp_id = f"mp-{self._puck_seq}"
-        self.match_pucks[(match_id, puck_uuid)] = mp_id
-        return mp_id
+        mp_ids: list[str] = []
+        for puck_uuid, _role, _name in pucks:
+            self._puck_seq += 1
+            mp_id = f"mp-{self._puck_seq}"
+            self.match_pucks[(match_id, puck_uuid)] = mp_id
+            mp_ids.append(mp_id)
+        self.snapshots.append((match_id, snapshot))
+        return match_id, mp_ids
 
     def insert_score(
         self,
@@ -98,6 +103,9 @@ class FakeWriter:
     def update_match_finished(self, match_id: str, ended_at: datetime) -> None:
         self.finished.append((match_id, ended_at))
 
+    def update_match_abandoned(self, match_id: str, ended_at: datetime) -> None:
+        self.abandoned.append((match_id, ended_at))
+
     def update_match_snapshot(self, match_id: str, snapshot: dict) -> None:
         self.snapshots.append((match_id, snapshot))
 
@@ -121,6 +129,19 @@ class FakeWriter:
                 continue
             for cue in snap.get("cues", []) or []:
                 out.append(cue.get("cue"))
+        return out
+
+    def cue_seqs(self, match_id: str) -> list[int]:
+        """Every cue `seq` written to any snapshot for this match, in
+        write order. The TV dedupes on this, so it must be strictly
+        increasing across the whole match."""
+        out: list[int] = []
+        for mid, snap in self.snapshots:
+            if mid != match_id:
+                continue
+            for cue in snap.get("cues", []) or []:
+                if "seq" in cue:
+                    out.append(cue["seq"])
         return out
 
 
@@ -176,3 +197,12 @@ def force_disconnect(
     on_puck_disconnected path, not a shortcut around it."""
     beats = manager.heartbeat._beats[match_id]
     beats[puck_index].last_seen -= manager.heartbeat.stale_threshold_s + 100.0
+
+
+def force_all_stale(manager: MatchManager, match_id: str) -> None:
+    """Age every puck's heartbeat past the stale threshold so
+    HeartbeatTracker.all_stale(match_id) is True on the next sweep. Used
+    by the abandoned-match test."""
+    beats = manager.heartbeat._beats[match_id]
+    for beat in beats.values():
+        beat.last_seen -= manager.heartbeat.stale_threshold_s + 100.0

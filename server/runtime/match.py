@@ -11,6 +11,7 @@ maintaining a Socket.IO server.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional, Protocol
@@ -18,24 +19,25 @@ from typing import Optional, Protocol
 from .game import Game, Player, InputEvent, ScoreEvent, StateUpdate
 from .cues import Cue, CueEvent
 from .heartbeat import HeartbeatTracker
+from .idempotency import IdempotencyCache
+from .log import get_logger
 from .registry import GameRegistry
+
+logger = get_logger("match")
 
 
 class SupabaseWriterProtocol(Protocol):
     """The slice of SupabaseWriter the manager needs. Keeping it as a
     Protocol means tests can swap in a fake without touching network."""
 
-    def insert_match(
-        self, location_id: str, game_slug: str, table_number: int
-    ) -> str: ...
-
-    def upsert_match_puck(
+    def create_match(
         self,
-        match_id: str,
-        puck_uuid: str,
-        role: str,
-        player_name: str | None,
-    ) -> str: ...
+        location_id: str,
+        game_slug: str,
+        table_number: int,
+        pucks: list[tuple[str, str, str | None]],
+        snapshot: dict,
+    ) -> tuple[str, list[str]]: ...
 
     def insert_score(
         self,
@@ -48,6 +50,10 @@ class SupabaseWriterProtocol(Protocol):
     ) -> None: ...
 
     def update_match_finished(
+        self, match_id: str, ended_at: datetime
+    ) -> None: ...
+
+    def update_match_abandoned(
         self, match_id: str, ended_at: datetime
     ) -> None: ...
 
@@ -82,6 +88,14 @@ class Match:
         default_factory=lambda: datetime.now(timezone.utc)
     )
     ended_at: Optional[datetime] = None
+    # Monotonic timestamp of the last input we processed. Seeded at
+    # create so a match that never sees input is still measured from
+    # creation for the abandoned-match sweep.
+    last_input_at: float = field(default_factory=time.monotonic)
+    # Per-match monotonic counter stamped onto every cue as it's written
+    # to a snapshot. The TV dedupes cues on this strictly-increasing seq
+    # instead of a wall-clock ts (which NTP/restart can run backwards).
+    cue_seq: int = 0
 
 
 class MatchManager:
@@ -89,12 +103,19 @@ class MatchManager:
     event to Supabase. Single-process for now; if we shard across
     workers, store match state in Redis and lock per match_id."""
 
+    # A match with no input AND every puck stale for this long is treated
+    # as abandoned (everyone left). Must comfortably exceed the heartbeat
+    # stale threshold so a brief Wi-Fi blip never abandons a live table.
+    ABANDON_AFTER_S = 120.0
+
     def __init__(
         self,
         registry: GameRegistry,
         writer: SupabaseWriterProtocol,
         scheduler: Optional[SchedulerProtocol] = None,
         heartbeat: Optional[HeartbeatTracker] = None,
+        idempotency: Optional[IdempotencyCache] = None,
+        abandon_after_s: Optional[float] = None,
     ) -> None:
         self.registry = registry
         self.writer = writer
@@ -103,6 +124,13 @@ class MatchManager:
         # the current match. If unset (tests, minimal envs), heartbeat
         # logic is skipped entirely.
         self.heartbeat = heartbeat
+        # Dedupes retried puck requests. If unset, idempotency is a no-op
+        # (every request processed) — fine for tests that don't exercise
+        # retries.
+        self.idempotency = idempotency
+        self.abandon_after_s = (
+            abandon_after_s if abandon_after_s is not None else self.ABANDON_AFTER_S
+        )
         self.matches: dict[str, Match] = {}
 
     # === Create ===
@@ -124,24 +152,30 @@ class MatchManager:
                 f"got {n}"
             )
 
-        match_id = self.writer.insert_match(
+        # Build the game first so its initial state seeds the snapshot in
+        # the SAME transaction as the match + puck rows. A game
+        # constructor that rejects its options raises here, before any DB
+        # write — no half-created match.
+        game = game_class(players=players, **game_options)
+
+        pucks = [
+            (p.puck_uuid, "host" if i == 0 else "sibling", p.name)
+            for i, p in enumerate(players)
+        ]
+        # One transaction: matches + match_pucks×N + seed snapshot. If it
+        # raises, nothing below runs and the match is never registered —
+        # the manager's in-memory state stays consistent with the DB.
+        match_id, mp_ids = self.writer.create_match(
             location_id=location_id,
             game_slug=game_slug,
             table_number=table_number,
+            pucks=pucks,
+            snapshot=game.get_state(),
         )
+        match_puck_ids = {
+            p.puck_index: mp_ids[i] for i, p in enumerate(players)
+        }
 
-        match_puck_ids: dict[int, str] = {}
-        for i, p in enumerate(players):
-            role = "host" if i == 0 else "sibling"
-            mp_id = self.writer.upsert_match_puck(
-                match_id=match_id,
-                puck_uuid=p.puck_uuid,
-                role=role,
-                player_name=p.name,
-            )
-            match_puck_ids[p.puck_index] = mp_id
-
-        game = game_class(players=players, **game_options)
         match = Match(
             id=match_id,
             location_id=location_id,
@@ -153,10 +187,6 @@ class MatchManager:
         )
         self.matches[match_id] = match
 
-        # Seed the initial snapshot so the TV's Realtime subscription
-        # gets a usable state on first paint without waiting for a tick.
-        self.writer.update_match_snapshot(match_id, game.get_state())
-
         # Seed heartbeat last_seen for every puck so the first sweep
         # doesn't immediately mark them stale.
         if self.heartbeat is not None:
@@ -166,15 +196,41 @@ class MatchManager:
 
         if self.scheduler is not None:
             self.scheduler.register(match_id)
+        logger.info(
+            "match %s created: game=%s table=%s players=%d",
+            match_id,
+            game_slug,
+            table_number,
+            len(players),
+        )
         return match
 
     # === Drive ===
 
-    def on_input(self, match_id: str, event: InputEvent) -> StateUpdate:
+    def on_input(
+        self,
+        match_id: str,
+        event: InputEvent,
+        event_id: Optional[str] = None,
+    ) -> StateUpdate:
         match = self._must_get(match_id)
+
+        # Idempotency: a retried request (same logical event_id from the
+        # same puck in the same match) replays the first response without
+        # re-applying the input. Checked before the status guard so a
+        # retry that arrives after the match finished still gets the
+        # original result, not a stale snapshot.
+        key: Optional[str] = None
+        if event_id is not None and self.idempotency is not None:
+            key = f"{match_id}:{event.puck_index}:{event_id}"
+            cached = self.idempotency.get(key)
+            if cached is not None:
+                return cached
+
         if match.status != "active":
             return StateUpdate(state=match.game.get_state())
 
+        match.last_input_at = time.monotonic()
         if self.heartbeat is not None:
             self.heartbeat.ping(match_id, event.puck_index)
 
@@ -184,10 +240,12 @@ class MatchManager:
         # definition, something the player did that the TV should react
         # to.
         self.writer.update_match_snapshot(
-            match_id, self._snapshot_payload(update)
+            match_id, self._snapshot_payload(match, update)
         )
         if update.is_final or match.game.is_over():
             self._finalize(match)
+        if key is not None:
+            self.idempotency.put(key, update)
         return update
 
     def tick(self, match_id: str) -> StateUpdate:
@@ -235,10 +293,15 @@ class MatchManager:
         # ticks would spam the matches row with no state change.
         if update.score_events or update.cues or update.is_final:
             self.writer.update_match_snapshot(
-                match_id, self._snapshot_payload(update)
+                match_id, self._snapshot_payload(match, update)
             )
         if update.is_final or match.game.is_over():
             self._finalize(match)
+        elif self._is_abandoned(match):
+            # No natural end and the table's gone quiet — close it out as
+            # abandoned so it doesn't sit 'active' forever. Checked after
+            # finalisation so a game that ends itself wins the race.
+            self._abandon(match)
         return update
 
     # === Finalise ===
@@ -271,6 +334,32 @@ class MatchManager:
             self.scheduler.unregister(match.id)
         if self.heartbeat is not None:
             self.heartbeat.drop_match(match.id)
+        logger.info("match %s finished", match.id)
+
+    def _is_abandoned(self, match: Match) -> bool:
+        """A still-active match is abandoned when every puck has gone
+        stale AND no input has landed for abandon_after_s. The input-age
+        gate (on top of all-stale) keeps a match that's merely between
+        turns from being reaped."""
+        if self.heartbeat is None:
+            return False
+        if not self.heartbeat.all_stale(match.id):
+            return False
+        return (time.monotonic() - match.last_input_at) >= self.abandon_after_s
+
+    def _abandon(self, match: Match) -> None:
+        if match.status != "active":
+            return
+        match.status = "abandoned"
+        match.ended_at = datetime.now(timezone.utc)
+        self.writer.update_match_abandoned(
+            match_id=match.id, ended_at=match.ended_at
+        )
+        if self.scheduler is not None:
+            self.scheduler.unregister(match.id)
+        if self.heartbeat is not None:
+            self.heartbeat.drop_match(match.id)
+        logger.info("match %s abandoned (all pucks stale, no input)", match.id)
 
     # === Internals ===
 
@@ -293,13 +382,23 @@ class MatchManager:
             raise KeyError(f"Match {match_id} not found")
         return self.matches[match_id]
 
-    @staticmethod
-    def _snapshot_payload(update: StateUpdate) -> dict:
-        """Merge game state with any cues fired this update. The TV
-        diffs snapshot.cues across updates to detect new emissions.
-        Cues are ephemeral — they don't accumulate in the snapshot
-        across updates because each write replaces the column."""
+    def _snapshot_payload(self, match: Match, update: StateUpdate) -> dict:
+        """Merge game state with any cues fired this update. Each cue is
+        stamped with a per-match monotonic `seq` so the TV can dedupe on
+        a strictly-increasing integer rather than a wall-clock `ts` (which
+        an NTP adjustment or container restart can run backwards, sticking
+        the TV's watermark and dropping every later cue).
+
+        Cues are ephemeral — they don't accumulate in the snapshot across
+        updates because each write replaces the column. The seq is what
+        lets the TV tell a genuinely new cue from a redelivered one."""
         payload = dict(update.state)
         if update.cues:
-            payload["cues"] = [c.to_dict() for c in update.cues]
+            cue_dicts = []
+            for cue in update.cues:
+                d = cue.to_dict()
+                d["seq"] = match.cue_seq
+                match.cue_seq += 1
+                cue_dicts.append(d)
+            payload["cues"] = cue_dicts
         return payload

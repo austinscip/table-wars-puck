@@ -47,6 +47,9 @@ from runtime import (
     MatchManager,
     TickScheduler,
     HeartbeatTracker,
+    IdempotencyCache,
+    configure_logging,
+    init_sentry,
     registry as game_registry,
     event_from_dict,
 )
@@ -84,10 +87,20 @@ def _get_container() -> dict:
     # rather than at module top-level so the routes blueprint can be
     # registered even when DATABASE_URL is unset (e.g. test imports).
     import games  # noqa: F401
+
+    # Stand up logging + (optional) Sentry before any match runs so a
+    # tick-loop exception is captured rather than lost to stdout.
+    configure_logging()
+    init_sentry()
+
     writer = SupabaseWriter()
     heartbeat = HeartbeatTracker()
+    idempotency = IdempotencyCache()
     manager = MatchManager(
-        registry=game_registry, writer=writer, heartbeat=heartbeat
+        registry=game_registry,
+        writer=writer,
+        heartbeat=heartbeat,
+        idempotency=idempotency,
     )
     scheduler = TickScheduler(match_manager=manager)
     manager.scheduler = scheduler
@@ -99,6 +112,7 @@ def _get_container() -> dict:
         "scheduler": scheduler,
         "pairing": pairing,
         "heartbeat": heartbeat,
+        "idempotency": idempotency,
     }
     return _container
 
@@ -220,9 +234,15 @@ def match_input(match_id: str):
     except (KeyError, ValueError, TypeError):
         return _bad("puck_index required")
     event = event_from_dict(puck_index, body)
+    # Idempotency key: prefer the standard header, fall back to an
+    # event_id in the body so firmware that can't set headers still gets
+    # dedupe. None means "no key" — processed every time (legacy pucks).
+    event_id = request.headers.get("Idempotency-Key") or body.get("event_id")
+    if event_id is not None:
+        event_id = str(event_id)
     mm: MatchManager = _get_container()["manager"]
     try:
-        update = mm.on_input(match_id, event)
+        update = mm.on_input(match_id, event, event_id=event_id)
     except KeyError:
         return _bad("Match not found", 404)
     match = mm.matches.get(match_id)

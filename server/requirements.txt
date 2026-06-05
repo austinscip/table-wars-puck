@@ -17,3 +17,8 @@ gunicorn==21.2.0  # Production WSGI server
 gevent==24.2.1  # Async worker for Flask-SocketIO
 gevent-websocket==0.10.1  # WebSocket support for gevent
 zeroconf>=0.140.0
+
+# Error reporting for the runtime. Optional at runtime — the runtime's
+# init_sentry() no-ops when sentry_sdk is absent or SENTRY_DSN is unset —
+# but installed in prod so tick-loop exceptions ship off-box.
+sentry-sdk>=2.0.0

@@ -49,6 +49,11 @@ export type CueEvent = {
   cue: CueName;
   target: number | null;
   channels: CueChannelName[] | null;
+  // Per-match monotonic sequence stamped by the MatchManager. This is the
+  // dedupe key — it only ever increases, unlike `ts`.
+  seq: number;
+  // Wall-clock emission time (seconds). Display/debug only; NOT used for
+  // dedupe because NTP steps / container restarts can run it backwards.
   ts: number;
   payload: Record<string, unknown>;
 };
@@ -56,8 +61,12 @@ export type CueEvent = {
 // === Dispatcher ===
 //
 // The TV diffs snapshot.cues across updates so it only fires new cue
-// emissions. Each cue carries a server-side `ts`; we keep the highest
-// `ts` we've seen and treat anything older as already dispatched.
+// emissions. Each cue carries a server-side `seq` — a per-match monotonic
+// counter — and we keep the highest `seq` we've seen, treating anything
+// at or below it as already dispatched. We deliberately do NOT key off
+// the wall-clock `ts`: an NTP adjustment or container restart can make a
+// later cue's ts smaller than an earlier one's, which would stick the
+// watermark high and silently swallow every subsequent cue.
 //
 // Subscribers register by channel; the dispatcher fans cue events out
 // to every subscriber whose channel is in the cue's channels list (or
@@ -70,9 +79,13 @@ export type CueEvent = {
 
 export type CueHandler = (event: CueEvent) => void;
 
+// Sentinel below any real seq (which start at 0), so the first cue of a
+// match is always fresh.
+const NO_SEQ = -1;
+
 export class CueDispatcher {
   private handlers = new Map<CueChannelName, Set<CueHandler>>();
-  private lastTs = 0;
+  private lastSeq = NO_SEQ;
 
   on(channel: CueChannelName, handler: CueHandler): () => void {
     if (!this.handlers.has(channel)) {
@@ -82,14 +95,23 @@ export class CueDispatcher {
     return () => this.handlers.get(channel)?.delete(handler);
   }
 
-  // Call this every time matches.snapshot.cues changes. Cues older than
-  // the highest ts we've seen are skipped.
+  // Call this every time matches.snapshot.cues changes. Cues at or below
+  // the highest seq we've seen are skipped (already dispatched). A cue
+  // missing `seq` falls back to its array index within this batch so a
+  // pre-seq server snapshot still dispatches once rather than never.
   ingest(cues: CueEvent[]): void {
     if (!cues || cues.length === 0) return;
-    const fresh = cues.filter((c) => c.ts > this.lastTs);
+    // Resolve a dedupe seq per cue up front (server-stamped seq, or a
+    // synthetic fallback keyed off the ORIGINAL index for a pre-seq
+    // snapshot) so the post-filter index shift can't corrupt it.
+    const withSeq = cues.map((cue, i) => ({
+      cue,
+      seq: typeof cue.seq === 'number' ? cue.seq : this.lastSeq + 1 + i,
+    }));
+    const fresh = withSeq.filter((x) => x.seq > this.lastSeq);
     if (fresh.length === 0) return;
-    this.lastTs = Math.max(...fresh.map((c) => c.ts));
-    for (const cue of fresh) {
+    this.lastSeq = Math.max(...fresh.map((x) => x.seq));
+    for (const { cue } of fresh) {
       const targetChannels =
         cue.channels && cue.channels.length > 0
           ? cue.channels
@@ -104,6 +126,6 @@ export class CueDispatcher {
 
   // Reset on new match so old cues don't carry over.
   reset(): void {
-    this.lastTs = 0;
+    this.lastSeq = NO_SEQ;
   }
 }

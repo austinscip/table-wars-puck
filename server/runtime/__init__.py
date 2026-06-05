@@ -26,6 +26,8 @@ from .inputs import event_from_dict
 from .pairing import PairingManager, PairingError, color_for
 from .scheduler import TickScheduler
 from .heartbeat import HeartbeatTracker, STALE_THRESHOLD_S
+from .idempotency import IdempotencyCache
+from .log import configure_logging, get_logger, init_sentry
 from .cues import (
     Cue,
     CueChannel,
@@ -56,6 +58,10 @@ __all__ = [
     "TickScheduler",
     "HeartbeatTracker",
     "STALE_THRESHOLD_S",
+    "IdempotencyCache",
+    "configure_logging",
+    "get_logger",
+    "init_sentry",
     "Cue",
     "CueChannel",
     "CueEvent",

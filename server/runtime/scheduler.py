@@ -17,7 +17,10 @@ import threading
 import time
 from typing import Optional, Set
 
+from .log import get_logger
 from .match import MatchManager
+
+logger = get_logger("scheduler")
 
 
 class TickScheduler:
@@ -75,13 +78,13 @@ class TickScheduler:
                     continue
                 try:
                     self.match_manager.tick(match_id)
-                except Exception as e:  # noqa: BLE001
-                    # A buggy game shouldn't crash the scheduler. Log
-                    # via print for now — swap for logger when one is
-                    # wired.
-                    print(
-                        f"[scheduler] tick({match_id}) raised: {e!r}",
-                        flush=True,
+                except Exception:  # noqa: BLE001
+                    # A buggy game must not crash the scheduler thread —
+                    # the whole table would freeze. Log with traceback
+                    # (and ship to Sentry if configured) and keep ticking
+                    # the other matches.
+                    logger.exception(
+                        "tick(%s) raised; continuing", match_id
                     )
 
             # Sleep the remaining slice of this tick. If a tick took

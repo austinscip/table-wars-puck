@@ -15,6 +15,7 @@ psycopg_pool.ConnectionPool.
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import datetime
 from typing import Optional
@@ -33,6 +34,64 @@ class SupabaseWriter:
         self.dsn = dsn
 
     # === Matches ===
+
+    def create_match(
+        self,
+        location_id: str,
+        game_slug: str,
+        table_number: int,
+        pucks: list[tuple[str, str, Optional[str]]],
+        snapshot: dict,
+    ) -> tuple[str, list[str]]:
+        """Create a match, its match_pucks rows, and the seed snapshot in a
+        SINGLE transaction. Either the whole match exists or none of it
+        does — a crash mid-create can't leave an orphan matches row with
+        no pucks, or pucks with no snapshot for the TV to paint.
+
+        pucks is a list of (puck_uuid, role, player_name) in seating
+        order. Returns (match_id, match_puck_ids) where match_puck_ids is
+        in the same order as pucks.
+        """
+        with psycopg.connect(self.dsn, row_factory=dict_row) as conn:
+            with conn.transaction():
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "select id from games where slug = %s", (game_slug,)
+                    )
+                    row = cur.fetchone()
+                    if not row:
+                        raise ValueError(f"Unknown game slug: {game_slug!r}")
+                    game_id = row["id"]
+
+                    cur.execute(
+                        "insert into matches "
+                        "(location_id, game_id, table_number, status) "
+                        "values (%s, %s, %s, 'active') "
+                        "returning id",
+                        (location_id, game_id, table_number),
+                    )
+                    match_id = cur.fetchone()["id"]
+
+                    match_puck_ids: list[str] = []
+                    for puck_uuid, role, player_name in pucks:
+                        cur.execute(
+                            "insert into match_pucks "
+                            "(match_id, puck_id, role, player_name) "
+                            "values (%s, %s, %s, %s) "
+                            "on conflict (match_id, puck_id) do update "
+                            "  set role = excluded.role, "
+                            "      player_name = excluded.player_name "
+                            "returning id",
+                            (match_id, puck_uuid, role, player_name),
+                        )
+                        match_puck_ids.append(cur.fetchone()["id"])
+
+                    cur.execute(
+                        "update matches set snapshot = %s::jsonb "
+                        "where id = %s",
+                        (json.dumps(snapshot), match_id),
+                    )
+        return match_id, match_puck_ids
 
     def insert_match(
         self, location_id: str, game_slug: str, table_number: int
@@ -64,6 +123,23 @@ class SupabaseWriter:
                     "update matches "
                     "set status = 'finished', ended_at = %s "
                     "where id = %s",
+                    (ended_at, match_id),
+                )
+
+    def update_match_abandoned(
+        self, match_id: str, ended_at: datetime
+    ) -> None:
+        """Mark a match abandoned — everyone walked away before it
+        finished. Distinct from 'finished' so analytics can tell a real
+        result from a dead table. No final scores are written (there's no
+        meaningful result). Guarded to only touch a still-active row so a
+        late sweep can't stomp a match that finished in the meantime."""
+        with psycopg.connect(self.dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "update matches "
+                    "set status = 'abandoned', ended_at = %s "
+                    "where id = %s and status = 'active'",
                     (ended_at, match_id),
                 )
 
@@ -122,8 +198,6 @@ class SupabaseWriter:
         """Write the current game state snapshot to matches.snapshot so
         the TV Realtime subscription wakes up. Called from MatchManager
         after every input or tick that changes visible state."""
-        import json
-
         with psycopg.connect(self.dsn) as conn:
             with conn.cursor() as cur:
                 cur.execute(

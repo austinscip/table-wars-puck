@@ -11,8 +11,11 @@ sync live here so every game inherits them.
 | `game.py` | The `Game` ABC every game implements. Plus the dataclasses (`Player`, `InputEvent`, `ScoreEvent`, `StateUpdate`) the runtime passes around. |
 | `registry.py` | `GameRegistry` — slug → game class. Games call `registry.register(SpeedPyramid)` at import time. |
 | `inputs.py` | Normalises raw puck JSON into `InputEvent`. The one place input aliases collapse. |
-| `match.py` | `Match` dataclass + `MatchManager`. Owns active matches in memory, persists every state-changing event to Supabase. |
-| `../supabase_client.py` | `SupabaseWriter` — psycopg connection to Supabase Postgres. Bypasses RLS because it connects as the `postgres` role (equivalent to PostgREST's service_role). |
+| `match.py` | `Match` dataclass + `MatchManager`. Owns active matches in memory, persists every state-changing event to Supabase. Also drives the abandoned-match sweep and per-match cue `seq` stamping. |
+| `idempotency.py` | `IdempotencyCache` — bounded LRU so a retried puck request isn't processed twice. Keyed by `(match_id, puck_index, event_id)`. |
+| `heartbeat.py` | `HeartbeatTracker` — per-puck last-seen + `all_stale` for the abandoned sweep. |
+| `log.py` | `configure_logging` / `get_logger` / `init_sentry`. Standard Python logging + optional Sentry for the runtime. New runtime code uses `get_logger`, never `print`. |
+| `../supabase_client.py` | `SupabaseWriter` — psycopg connection to Supabase Postgres. Bypasses RLS because it connects as the `postgres` role (equivalent to PostgREST's service_role). `create_match` is the **atomic** create (match + pucks + seed snapshot in one transaction). |
 
 ## What a Game class must implement
 
@@ -170,6 +173,20 @@ The TV reconstructs the visible state from these streams. The
 `get_state()` dict the game returns goes into a `matches.snapshot` JSONB
 column (TBD — not yet on the schema; will add when the first game's
 state-shape stabilises).
+
+## Production-hardening status (2026-06-05 pass)
+
+Landed: per-game disconnect adapters; pytest + jest harness with CI;
+transactional match creation; input idempotency; abandoned-match sweep;
+monotonic cue `seq` (server + TV dedupe); TV Realtime resubscribe;
+structured logging + optional Sentry. Full edge-case review:
+`docs/audit/runtime-hardening-review-2026-06-05.md`.
+
+Known-accepted limitations (see the review): a disconnected puck is
+retired for the match (no mid-match reconnect); idempotency is best-effort
+without the per-match lock (Tier 2 Redis); a server restart mid-match
+loses in-memory state (and resets cue `seq`) until runtime state is
+Redis-backed.
 
 ## Open items not yet wired
 
