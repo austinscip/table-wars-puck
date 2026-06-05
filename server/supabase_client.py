@@ -271,6 +271,32 @@ class SupabaseWriter:
                     (json.dumps(snapshot), match_id),
                 )
 
+    # === Lobbies (Realtime-published pairing state) ===
+
+    def upsert_lobby(
+        self, location_id: str, table_number: int, snapshot: dict
+    ) -> None:
+        """Publish a table's lobby snapshot so the TV's Realtime
+        subscription wakes. One row per (location_id, table_number)."""
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "insert into lobbies (location_id, table_number, snapshot, updated_at) "
+                    "values (%s, %s, %s::jsonb, now()) "
+                    "on conflict (location_id, table_number) do update "
+                    "  set snapshot = excluded.snapshot, updated_at = now()",
+                    (location_id, table_number, json.dumps(snapshot)),
+                )
+
+    def delete_lobby(self, location_id: str, table_number: int) -> None:
+        """Remove a table's lobby row when it's cancelled/expired."""
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "delete from lobbies where location_id = %s and table_number = %s",
+                    (location_id, table_number),
+                )
+
     # === Pucks ===
 
     def ensure_puck(self, puck_index: int, location_id: str) -> str:

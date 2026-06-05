@@ -106,6 +106,9 @@ insert into matches(id,location_id,game_id,table_number,status)
  select '{MATCH_A}','{LOC_A}',g.id,1,'active' from games g where g.slug='speed_pyramid';
 insert into matches(id,location_id,game_id,table_number,status)
  select '{MATCH_B}','{LOC_B}',g.id,1,'active' from games g where g.slug='speed_pyramid';
+insert into lobbies(location_id,table_number,snapshot) values
+ ('{LOC_A}',1,'{{"code":"111111"}}'::jsonb),
+ ('{LOC_B}',1,'{{"code":"222222"}}'::jsonb);
 """
 
 
@@ -262,6 +265,25 @@ def test_anon_token_scopes_scores(rls_dsn):
     assert _count_as(rls_dsn, "scores", role="anon",
                      claims=_claims(match_id=MATCH_A),
                      where=f"where match_id='{MATCH_B}'") == 0
+
+
+def test_lobby_anon_scoped_by_location_token(rls_dsn):
+    import json
+    # A location-scoped anon token sees its location's lobby, not the other.
+    claims_a = json.dumps({"role": "anon", "location_id": LOC_A})
+    assert _count_as(rls_dsn, "lobbies", role="anon", claims=claims_a) == 1
+    assert _count_as(rls_dsn, "lobbies", role="anon", claims=claims_a,
+                     where=f"where location_id='{LOC_B}'") == 0
+    # Tokenless anon -> nothing.
+    assert _count_as(rls_dsn, "lobbies", role="anon",
+                     claims=json.dumps({"role": "anon"})) == 0
+
+
+def test_org_admin_sees_only_own_lobby(rls_dsn):
+    assert _count_as(rls_dsn, "lobbies", role="authenticated",
+                     sub=USER_A_ADMIN) == 1
+    assert _count_as(rls_dsn, "lobbies", role="authenticated",
+                     sub=USER_A_ADMIN, where=f"where location_id='{LOC_B}'") == 0
 
 
 def test_server_minted_tv_token_satisfies_rls(rls_dsn):

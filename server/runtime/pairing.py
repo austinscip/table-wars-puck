@@ -31,7 +31,10 @@ from dataclasses import dataclass, field
 from typing import Optional, Protocol
 
 from .game import Player
+from .log import get_logger
 from .match import Match, MatchManager
+
+logger = get_logger("pairing")
 
 
 # Same palette as the existing pair_routes.py PUCK_COLORS, transposed
@@ -122,6 +125,7 @@ class PairingManager:
         match_manager: MatchManager,
         puck_resolver: PuckResolverProtocol,
         token_authority=None,
+        lobby_writer=None,
     ) -> None:
         self.match_manager = match_manager
         self.resolver = puck_resolver
@@ -129,6 +133,10 @@ class PairingManager:
         # lobby gets a signed token in its pair response, which the match
         # input endpoint then requires. When None, pairing is open (dev).
         self.token_authority = token_authority
+        # Optional writer (SupabaseWriter) that publishes lobby snapshots to
+        # the `lobbies` table so the TV can subscribe via Realtime instead
+        # of polling. Best-effort: a publish failure never breaks pairing.
+        self.lobby_writer = lobby_writer
         # (location_id, table_number) -> Lobby. Many simultaneous tables.
         self._lobbies: dict[LobbyKey, Lobby] = {}
         # puck_index -> the lobby key it belongs to, so dial/confirm/
@@ -276,6 +284,7 @@ class PairingManager:
             )
             lobby.started = True
             lobby.match_id = match.id
+            self._publish(lobby)
             return match
 
     def cancel(self, puck_index: int) -> None:
@@ -366,7 +375,36 @@ class PairingManager:
             joined_at=time.time(),
         )
         lobby.pucks[puck_index] = lp
+        self._publish(lobby)
         return lp
+
+    def _publish(self, lobby: Lobby) -> None:
+        """Mirror a lobby's snapshot into the lobbies table for Realtime.
+        Best-effort — pairing must not fail because the publish did."""
+        if self.lobby_writer is None:
+            return
+        try:
+            self.lobby_writer.upsert_lobby(
+                lobby.location_id, lobby.table_number, lobby.snapshot()
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "failed to publish lobby (loc=%s table=%s)",
+                lobby.location_id,
+                lobby.table_number,
+            )
+
+    def _unpublish(self, location_id: str, table_number: int) -> None:
+        if self.lobby_writer is None:
+            return
+        try:
+            self.lobby_writer.delete_lobby(location_id, table_number)
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "failed to unpublish lobby (loc=%s table=%s)",
+                location_id,
+                table_number,
+            )
 
     def _role_response(
         self, lobby: Lobby, role: str, puck: LobbyPuck
@@ -414,6 +452,7 @@ class PairingManager:
             idx for idx, k in self._puck_locator.items() if k == key
         ]:
             del self._puck_locator[idx]
+        self._unpublish(key[0], key[1])
 
     def _purge_expired(self) -> None:
         now = time.time()

@@ -143,6 +143,7 @@ def _get_container() -> dict:
         match_manager=manager,
         puck_resolver=writer,
         token_authority=token_authority,
+        lobby_writer=writer,
     )
     scheduler.start()
     _container = {

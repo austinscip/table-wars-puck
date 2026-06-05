@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { fetchLobbyState, type LobbyStateWire } from './runtimeApi';
 
-// Polls /api/runtime/pair/lobby-state at 1 Hz. The lobby lives in Flask
-// process memory (not Supabase), so Realtime postgres_changes can't
-// reach it. 1 Hz is fast enough that a puck's pair request lands on
-// the TV within one heartbeat and slow enough that an idle TV barely
-// taxes Wi-Fi.
+// Polls /api/runtime/pair/lobby-state at 1 Hz.
+//
+// NOTE: as of the lobbies-realtime migration the PairingManager now ALSO
+// publishes each lobby mutation to the Supabase `lobbies` table (location-
+// scoped anon RLS), so a Realtime subscription is now possible and would
+// remove this poll. The swap is deferred until the TV has a location-token
+// + table-binding flow (it needs a location_id-claim token to read lobbies
+// via anon RLS, the same mechanism as useMatchState's match token). Until
+// then the poll is the working path; 1 Hz lands a pair request within one
+// heartbeat while barely taxing Wi-Fi.
 
 export type LobbyState = LobbyStateWire | { active: false; loading: boolean };
 
