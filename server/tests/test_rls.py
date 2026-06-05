@@ -14,6 +14,7 @@ Skips cleanly when local Postgres binaries (initdb/pg_ctl) aren't present.
 
 from __future__ import annotations
 
+import glob
 import os
 import shutil
 import subprocess
@@ -34,6 +35,8 @@ _PG_BIN_DIRS = [
     "/opt/homebrew/bin",
     "/usr/local/bin",
 ]
+# Debian/Ubuntu (CI) install Postgres binaries here, not on PATH.
+_PG_BIN_GLOBS = ["/usr/lib/postgresql/*/bin", "/usr/pgsql-*/bin"]
 
 
 def _find(binary: str) -> str | None:
@@ -41,6 +44,11 @@ def _find(binary: str) -> str | None:
         cand = os.path.join(d, binary)
         if os.path.exists(cand):
             return cand
+    for pattern in _PG_BIN_GLOBS:
+        for d in sorted(glob.glob(pattern), reverse=True):
+            cand = os.path.join(d, binary)
+            if os.path.exists(cand):
+                return cand
     return shutil.which(binary)
 
 

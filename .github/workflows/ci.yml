@@ -17,10 +17,20 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install pytest
-        # The runtime + games packages are pure stdlib; the suite needs
-        # only pytest. Keep this lean so the gate stays fast.
-        run: python -m pip install --upgrade pip "pytest>=8,<10"
+      - name: Ensure Postgres client+server binaries (for the RLS suite)
+        # test_rls.py bootstraps a throwaway cluster via initdb/pg_ctl; on
+        # GitHub's ubuntu image these ship preinstalled under
+        # /usr/lib/postgresql/*/bin (the test finds them there). If absent
+        # the RLS tests skip rather than fail.
+        run: sudo apt-get update && sudo apt-get install -y postgresql || true
+
+      - name: Install test deps
+        # Runtime + games are pure stdlib, but the auth/redis/RLS/route
+        # suites need these. fakeredis avoids a live Redis service.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "pytest>=8,<10" "PyJWT>=2.8.0" \
+            "fakeredis>=2.20.0" "flask>=3.0.0" "psycopg[binary]>=3.1.0"
 
       - name: Run runtime test suite
         working-directory: server
