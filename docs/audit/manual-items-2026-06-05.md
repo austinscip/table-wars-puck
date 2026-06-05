@@ -21,6 +21,7 @@ runs in safe/open mode when they're absent.
 | `REDIS_URL` | Enables the durable match store + restart recovery + shared idempotency. | Set it + run Redis; a redeploy/crash mid-match then recovers active matches on boot. |
 | `CORS_ALLOWED_ORIGINS` | Locks CORS to the portal/TV origins (comma-separated). | Defaults to `*` (dev). Set before launch. |
 | `PLAYER_PHONE_PEPPER` | Enables optional phone-based player recovery (ADR 0005). | **Optional, ≥32 bytes.** Without it, phone numbers are never hashed/stored — the QR token is the only identity. The pepper makes the (enumerable) phone space safe to key on; keep it secret + stable (rotating it orphans existing phone links). |
+| `DATABASE_URL` | Point at Supabase's **transaction pooler** (`:6543`) at fleet scale (ADR 0007). | Direct Postgres (`:5432`) doesn't scale to many venues. Use the pooler URL from Dashboard → Settings → Database → Connection pooling (Transaction mode). The writer auto-detects `:6543` and disables prepared statements; no code change. `PGBOUNCER_TRANSACTION_MODE=1` forces it if your URL hides the port. |
 
 ## 2. Supabase — apply migrations + enable Realtime
 

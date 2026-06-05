@@ -43,6 +43,34 @@ def _autoprovision_enabled() -> bool:
     return os.environ.get("PUCK_AUTOPROVISION", "1") not in ("0", "false", "False")
 
 
+def _is_transaction_pooler(dsn: Optional[str]) -> bool:
+    """Is this DSN Supabase's TRANSACTION pooler (Supavisor/pgbouncer,
+    :6543)? At chain scale every venue's pool must go through it instead of
+    direct Postgres (:5432), or 100 venues × a client pool blows past the
+    Postgres connection ceiling (ADR 0007). Detected by the :6543 port or an
+    explicit override, so ops can flip it without code changes."""
+    if os.environ.get("PGBOUNCER_TRANSACTION_MODE") in ("1", "true", "True"):
+        return True
+    if not dsn:
+        return False
+    return ":6543" in dsn or "pooler.supabase.com:6543" in dsn
+
+
+def _conn_kwargs(dsn: Optional[str]) -> dict:
+    """psycopg connection kwargs. Through the transaction pooler a
+    connection isn't pinned to a session, so server-side PREPARED statements
+    (psycopg3's default after a few executions) break — they'd be prepared
+    on one backend and executed on another. prepare_threshold=None disables
+    them. The single-statement transactions we run (incl. create_match's
+    `with conn.transaction()`) are exactly the unit the pooler multiplexes,
+    so they're unaffected. Direct (:5432) connections keep prepared
+    statements for speed."""
+    kwargs: dict = {"row_factory": dict_row}
+    if _is_transaction_pooler(dsn):
+        kwargs["prepare_threshold"] = None
+    return kwargs
+
+
 class SupabaseWriter:
     def __init__(
         self,
@@ -53,6 +81,7 @@ class SupabaseWriter:
             # Pooled mode: the pool owns the DSN + connection config.
             self._pool = pool
             self.dsn: Optional[str] = None
+            self._connect_kwargs: dict = {"row_factory": dict_row}
             return
         dsn = dsn or os.environ.get("DATABASE_URL")
         if not dsn:
@@ -61,6 +90,9 @@ class SupabaseWriter:
             )
         self.dsn = dsn
         self._pool = None
+        # Pooler-safe per-connection config (disables prepared statements on
+        # the transaction pooler; see _conn_kwargs).
+        self._connect_kwargs = _conn_kwargs(dsn)
 
     @classmethod
     def with_pool(
@@ -82,11 +114,17 @@ class SupabaseWriter:
             raise RuntimeError(
                 "DATABASE_URL is not set. Source ~/tablewars/.env first."
             )
+        # Through the transaction pooler the SERVER multiplexes connections,
+        # so a big client pool is both unnecessary and harmful at fleet scale
+        # (100 venues × max_size backends). Cap it small there; direct mode
+        # keeps the caller's sizing.
+        if _is_transaction_pooler(dsn):
+            max_size = min(max_size, 4)
         pool = ConnectionPool(
             dsn,
             min_size=min_size,
             max_size=max_size,
-            kwargs={"row_factory": dict_row},
+            kwargs=_conn_kwargs(dsn),
             open=True,
         )
         return cls(pool=pool)
@@ -101,7 +139,7 @@ class SupabaseWriter:
             with self._pool.connection() as conn:
                 yield conn
         else:
-            with psycopg.connect(self.dsn, row_factory=dict_row) as conn:
+            with psycopg.connect(self.dsn, **self._connect_kwargs) as conn:
                 yield conn
 
     def close(self) -> None:
