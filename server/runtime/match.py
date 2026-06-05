@@ -16,6 +16,8 @@ from datetime import datetime, timezone
 from typing import Optional, Protocol
 
 from .game import Game, Player, InputEvent, ScoreEvent, StateUpdate
+from .cues import Cue, CueEvent
+from .heartbeat import HeartbeatTracker
 from .registry import GameRegistry
 
 
@@ -92,10 +94,15 @@ class MatchManager:
         registry: GameRegistry,
         writer: SupabaseWriterProtocol,
         scheduler: Optional[SchedulerProtocol] = None,
+        heartbeat: Optional[HeartbeatTracker] = None,
     ) -> None:
         self.registry = registry
         self.writer = writer
         self.scheduler = scheduler
+        # One tracker shared across all matches. Each tick sweeps just
+        # the current match. If unset (tests, minimal envs), heartbeat
+        # logic is skipped entirely.
+        self.heartbeat = heartbeat
         self.matches: dict[str, Match] = {}
 
     # === Create ===
@@ -150,6 +157,13 @@ class MatchManager:
         # gets a usable state on first paint without waiting for a tick.
         self.writer.update_match_snapshot(match_id, game.get_state())
 
+        # Seed heartbeat last_seen for every puck so the first sweep
+        # doesn't immediately mark them stale.
+        if self.heartbeat is not None:
+            self.heartbeat.register(
+                match_id, [p.puck_index for p in players]
+            )
+
         if self.scheduler is not None:
             self.scheduler.register(match_id)
         return match
@@ -160,6 +174,9 @@ class MatchManager:
         match = self._must_get(match_id)
         if match.status != "active":
             return StateUpdate(state=match.game.get_state())
+
+        if self.heartbeat is not None:
+            self.heartbeat.ping(match_id, event.puck_index)
 
         update = match.game.on_input(event)
         self._persist_scores(match, update.score_events)
@@ -180,6 +197,21 @@ class MatchManager:
 
         update = match.game.tick()
         self._persist_scores(match, update.score_events)
+
+        # Heartbeat sweep — any puck that hasn't pinged in
+        # STALE_THRESHOLD_S gets a PLAYER_LEFT cue appended to this
+        # update. Exactly once per disconnect; re-pings clear the flag.
+        if self.heartbeat is not None:
+            stale = self.heartbeat.sweep(match_id)
+            for puck_index in sorted(stale):
+                update.cues.append(
+                    CueEvent(
+                        cue=Cue.PLAYER_LEFT,
+                        target=puck_index,
+                        payload={"reason": "heartbeat_timeout"},
+                    )
+                )
+
         # Only persist snapshot on tick if the tick produced score
         # events, fired cues, or finalised the match. Otherwise 10 Hz
         # ticks would spam the matches row with no state change.
@@ -219,6 +251,8 @@ class MatchManager:
         )
         if self.scheduler is not None:
             self.scheduler.unregister(match.id)
+        if self.heartbeat is not None:
+            self.heartbeat.drop_match(match.id)
 
     # === Internals ===
 

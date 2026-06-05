@@ -25,6 +25,7 @@ from .match import Match, MatchManager
 from .inputs import event_from_dict
 from .pairing import PairingManager, PairingError, color_for
 from .scheduler import TickScheduler
+from .heartbeat import HeartbeatTracker, STALE_THRESHOLD_S
 from .cues import (
     Cue,
     CueChannel,
@@ -53,6 +54,8 @@ __all__ = [
     "PairingError",
     "color_for",
     "TickScheduler",
+    "HeartbeatTracker",
+    "STALE_THRESHOLD_S",
     "Cue",
     "CueChannel",
     "CueEvent",

@@ -46,6 +46,7 @@ from runtime import (
     PairingError,
     MatchManager,
     TickScheduler,
+    HeartbeatTracker,
     registry as game_registry,
     event_from_dict,
 )
@@ -84,7 +85,10 @@ def _get_container() -> dict:
     # registered even when DATABASE_URL is unset (e.g. test imports).
     import games  # noqa: F401
     writer = SupabaseWriter()
-    manager = MatchManager(registry=game_registry, writer=writer)
+    heartbeat = HeartbeatTracker()
+    manager = MatchManager(
+        registry=game_registry, writer=writer, heartbeat=heartbeat
+    )
     scheduler = TickScheduler(match_manager=manager)
     manager.scheduler = scheduler
     pairing = PairingManager(match_manager=manager, puck_resolver=writer)
@@ -94,6 +98,7 @@ def _get_container() -> dict:
         "manager": manager,
         "scheduler": scheduler,
         "pairing": pairing,
+        "heartbeat": heartbeat,
     }
     return _container
 
