@@ -196,11 +196,14 @@ class MatchManager:
             return StateUpdate(state=match.game.get_state())
 
         update = match.game.tick()
-        self._persist_scores(match, update.score_events)
 
         # Heartbeat sweep — any puck that hasn't pinged in
         # STALE_THRESHOLD_S gets a PLAYER_LEFT cue appended to this
         # update. Exactly once per disconnect; re-pings clear the flag.
+        # The game then gets a chance to react (force-lock, pass turn,
+        # eliminate) so the match doesn't hang on a silent puck. The
+        # reaction's cues/score_events/state fold into this same update
+        # so one tick both detects and resolves the disconnect.
         if self.heartbeat is not None:
             stale = self.heartbeat.sweep(match_id)
             for puck_index in sorted(stale):
@@ -211,6 +214,21 @@ class MatchManager:
                         payload={"reason": "heartbeat_timeout"},
                     )
                 )
+                reaction = match.game.on_puck_disconnected(puck_index)
+                if reaction is not None:
+                    update.cues.extend(reaction.cues)
+                    update.score_events.extend(reaction.score_events)
+                    # The reaction mutated game state; adopt its fresh
+                    # snapshot so the row the TV reads reflects the
+                    # post-disconnect state, not the pre-sweep tick.
+                    update.state = reaction.state
+                    if reaction.is_final:
+                        update.is_final = True
+
+        # Persist score events after the sweep so a disconnect reaction's
+        # scores (e.g. SpeedPyramid's forced-TIMEOUT round score) land in
+        # the same write path as the tick's own scores.
+        self._persist_scores(match, update.score_events)
 
         # Only persist snapshot on tick if the tick produced score
         # events, fired cues, or finalised the match. Otherwise 10 Hz

@@ -246,6 +246,11 @@ class SpeedPyramid(Game):
         self.locked: dict[int, dict | None] = {
             p.puck_index: None for p in players
         }
+        # Pucks the runtime has told us disconnected. They're force-locked
+        # as TIMEOUT every round so a permanent disconnect never makes a
+        # later round wait out the full timer (the heartbeat sweep only
+        # reports a disconnect once, on the round it happens).
+        self.disconnected: set[int] = set()
         self.finished = False
         # Match-start cue queued for the first state update so the TV
         # gets a beat before any input. Emitted on next on_input/tick.
@@ -288,6 +293,13 @@ class SpeedPyramid(Game):
                 cues.extend(self._end_round_cues())
                 self._advance_round()
 
+        # A live player's lock-in must not be held up waiting on a puck
+        # that already left — settle any known disconnects so the round
+        # can still resolve.
+        se2, c2 = self._settle_disconnected()
+        score_events.extend(se2)
+        cues.extend(c2)
+
         # Flush any cues queued during this update (round_start for the
         # new round, match_end on finalisation) so the snapshot the TV
         # receives contains the full beat list. Without this, match_end
@@ -314,12 +326,28 @@ class SpeedPyramid(Game):
         if self.finished:
             return StateUpdate(state=self.get_state())
 
+        # Settle any known-disconnected pucks first so a permanent
+        # disconnect is force-locked at the top of every round rather
+        # than stalling it until the timer expires.
+        se2, c2 = self._settle_disconnected()
+        score_events.extend(se2)
+        cues.extend(c2)
+        if self.finished:
+            return StateUpdate(
+                state=self.get_state(),
+                cues=cues,
+                score_events=score_events,
+                is_final=True,
+            )
+
         elapsed_ms = int((time.monotonic() - self.round_started_at) * 1000)
         if elapsed_ms < self.current_question.time_limit_ms:
-            # Only emit cues we already queued (e.g. match_start). No
-            # state change means the manager won't write a snapshot
-            # unless cues are non-empty.
-            return StateUpdate(state=self.get_state(), cues=cues)
+            # No timer expiry this tick. Still return whatever cues/score
+            # events the disconnect settle produced (else they're lost
+            # and the manager writes no snapshot for them).
+            return StateUpdate(
+                state=self.get_state(), cues=cues, score_events=score_events
+            )
 
         # Time expired — lock in TIMEOUT for everyone who didn't pick.
         for puck in list(self.scores):
@@ -343,6 +371,63 @@ class SpeedPyramid(Game):
             score_events=score_events,
             is_final=self.finished,
         )
+
+    def on_puck_disconnected(self, puck_index: int) -> StateUpdate | None:
+        """A silent puck would otherwise hang the round forever — the
+        round only advances when every puck has locked in or the round
+        timer elapses, and a disconnected puck never locks. Remember the
+        disconnect and force-lock it as a TIMEOUT (0 points, same as the
+        round-timer path) so this and every later round can resolve.
+        """
+        if self.finished or puck_index not in self.scores:
+            return None
+        if puck_index in self.disconnected:
+            # Already retired — nothing new to do.
+            return None
+        self.disconnected.add(puck_index)
+
+        score_events, cues = self._settle_disconnected()
+        if not score_events and not cues:
+            # Puck had already locked in this round; the disconnect is
+            # remembered for later rounds but changes nothing right now.
+            return None
+        return StateUpdate(
+            state=self.get_state(),
+            cues=cues,
+            score_events=score_events,
+            is_final=self.finished,
+        )
+
+    def _settle_disconnected(self) -> tuple[list[ScoreEvent], list[CueEvent]]:
+        """Force-lock every known-disconnected puck that hasn't committed
+        the current round, advancing rounds as the locks complete them.
+        Idempotent when no disconnected puck is pending. Terminates because
+        rounds are finite and self.finished breaks the loop."""
+        score_events: list[ScoreEvent] = []
+        cues: list[CueEvent] = []
+        if not self.disconnected:
+            return score_events, cues
+        progressed = True
+        while progressed and not self.finished:
+            progressed = False
+            for puck in self.disconnected:
+                if self.locked.get(puck) is not None:
+                    continue
+                evs, lock_cues = self._lock_in(puck, forced_timeout=True)
+                score_events.extend(evs)
+                cues.extend(lock_cues)
+                progressed = True
+                if self._all_locked():
+                    cues.extend(self._end_round_cues())
+                    self._advance_round()
+                    # New round (or finish) — restart the scan so the
+                    # disconnected pucks get re-locked for it.
+                    break
+        # Drain cues _advance_round queued (next round_start / match_end).
+        if self._pending_cues:
+            cues.extend(self._pending_cues)
+            self._pending_cues = []
+        return score_events, cues
 
     def is_over(self) -> bool:
         return self.finished

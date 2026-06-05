@@ -98,6 +98,9 @@ class PlayerState:
     distance_remaining: float = 0.0
     ball_x: float = 0.0
     ball_y: float = 0.0
+    # A disconnected puck is retired for the rest of the match: it stays
+    # "done" on every hole so the round-robin skips it permanently.
+    disconnected: bool = False
 
 
 # ============================================================================
@@ -187,6 +190,48 @@ class PuckGolf(Game):
             self._decay_power(self.player_state[current])
         cues.extend(self._drain_pending())
         return StateUpdate(state=self.get_state(), cues=cues)
+
+    def on_puck_disconnected(self, puck_index: int) -> StateUpdate | None:
+        """Turn-based golf stalls if the puck whose turn it is goes
+        silent — no shot ever commits and the round-robin never moves.
+        Retire the puck: mark it done for this hole and disconnected so
+        future holes skip it too. If it was its turn, pass to the next
+        active puck. If everyone has now left, finalise.
+        """
+        if self.finished or puck_index not in self.player_state:
+            return None
+        st = self.player_state[puck_index]
+        if st.disconnected:
+            return None
+        st.disconnected = True
+        st.hole_done = True
+
+        cues: list[CueEvent] = [
+            CueEvent(
+                cue=Cue.PLAYER_LEFT,
+                target=puck_index,
+                payload={"reason": "heartbeat_timeout"},
+            )
+        ]
+
+        if all(s.disconnected for s in self.player_state.values()):
+            # No one left to play — finalise on whatever strokes stand.
+            self.finished = True
+            finals = self.final_scores()
+            winner = (
+                max(finals.items(), key=lambda kv: kv[1])[0] if finals else None
+            )
+            cues.append(cue_match_end(winner_index=winner))
+            return StateUpdate(state=self.get_state(), cues=cues, is_final=True)
+
+        if self._is_current_turn(puck_index):
+            # Pass the turn off the puck that just left.
+            self._advance_turn()
+            cues.extend(self._drain_pending())
+
+        return StateUpdate(
+            state=self.get_state(), cues=cues, is_final=self.finished
+        )
 
     def is_over(self) -> bool:
         return self.finished
@@ -315,7 +360,10 @@ class PuckGolf(Game):
             return
         # Next hole: reset per-hole state, queue hole_start cue.
         self._reset_hole_state()
+        # First active puck tees off — a retired (disconnected) puck at
+        # index 0 must not be left "current" or the hole would deadlock.
         self.turn_index = 0
+        self._skip_to_active_turn()
         self._pending_cues.append(
             cue_round_start(
                 round_number=self.current_hole.number,
@@ -333,12 +381,24 @@ class PuckGolf(Game):
     def _reset_hole_state(self) -> None:
         hole = self.current_hole
         for state in self.player_state.values():
-            state.hole_done = False
+            # Retired pucks stay done forever; everyone else starts fresh.
+            state.hole_done = state.disconnected
             state.ball_x = 0.0
             state.ball_y = 0.0
             state.distance_remaining = hole.distance
             state.power = 0.0
             state.last_power_update = time.monotonic()
+
+    def _skip_to_active_turn(self) -> None:
+        """Advance turn_index to the first puck not already done with the
+        current hole. Caller guarantees at least one active puck exists
+        (the all-disconnected case finalises the match instead)."""
+        n = len(self.turn_queue)
+        for _ in range(n):
+            puck = self.turn_queue[self.turn_index]
+            if not self.player_state[puck].hole_done:
+                return
+            self.turn_index = (self.turn_index + 1) % n
 
     def _is_current_turn(self, puck_index: int) -> bool:
         return (

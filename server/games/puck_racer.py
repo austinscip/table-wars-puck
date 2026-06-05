@@ -97,6 +97,10 @@ class RacerState:
     boost_until: Optional[float] = None  # seconds since race_start
     finished: bool = False
     finish_time: Optional[float] = None   # seconds since race_start
+    # A disconnected racer is frozen at its current position and out of
+    # contention — it never crosses the line, so it ranks by distance
+    # covered, always behind anyone who actually finished.
+    disconnected: bool = False
 
 
 # ============================================================================
@@ -188,7 +192,7 @@ class PuckRacer(Game):
 
         score_events: list[ScoreEvent] = []
         for racer in self.racers.values():
-            if racer.finished:
+            if racer.finished or racer.disconnected:
                 continue
             self._integrate(racer, race_t)
             if racer.position >= FINISH_DISTANCE and not racer.finished:
@@ -207,14 +211,53 @@ class PuckRacer(Game):
                     )
                 )
 
-        # Race-over conditions.
+        # Race-over conditions. A disconnected racer counts as "done" for
+        # the all-done check — it will never finish, so the race
+        # shouldn't wait on it.
         time_up = race_t >= MAX_RACE_SECONDS
-        all_finished = all(r.finished for r in self.racers.values())
+        all_finished = all(
+            r.finished or r.disconnected for r in self.racers.values()
+        )
         grace_done = (
             self.first_finish_time is not None
             and race_t - self.first_finish_time >= GRACE_SECONDS_AFTER_FIRST_FINISH
         )
         if time_up or all_finished or grace_done:
+            self._finalize(cues, score_events)
+
+        return StateUpdate(
+            state=self.get_state(),
+            cues=cues,
+            score_events=score_events,
+            is_final=self.finished,
+        )
+
+    def on_puck_disconnected(self, puck_index: int) -> StateUpdate | None:
+        """A real-time racer that goes silent would just coast forward on
+        BASE_SPEED forever (its throttle/lane state is frozen at last
+        input) and could even win by default. Freeze it instead: mark it
+        disconnected so integration skips it and it can't finish. If
+        that leaves every racer done, end the race now.
+        """
+        if self.finished:
+            return None
+        racer = self.racers.get(puck_index)
+        if racer is None or racer.finished or racer.disconnected:
+            return None
+        racer.disconnected = True
+        racer.throttle_held = False
+
+        cues: list[CueEvent] = [
+            CueEvent(
+                cue=Cue.PLAYER_ELIMINATED,
+                target=puck_index,
+                payload={"reason": "heartbeat_timeout"},
+            )
+        ]
+        score_events: list[ScoreEvent] = []
+        if all(
+            r.finished or r.disconnected for r in self.racers.values()
+        ):
             self._finalize(cues, score_events)
 
         return StateUpdate(
@@ -268,6 +311,7 @@ class PuckRacer(Game):
                         r.boost_until is not None and r.boost_until > self._race_time
                     ),
                     "finished": r.finished,
+                    "disconnected": r.disconnected,
                     "finish_time_sec": (
                         round(r.finish_time, 2)
                         if r.finish_time is not None

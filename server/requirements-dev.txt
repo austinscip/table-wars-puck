@@ -9,3 +9,8 @@
 # playback, autoplay-blocked SFX, stale TV bundles, etc.
 
 playwright>=1.40.0
+
+# Runtime test suite (tests/). The runtime + games packages are pure
+# stdlib, so these tests need only pytest — no Flask/Supabase install.
+pytest>=8,<10
+

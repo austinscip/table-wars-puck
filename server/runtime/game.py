@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Literal, TYPE_CHECKING
+from typing import Any, Literal, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .cues import CueEvent
@@ -125,6 +125,30 @@ class Game(ABC):
         Default no-op. Override for time-driven games (racing, brawler).
         """
         return StateUpdate(state=self.get_state())
+
+    def on_puck_disconnected(self, puck_index: int) -> Optional[StateUpdate]:
+        """Called by the MatchManager when the heartbeat sweep marks
+        puck_index as stale — the puck stopped talking (battery, Wi-Fi,
+        crash). Detection is shared (HeartbeatTracker); the *reaction* is
+        per-game, so games override this to keep the match moving instead
+        of hanging on a silent puck:
+
+        - SpeedPyramid force-locks the puck as a TIMEOUT so the round can
+          resolve instead of waiting on a lock-in that will never arrive.
+        - PuckGolf passes the turn / retires the puck so the round-robin
+          doesn't stall on a player who left.
+        - PuckRacer and Smash mark the puck eliminated so the win
+          condition can still be reached.
+
+        Default no-op returns None — a game that genuinely doesn't care
+        about disconnects inherits "ignore". When non-None, the returned
+        StateUpdate's cues and score_events are folded into the current
+        tick, its state replaces the snapshot, and is_final can finalise
+        the match (e.g. the last surviving racer). Called exactly once
+        per disconnect transition; a puck that re-pings then dies again
+        triggers a fresh call.
+        """
+        return None
 
     @abstractmethod
     def get_state(self) -> dict[str, Any]:

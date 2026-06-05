@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main, sandbox]
+  pull_request:
+
+jobs:
+  runtime-tests:
+    name: Runtime pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pytest
+        # The runtime + games packages are pure stdlib; the suite needs
+        # only pytest. Keep this lean so the gate stays fast.
+        run: python -m pip install --upgrade pip "pytest>=8,<10"
+
+      - name: Run runtime test suite
+        working-directory: server
+        run: python -m pytest -ra

@@ -36,6 +36,12 @@ class SpeedPyramid(Game):
         # Default no-op. Override for time-driven games.
         return StateUpdate(state=self.get_state())
 
+    def on_puck_disconnected(self, puck_index) -> StateUpdate | None:
+        # Optional. The MatchManager calls this from the heartbeat sweep
+        # when a puck goes stale. Default no-op returns None. Override to
+        # keep the match moving instead of hanging on a silent puck.
+        return None
+
     def get_state(self) -> dict:
         ...
 
@@ -63,6 +69,8 @@ registry.register(SpeedPyramid)
        ┌─────────────────┐
        │     active      │◄─── on_input(event) ──── puck HTTP
        │                 │◄─── tick()         ──── 10 Hz loop
+       │                 │◄─── on_puck_disconnected(i)
+       │                 │        ▲ heartbeat sweep (inside tick)
        └────────┬────────┘
                 │
        is_over() or is_final
@@ -98,6 +106,30 @@ game (`update(puck_id, tilt_x, tilt_y, shake_intensity)` vs
 branch. With `InputEvent`, the dispatcher is `match.game.on_input(event)`
 — the game pulls only the fields it cares about. Adding game N+1 is zero
 runtime changes.
+
+## How disconnects are handled
+
+Detection is shared, reaction is per-game. The `HeartbeatTracker` (one
+shared instance) marks a puck stale when it hasn't pinged in
+`STALE_THRESHOLD_S`. Inside `MatchManager.tick`, the sweep emits a
+`PLAYER_LEFT` cue and then calls `game.on_puck_disconnected(puck_index)`
+exactly once per disconnect transition. The returned `StateUpdate` (cues,
+score_events, fresh state, `is_final`) folds into the same tick, so one
+tick both detects and resolves the disconnect.
+
+Each game keeps the match moving its own way:
+
+| Game | Reaction |
+|---|---|
+| Speed Pyramid | Force-locks the puck as TIMEOUT (0 pts) so the round resolves. Remembers the disconnect in a `disconnected` set and re-locks it at the top of every later round — the heartbeat only reports a disconnect once, so the game owns the persistence. |
+| Puck Golf | Retires the puck (`disconnected` + `hole_done` for every hole) and passes the turn if it was theirs, so the round-robin never stalls. |
+| Puck Racer | Marks the puck `disconnected` — integration skips it, it can't finish, and the race ends when every racer is finished-or-disconnected. |
+| Smash | Eliminates the fighter so "last one standing" can be reached. |
+
+All four finalise the match when the disconnect leaves no one able to
+play. Regression coverage: `server/tests/test_disconnect.py` drives a
+real match through the MatchManager with a heartbeat-driven disconnect
+and asserts the game reacted, not just that a cue fired.
 
 ## ScoreEvent semantics
 
@@ -148,5 +180,8 @@ state-shape stabilises).
   untyped; should become per-game pydantic models.
 - Power-up framework — Track G item 16, scoped for Speed Pyramid
   rework or later.
-- Ghost sweep / heartbeat — Track G item 17. Owns puck disconnects
-  and auto-removes from `match_pucks`.
+- Ghost sweep / heartbeat — Track G item 17. Detection lands via
+  `HeartbeatTracker`; per-game reaction via `on_puck_disconnected`
+  (see "How disconnects are handled"). Still TODO: auto-removing a
+  permanently-gone puck's `match_pucks` row vs. leaving it for the
+  scoreboard.

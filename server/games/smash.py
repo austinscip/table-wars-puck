@@ -236,6 +236,36 @@ class Smash(Game):
             is_final=self.finished,
         )
 
+    def on_puck_disconnected(self, puck_index: int) -> StateUpdate | None:
+        """A silent fighter just stands still as a punching bag and, worse,
+        keeps the match from ending — the win condition is "one fighter
+        left standing", and a frozen-but-not-eliminated puck never gets
+        KO'd off the stage on its own. Eliminate it outright (forfeit its
+        remaining stocks) so the brawl can resolve. If that leaves one
+        fighter, finalise with them as the winner.
+        """
+        if self.finished:
+            return None
+        fighter = self.fighters.get(puck_index)
+        if fighter is None or fighter.eliminated:
+            return None
+        fighter.eliminated = True
+
+        cues: list[CueEvent] = [
+            CueEvent(
+                cue=Cue.PLAYER_ELIMINATED,
+                target=puck_index,
+                payload={"reason": "heartbeat_timeout"},
+            )
+        ]
+        alive = [f for f in self.fighters.values() if not f.eliminated]
+        if len(alive) <= 1 and len(self.fighters) > 1:
+            self._finalize(alive[0] if alive else None, cues)
+
+        return StateUpdate(
+            state=self.get_state(), cues=cues, is_final=self.finished
+        )
+
     def is_over(self) -> bool:
         return self.finished
 
