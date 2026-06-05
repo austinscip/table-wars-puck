@@ -292,7 +292,7 @@ class MatchManager:
         # write — no half-created match.
         game = game_class(players=players, **game_options)
 
-        pucks = [
+        pucks: list[tuple[str, str, Optional[str]]] = [
             (p.puck_uuid, "host" if i == 0 else "sibling", p.name)
             for i, p in enumerate(players)
         ]
@@ -396,7 +396,7 @@ class MatchManager:
             self._finalize(match)
         else:
             self._persist(match)
-        if key is not None:
+        if key is not None and self.idempotency is not None:
             # Store the JSON-able response state for replay (see the get
             # path above). A Redis cache serialises this directly.
             self.idempotency.put(key, update.state)

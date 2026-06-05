@@ -33,7 +33,7 @@ export function ScoreboardScreen({ route }: Props) {
   // live in the scores table with event_type='final'; the runtime
   // guarantees one row per puck via uniq_final_score_per_match_puck.
   useEffect(() => {
-    void (async () => {
+    (async () => {
       const { data } = await supabase
         .from('scores')
         .select(

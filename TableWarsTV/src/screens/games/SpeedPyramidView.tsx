@@ -40,7 +40,7 @@ export function SpeedPyramidView({ snapshot }: { snapshot: SpeedPyramidSnapshot 
                     key={letter}
                     letter={letter}
                     text={q.answers[letter]}
-                    pickedBy={pickedBy(snapshot, letter)}
+                    pickedBy={pickersForLetter(snapshot, letter)}
                   />
                 ))}
               </View>
@@ -80,7 +80,7 @@ export function SpeedPyramidView({ snapshot }: { snapshot: SpeedPyramidSnapshot 
   );
 }
 
-function pickedBy(snapshot: SpeedPyramidSnapshot, letter: string): number[] {
+function pickersForLetter(snapshot: SpeedPyramidSnapshot, letter: string): number[] {
   const out: number[] = [];
   for (const [puck, locked] of Object.entries(snapshot.locked)) {
     if (locked.answer === letter) out.push(Number(puck));

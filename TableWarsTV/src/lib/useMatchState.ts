@@ -86,7 +86,7 @@ export function useMatchState(matchId: string | null): MatchRowState {
       attempt += 1;
       retryTimer = setTimeout(() => {
         retryTimer = null;
-        void connect();
+        connect();
       }, delay);
     };
 
@@ -140,7 +140,7 @@ export function useMatchState(matchId: string | null): MatchRowState {
           if (disposed) return;
           if (status === 'SUBSCRIBED') {
             attempt = 0; // healthy — reset backoff
-            void resync();
+            resync();
           } else if (
             status === 'CHANNEL_ERROR' ||
             status === 'TIMED_OUT' ||
@@ -153,8 +153,8 @@ export function useMatchState(matchId: string | null): MatchRowState {
         });
     };
 
-    void resync();
-    void connect();
+    resync();
+    connect();
 
     return () => {
       disposed = true;

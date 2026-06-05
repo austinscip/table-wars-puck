@@ -43,20 +43,18 @@ export function PuckGolfView({ snapshot }: { snapshot: PuckGolfSnapshot }) {
         {snapshot.players.map((p) => {
           const pct = Math.max(0, Math.min(1, p.ball.y / distance));
           const bottom = pct * FAIRWAY_HEIGHT;
+          // Dynamic (state-dependent) style — extracted to a variable so
+          // it isn't an inline literal in the JSX.
+          const ballStyle = {
+            backgroundColor: colorForPuck(p.puck_index),
+            bottom,
+            borderColor:
+              snapshot.current_turn_puck_index === p.puck_index
+                ? colors.correct
+                : 'transparent',
+          };
           return (
-            <View
-              key={p.puck_index}
-              style={[
-                styles.ball,
-                {
-                  backgroundColor: colorForPuck(p.puck_index),
-                  bottom,
-                  borderColor:
-                    snapshot.current_turn_puck_index === p.puck_index
-                      ? colors.correct
-                      : 'transparent',
-                },
-              ]}>
+            <View key={p.puck_index} style={[styles.ball, ballStyle]}>
               <Text style={styles.ballLabel}>{p.puck_index}</Text>
             </View>
           );

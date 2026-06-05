@@ -1,13 +1,16 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 import { colors } from '../theme';
 
 // Three dots that pulse opacity in sequence — the "ready, waiting" cue
 // shared with the existing Speed Pyramid title screen.
 export function BreathingDots() {
-  const opacities = [useRef(new Animated.Value(0.2)).current,
-                     useRef(new Animated.Value(0.2)).current,
-                     useRef(new Animated.Value(0.2)).current];
+  // Stable Animated.Value refs; memo the array so the effect's dep is
+  // stable across renders.
+  const o0 = useRef(new Animated.Value(0.2)).current;
+  const o1 = useRef(new Animated.Value(0.2)).current;
+  const o2 = useRef(new Animated.Value(0.2)).current;
+  const opacities = useMemo(() => [o0, o1, o2], [o0, o1, o2]);
 
   useEffect(() => {
     const loops = opacities.map((opacity, i) => {

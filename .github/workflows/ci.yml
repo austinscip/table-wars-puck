@@ -30,7 +30,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install "pytest>=8,<10" "PyJWT>=2.8.0" \
-            "fakeredis>=2.20.0" "flask>=3.0.0" "psycopg[binary]>=3.1.0"
+            "fakeredis>=2.20.0" "flask>=3.0.0" "psycopg[binary]>=3.1.0" mypy
+
+      - name: Type-check runtime + games (mypy)
+        working-directory: server
+        run: python -m mypy
 
       - name: Run runtime test suite
         working-directory: server
@@ -56,6 +60,10 @@ jobs:
       - name: Typecheck
         working-directory: TableWarsTV
         run: npx tsc --noEmit
+
+      - name: Lint
+        working-directory: TableWarsTV
+        run: npx eslint .
 
       - name: Unit tests (lib)
         working-directory: TableWarsTV

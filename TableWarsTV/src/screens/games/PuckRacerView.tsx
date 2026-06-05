@@ -35,17 +35,14 @@ export function PuckRacerView({ snapshot }: { snapshot: PuckRacerSnapshot }) {
               .map((r) => {
                 const pct = Math.min(1, r.position / snapshot.finish_distance);
                 const bottom = pct * TRACK_HEIGHT;
+                // Dynamic style extracted to a variable (not an inline literal).
+                const carStyle = {
+                  backgroundColor: colorForPuck(r.puck_index),
+                  bottom,
+                  borderColor: r.boost_active ? colors.correct : 'transparent',
+                };
                 return (
-                  <View
-                    key={r.puck_index}
-                    style={[
-                      styles.car,
-                      {
-                        backgroundColor: colorForPuck(r.puck_index),
-                        bottom,
-                        borderColor: r.boost_active ? colors.correct : 'transparent',
-                      },
-                    ]}>
+                  <View key={r.puck_index} style={[styles.car, carStyle]}>
                     <Text style={styles.carLabel}>{r.puck_index}</Text>
                   </View>
                 );

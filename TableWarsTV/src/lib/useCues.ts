@@ -3,7 +3,7 @@ import { CueDispatcher, type CueEvent } from './cues';
 
 // Owns a CueDispatcher per match. When useMatchState pushes a new
 // snapshot, this hook extracts snapshot.cues and runs them through the
-// dispatcher's monotonic-ts watermark. The dispatcher dedupes cues
+// dispatcher's monotonic-seq watermark. The dispatcher dedupes cues
 // already fired in earlier snapshots so subscribers only see fresh
 // emissions.
 //
@@ -16,8 +16,9 @@ export function useCues(
   matchId: string | null,
 ): CueDispatcher {
   // Keep one dispatcher per matchId. When matchId changes (new match
-  // pairs), reset so cue timestamps from the prior match don't carry
-  // over.
+  // pairs), recreate it so a fresh seq watermark starts from scratch — the
+  // matchId dep is intentional even though the factory doesn't read it.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const dispatcher = useMemo(() => new CueDispatcher(), [matchId]);
 
   const seenMatchId = useRef<string | null>(null);
