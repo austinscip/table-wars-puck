@@ -121,9 +121,14 @@ class PairingManager:
         self,
         match_manager: MatchManager,
         puck_resolver: PuckResolverProtocol,
+        token_authority=None,
     ) -> None:
         self.match_manager = match_manager
         self.resolver = puck_resolver
+        # Optional MatchTokenAuthority. When set, every puck that enters a
+        # lobby gets a signed token in its pair response, which the match
+        # input endpoint then requires. When None, pairing is open (dev).
+        self.token_authority = token_authority
         # (location_id, table_number) -> Lobby. Many simultaneous tables.
         self._lobbies: dict[LobbyKey, Lobby] = {}
         # puck_index -> the lobby key it belongs to, so dial/confirm/
@@ -187,6 +192,7 @@ class PairingManager:
                 "color_name": color_name,
                 "game_slug": lobby.game_slug,
                 "table_number": lobby.table_number,
+                "token": self._maybe_token(lobby, puck_index),
                 "players": lobby.snapshot()["players"],
             }
 
@@ -372,8 +378,20 @@ class PairingManager:
             "color_name": puck.color_name,
             "game_slug": lobby.game_slug,
             "table_number": lobby.table_number,
+            "token": self._maybe_token(lobby, puck.puck_index),
             "players": lobby.snapshot()["players"],
         }
+
+    def _maybe_token(self, lobby: Lobby, puck_index: int) -> Optional[str]:
+        """Mint a puck-input token if an authority is configured, else
+        None (open dev flow)."""
+        if self.token_authority is None:
+            return None
+        return self.token_authority.issue(
+            location_id=lobby.location_id,
+            puck_index=puck_index,
+            table_number=lobby.table_number,
+        )
 
     def _resolve_lobby(self, puck_index: int) -> Lobby:
         """Find the lobby a puck belongs to via the locator. Raises if the

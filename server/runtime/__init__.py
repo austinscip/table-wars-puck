@@ -27,7 +27,15 @@ from .pairing import PairingManager, PairingError, color_for
 from .scheduler import TickScheduler
 from .heartbeat import HeartbeatTracker, STALE_THRESHOLD_S
 from .idempotency import IdempotencyCache
-from .log import configure_logging, get_logger, init_sentry
+from .auth import MatchTokenAuthority, AuthError
+from .ratelimit import RateLimiter
+from .log import (
+    configure_logging,
+    get_logger,
+    init_sentry,
+    harden_secrets,
+    redact,
+)
 from .cues import (
     Cue,
     CueChannel,
@@ -59,9 +67,14 @@ __all__ = [
     "HeartbeatTracker",
     "STALE_THRESHOLD_S",
     "IdempotencyCache",
+    "MatchTokenAuthority",
+    "AuthError",
+    "RateLimiter",
     "configure_logging",
     "get_logger",
     "init_sentry",
+    "harden_secrets",
+    "redact",
     "Cue",
     "CueChannel",
     "CueEvent",

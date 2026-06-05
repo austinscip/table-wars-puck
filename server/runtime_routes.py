@@ -48,12 +48,19 @@ from runtime import (
     TickScheduler,
     HeartbeatTracker,
     IdempotencyCache,
+    MatchTokenAuthority,
+    AuthError,
+    RateLimiter,
     configure_logging,
+    get_logger,
     init_sentry,
+    harden_secrets,
     registry as game_registry,
     event_from_dict,
 )
 from supabase_client import SupabaseWriter
+
+_log = get_logger("routes")
 
 runtime_bp = Blueprint("runtime", __name__, url_prefix="/api/runtime")
 
@@ -99,6 +106,22 @@ def _get_container() -> dict:
     writer = SupabaseWriter.with_pool()
     heartbeat = HeartbeatTracker()
     idempotency = IdempotencyCache()
+
+    # Puck auth: enforced only when PUCK_JWT_SECRET is configured. In prod
+    # set it to require signed tokens on every input; unset in dev for the
+    # open flow. We log loudly which mode we're in so a misconfigured prod
+    # box doesn't silently run unauthenticated.
+    secret = os.environ.get("PUCK_JWT_SECRET")
+    if secret:
+        token_authority = MatchTokenAuthority(secret)
+        _log.info("puck auth ENABLED (PUCK_JWT_SECRET set)")
+    else:
+        token_authority = None
+        _log.warning(
+            "puck auth DISABLED — set PUCK_JWT_SECRET to require signed "
+            "puck tokens on match input"
+        )
+
     manager = MatchManager(
         registry=game_registry,
         writer=writer,
@@ -107,7 +130,11 @@ def _get_container() -> dict:
     )
     scheduler = TickScheduler(match_manager=manager)
     manager.scheduler = scheduler
-    pairing = PairingManager(match_manager=manager, puck_resolver=writer)
+    pairing = PairingManager(
+        match_manager=manager,
+        puck_resolver=writer,
+        token_authority=token_authority,
+    )
     scheduler.start()
     _container = {
         "writer": writer,
@@ -116,7 +143,14 @@ def _get_container() -> dict:
         "pairing": pairing,
         "heartbeat": heartbeat,
         "idempotency": idempotency,
+        "token_authority": token_authority,
+        "rate_limiter": RateLimiter(),
     }
+    # Every secret has now been read into a long-lived object (the pool's
+    # conninfo, the authority's key, database.py's module constant). If
+    # SCRUB_SECRETS_AFTER_BOOT is set, drop them from os.environ so a
+    # later in-process compromise can't read them back.
+    harden_secrets()
     return _container
 
 
@@ -235,6 +269,13 @@ def pair_lobby_state():
 # === Match endpoints ===
 
 
+def _bearer_token() -> Optional[str]:
+    header = request.headers.get("Authorization", "")
+    if header.startswith("Bearer "):
+        return header[len("Bearer ") :].strip()
+    return None
+
+
 @runtime_bp.route("/match/<match_id>/input", methods=["POST"])
 def match_input(match_id: str):
     body = request.get_json(silent=True) or {}
@@ -242,6 +283,36 @@ def match_input(match_id: str):
         puck_index = int(body["puck_index"])
     except (KeyError, ValueError, TypeError):
         return _bad("puck_index required")
+
+    container = _get_container()
+    mm: MatchManager = container["manager"]
+    match = mm.matches.get(match_id)
+    if match is None:
+        return _bad("Match not found", 404)
+
+    # Auth: when an authority is configured, require a token scoped to
+    # this match's location and the submitting puck_index. A token issued
+    # for puck 3 can't drive puck 5; a token for another venue can't drive
+    # this one.
+    authority = container.get("token_authority")
+    if authority is not None:
+        token = _bearer_token() or body.get("token")
+        try:
+            authority.verify(
+                token or "",
+                location_id=match.location_id,
+                puck_index=puck_index,
+            )
+        except AuthError as e:
+            return _bad(f"unauthorized: {e}", 401)
+
+    # Rate limit per (match, puck) AFTER auth so an unauthenticated flood
+    # can't drain a real puck's bucket. A misbehaving but paired puck that
+    # exceeds the cap gets 429s until its bucket refills.
+    limiter: Optional[RateLimiter] = container.get("rate_limiter")
+    if limiter is not None and not limiter.allow(f"{match_id}:{puck_index}"):
+        return _bad("rate limited", 429)
+
     event = event_from_dict(puck_index, body)
     # Idempotency key: prefer the standard header, fall back to an
     # event_id in the body so firmware that can't set headers still gets
@@ -249,14 +320,11 @@ def match_input(match_id: str):
     event_id = request.headers.get("Idempotency-Key") or body.get("event_id")
     if event_id is not None:
         event_id = str(event_id)
-    mm: MatchManager = _get_container()["manager"]
     try:
         update = mm.on_input(match_id, event, event_id=event_id)
     except KeyError:
         return _bad("Match not found", 404)
-    match = mm.matches.get(match_id)
-    status = match.status if match else "unknown"
-    return jsonify({"state": update.state, "status": status})
+    return jsonify({"state": update.state, "status": match.status})
 
 
 @runtime_bp.route("/match/<match_id>/state", methods=["GET"])
