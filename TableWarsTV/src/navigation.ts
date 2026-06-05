@@ -14,6 +14,7 @@ export type ScoreboardPlayer = {
 
 export type RootStackParamList = {
   Title: undefined;
+  Attract: undefined;
   Pair: {
     code: string;
     progress: (number | null)[];

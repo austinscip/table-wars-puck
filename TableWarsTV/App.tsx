@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'react-native';
 import { TitleScreen } from './src/screens/TitleScreen';
+import { AttractScreen } from './src/screens/AttractScreen';
 import { PairScreen } from './src/screens/PairScreen';
 import { LobbyScreen } from './src/screens/LobbyScreen';
 import { ScoreboardScreen } from './src/screens/ScoreboardScreen';
@@ -38,6 +39,7 @@ export default function App() {
           initialRouteName="Title"
           screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
           <Stack.Screen name="Title" component={TitleScreen} />
+          <Stack.Screen name="Attract" component={AttractScreen} />
           <Stack.Screen
             name="Pair"
             component={PairScreen}
