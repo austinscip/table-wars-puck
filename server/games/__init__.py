@@ -12,5 +12,6 @@ To add a new game:
 from . import speed_pyramid  # noqa: F401
 from . import puck_golf  # noqa: F401
 from . import puck_racer  # noqa: F401
+from . import smash  # noqa: F401
 
-__all__ = ["speed_pyramid", "puck_golf", "puck_racer"]
+__all__ = ["speed_pyramid", "puck_golf", "puck_racer", "smash"]
