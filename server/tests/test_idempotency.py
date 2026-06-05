@@ -65,9 +65,11 @@ def test_duplicate_input_is_not_double_counted():
     score_total_after_first = game.scores[1]
 
     # The firmware retries the SAME event_id (network hiccup). It must be
-    # a no-op: no second lock, no second score event, no score change.
+    # a no-op: no second lock, no second score event, no score change. The
+    # replay returns the same state (reconstructed from the cache), not
+    # necessarily the same object.
     second = mgr.on_input(match.id, ev, event_id="e1")
-    assert second is first, "retry should replay the cached response object"
+    assert second.state == first.state, "retry should replay the cached state"
 
     mp1 = writer.match_pucks[(match.id, "uuid-1")]
     puck1_round_scores = [

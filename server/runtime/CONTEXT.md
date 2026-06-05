@@ -158,17 +158,31 @@ closes the idempotency check-then-act window. It is also the exact seam
 the multi-worker migration needs: swap `threading.RLock` for a Redis lock
 keyed by `match:{id}` and the call sites don't change.
 
-When we shard across workers (multi-bar, multi-process), the swap is:
+**Redis coordination primitives exist and are tested** (`redis_backends.py`):
+- `RedisIdempotencyCache` is a drop-in for `IdempotencyCache`
+  (`MatchManager(idempotency=RedisIdempotencyCache(client))`) — JSON
+  values + TTL, dedupes retried inputs across workers.
+- `RedisLock.lock_for(match_id)` is a correct distributed mutex (SET NX PX
+  + compare-and-delete release via WATCH/MULTI, so it never drops another
+  holder's lock; TTL frees a crashed holder). Same context-manager shape
+  as the in-process `_lock_for`.
+Both are exercised against fakeredis in CI and verified against real redis.
 
-1. Move `MatchManager.matches` to Redis with `match:{id}` keys.
-2. Replace the in-process `_lock_for` RLock with a Redis lock (e.g.
-   `redis-py` `Lock`) of the same per-match granularity. The
-   `IdempotencyCache` likewise moves to Redis `SETNX` + TTL on the same
-   key. Both are already isolated behind small interfaces.
-3. Everything else (game class, Supabase writer, the connection pool)
-   stays. `SupabaseWriter.with_pool` already shares one pool per process.
+**The remaining blocker for true multi-worker is shared match STATE, not
+coordination.** `MatchManager.matches` holds live `Game` objects in one
+worker's memory. A request that load-balances to a different worker can't
+process that match — the Game isn't there. Closing this needs the game
+state itself serialised to Redis and reconstructed per request, which is a
+deeper change to every `Game` (a `to_dict`/`from_dict` round-trip, or
+rebuilding from the snapshot + an event log). Until then:
 
-No premature distribution — only the seams are in place.
+1. Run a single runtime worker (gunicorn `--workers 1`), OR pin a match's
+   traffic to its owning worker (sticky routing by match_id).
+2. The Redis lock + idempotency above are ready to wire the moment state
+   is shared; the call sites already go through the injected seams.
+
+No premature distribution — the coordination seams are in place and
+tested; the state-sharing work is scoped but deliberately not yet done.
 
 ## Multi-lobby (one server, many tables)
 

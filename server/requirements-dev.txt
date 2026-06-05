@@ -13,4 +13,12 @@ playwright>=1.40.0
 # Runtime test suite (tests/). The runtime + games packages are pure
 # stdlib, so these tests need only pytest — no Flask/Supabase install.
 pytest>=8,<10
+# Auth + Redis-backend tests.
+PyJWT>=2.8.0
+fakeredis>=2.20.0
+# RLS suite (test_rls.py) drives a real Postgres via psycopg; the
+# adversarial-auth + route tests need Flask. (Both already in
+# requirements.txt for the app; listed here so a test-only install works.)
+flask>=3.0.0
+psycopg[binary]>=3.1.0
 

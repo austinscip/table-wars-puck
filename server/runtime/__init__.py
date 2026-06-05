@@ -29,6 +29,7 @@ from .heartbeat import HeartbeatTracker, STALE_THRESHOLD_S
 from .idempotency import IdempotencyCache
 from .auth import MatchTokenAuthority, TvMatchTokenAuthority, AuthError
 from .ratelimit import RateLimiter
+from .redis_backends import RedisIdempotencyCache, RedisLock
 from .log import (
     configure_logging,
     get_logger,
@@ -71,6 +72,8 @@ __all__ = [
     "TvMatchTokenAuthority",
     "AuthError",
     "RateLimiter",
+    "RedisIdempotencyCache",
+    "RedisLock",
     "configure_logging",
     "get_logger",
     "init_sentry",

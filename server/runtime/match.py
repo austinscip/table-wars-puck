@@ -268,7 +268,13 @@ class MatchManager:
             key = f"{match_id}:{event.puck_index}:{event_id}"
             cached = self.idempotency.get(key)
             if cached is not None:
-                return cached
+                # Replay the original response. We cache the JSON-able
+                # state dict (not the StateUpdate object) so the same code
+                # path works whether the cache is in-process or Redis-
+                # backed. The side effects (scores, snapshot) already
+                # happened on the first arrival; a replay re-emits no cues
+                # or score events.
+                return StateUpdate(state=cached)
 
         if match.status != "active":
             return StateUpdate(state=match.game.get_state())
@@ -288,7 +294,9 @@ class MatchManager:
         if update.is_final or match.game.is_over():
             self._finalize(match)
         if key is not None:
-            self.idempotency.put(key, update)
+            # Store the JSON-able response state for replay (see the get
+            # path above). A Redis cache serialises this directly.
+            self.idempotency.put(key, update.state)
         return update
 
     def tick(self, match_id: str) -> StateUpdate:

@@ -12,6 +12,7 @@ Pillow>=10.2.0
 psycopg[binary]>=3.1.0  # PostgreSQL adapter (psycopg3 - Python 3.14 compatible)
 psycopg_pool>=3.2.0  # Connection pool for SupabaseWriter.with_pool() (runtime)
 PyJWT>=2.8.0  # Puck input auth — signed (match-scoped) capability tokens
+redis>=5.0.0  # Optional: Redis-backed idempotency + distributed lock (multi-worker)
 
 # Sprint 1E: Production deployment dependencies
 python-dotenv==1.0.0  # Environment variable management
