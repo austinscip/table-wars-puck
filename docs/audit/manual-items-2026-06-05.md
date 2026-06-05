@@ -18,7 +18,8 @@ runs in safe/open mode when they're absent.
 | `SCRUB_SECRETS_AFTER_BOOT=1` | Drops DATABASE_URL/secrets from env after boot (item 16). | Safe in this codebase (verified). |
 | `SENTRY_DSN` (+ `pip install sentry-sdk`) | Error reporting (item 8). | Optional `ENVIRONMENT`, `SENTRY_TRACES_SAMPLE_RATE`. |
 | `LOCATION_ID` | Pins the Flask box to one venue. | Already used; confirm it's set per venue. |
-| `REDIS_URL` | Only if/when you wire the Redis backends (multi-worker). | See §4. |
+| `REDIS_URL` | Enables the durable match store + restart recovery + shared idempotency. | Set it + run Redis; a redeploy/crash mid-match then recovers active matches on boot. |
+| `CORS_ALLOWED_ORIGINS` | Locks CORS to the portal/TV origins (comma-separated). | Defaults to `*` (dev). Set before launch. |
 
 ## 2. Supabase — apply migrations + enable Realtime
 
@@ -74,10 +75,11 @@ have.
 ## 4. Deploy / ops
 
 - **Single runtime worker** (gunicorn `--workers 1`) OR sticky-by-match
-  routing until match state is shared (see `server/runtime/CONTEXT.md` —
-  the Redis lock/idempotency seams are ready but match *state* still lives
-  in one worker). Don't run N workers naively or matches will 404 on the
-  wrong worker.
+  routing. Match state is now serializable + restart-recoverable (set
+  `REDIS_URL`), but the per-match *ownership claim* that makes N concurrent
+  workers safe isn't wired yet (see `server/runtime/CONTEXT.md`). Don't run
+  N workers naively — until ownership lands, two could tick the same match.
+  Restart-recovery (redeploy/crash) is covered.
 - **Redis**: run one if you enable `RedisIdempotencyCache`/`RedisLock`.
 - **TLS at the venue edge**: puck auth raises the floor but tokens ride
   plain HTTP today; terminate TLS so they can't be sniffed/replayed.
@@ -92,10 +94,15 @@ listed so nothing's lost:
 
 - **Question dedup** — needs per-puck `trivia_answers` history plumbed into
   the runtime SpeedPyramid load path.
-- **Multi-worker match state** — serialise `Game` state to Redis +
-  reconstruct (the real blocker; coordination seams are ready).
+- **Multi-worker ownership claim** — the last step: wrap per-request match
+  processing in the (already-built, tested) `RedisLock` so exactly one
+  worker owns a match. Serialization + store + recovery + lock are all
+  done. Largely YAGNI given per-venue boxes; do it only if one box must run
+  multiple runtime workers.
 - **Legacy `app.py` logging sweep** — convert remaining `print()`s.
-- **CORS/CSRF audit** on Flask for the portal origin.
-- **Deployment story** — Dockerfile audit, production WSGI unit, health
-  check endpoint.
+- **CSRF** on Flask state-changing routes (CORS is now configurable; CSRF
+  tokens on the portal forms remain).
+- **Deployment story** — Dockerfile audit, production WSGI unit (gunicorn
+  `--workers 1` for the runtime). `/api/runtime/health` is now available
+  for the load-balancer probe.
 - **CI for the portal/legacy app**, mypy, ESLint-in-CI.
