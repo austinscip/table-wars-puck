@@ -9,6 +9,7 @@ import { colors, fonts } from '../theme';
 import { useMatchState } from '../lib/useMatchState';
 import { useCues } from '../lib/useCues';
 import { CueFlashOverlay } from '../components/CueFlashOverlay';
+import { JoinQrBadge } from '../components/JoinQrBadge';
 import { GameViewDispatcher } from './games';
 import type { RootStackParamList } from '../navigation';
 
@@ -44,6 +45,10 @@ export function GameScreen({ route }: Props) {
         <GameViewDispatcher snapshot={match.snapshot} />
       )}
       <CueFlashOverlay dispatcher={dispatcher} />
+      {/* Scan-to-join badge while the match is live (ADR 0005). */}
+      {match.status === 'active' || match.status === 'lobby' ? (
+        <JoinQrBadge matchId={matchId} />
+      ) : null}
     </View>
   );
 }

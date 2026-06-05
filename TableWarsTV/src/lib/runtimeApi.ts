@@ -91,3 +91,12 @@ export function fetchLobbyState(): Promise<LobbyStateWire | null> {
 export function fetchMatchState(matchId: string): Promise<MatchStateWire | null> {
   return getJSON<MatchStateWire>(`/api/runtime/match/${matchId}/state`);
 }
+
+// QR the TV shows so a patron's phone can open the bind page for this match
+// (ADR 0005). `qr_code` is a base64 PNG data URI usable directly as an
+// <Image> source; `play_url` is the text fallback. Null when unreachable.
+export type MatchQrWire = { play_url: string; qr_code: string | null };
+
+export function fetchMatchQr(matchId: string): Promise<MatchQrWire | null> {
+  return getJSON<MatchQrWire>(`/api/runtime/match/${matchId}/qr`);
+}

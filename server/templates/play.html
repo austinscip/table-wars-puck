@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Table Wars — Join</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+<style>
+  /* Brand tokens (CONTEXT.md): HQ Trivia / Jackbox direction. */
+  :root {
+    --bg: #0A0E1A; --primary: #3B82F6; --accent: #EC4899;
+    --correct: #FBBF24; --wrong: #EF4444; --text: #F8FAFC;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+    font-family: Inter, system-ui, sans-serif;
+    padding: 24px 18px calc(24px + env(safe-area-inset-bottom));
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-family: Anton, Inter, sans-serif; font-weight: 400; font-size: 34px;
+       letter-spacing: .5px; margin: 4px 0 2px; text-transform: uppercase; }
+  .sub { color: #93a0b4; font-size: 14px; margin-bottom: 22px; }
+  label { display: block; font-size: 13px; font-weight: 600; color: #c4cdda;
+          margin: 14px 0 6px; }
+  input {
+    width: 100%; padding: 14px 14px; border-radius: 12px; border: 1px solid #26304a;
+    background: #131a2c; color: var(--text); font-size: 17px; font-family: inherit;
+  }
+  input:focus { outline: none; border-color: var(--primary); }
+  .seats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+  .seat {
+    display: flex; align-items: center; gap: 10px; padding: 14px;
+    border-radius: 12px; border: 2px solid #26304a; background: #131a2c;
+    color: var(--text); font-size: 16px; font-weight: 600; cursor: pointer;
+    text-align: left; font-family: inherit;
+  }
+  .seat:disabled { opacity: .45; }
+  .seat .dot { width: 18px; height: 18px; border-radius: 50%; flex: 0 0 auto;
+               box-shadow: 0 0 0 2px rgba(255,255,255,.12) inset; }
+  .seat.sel { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59,130,246,.3); }
+  .note { font-size: 12px; color: #7c889c; margin-top: 6px; }
+  .msg { margin-top: 18px; padding: 14px; border-radius: 12px; font-weight: 600;
+         display: none; }
+  .msg.ok { background: rgba(251,191,36,.14); color: var(--correct); display: block; }
+  .msg.err { background: rgba(239,68,68,.14); color: var(--wrong); display: block; }
+  .spin { color: #7c889c; font-size: 14px; }
+</style>
+</head>
+<body>
+  <h1>You're in.</h1>
+  <div class="sub">Pick your puck to put your name on the board.</div>
+
+  <label for="name">Your name</label>
+  <input id="name" maxlength="20" autocomplete="given-name" placeholder="e.g. Mae" />
+
+  <label>Which puck are you holding?</label>
+  <div id="seats" class="seats"><div class="spin">Loading the table…</div></div>
+
+  <label for="phone">Phone <span style="font-weight:400;color:#7c889c">(optional — to find your stats next time)</span></label>
+  <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(optional)" />
+  <div class="note">We never show your number. It just lets you reclaim your scores on a new phone.</div>
+
+  <div id="msg" class="msg"></div>
+
+<script>
+  // Injected by the Flask /play/<match_id> route.
+  const MATCH_ID = {{ match_id | tojson }};
+  const TOKEN_KEY = "tw_player_token";
+  const NAME_KEY = "tw_display_name";
+
+  const $ = (id) => document.getElementById(id);
+  const seatsEl = $("seats"), msgEl = $("msg"), nameEl = $("name"), phoneEl = $("phone");
+  let selected = null, busy = false;
+
+  // Prefill the name from a prior visit.
+  try { const n = localStorage.getItem(NAME_KEY); if (n) nameEl.value = n; } catch (e) {}
+
+  function show(kind, text) { msgEl.className = "msg " + kind; msgEl.textContent = text; }
+
+  async function loadSeats() {
+    try {
+      const res = await fetch(`/api/runtime/match/${MATCH_ID}/state`, { headers: { Accept: "application/json" } });
+      if (!res.ok) throw new Error("state " + res.status);
+      const data = await res.json();
+      const players = (data.players || []);
+      if (data.status === "finished" || data.status === "abandoned") {
+        seatsEl.innerHTML = "";
+        show("err", "This game has ended. Catch the next round!");
+        return;
+      }
+      if (!players.length) { seatsEl.innerHTML = '<div class="spin">No pucks at this table yet.</div>'; return; }
+      seatsEl.innerHTML = "";
+      players.forEach((p) => {
+        const b = document.createElement("button");
+        b.className = "seat"; b.type = "button";
+        b.innerHTML = `<span class="dot" style="background:${p.color || '#888'}"></span><span>${p.name || ('Puck ' + p.puck_index)}</span>`;
+        b.onclick = () => selectSeat(p.puck_index, b);
+        seatsEl.appendChild(b);
+      });
+    } catch (e) {
+      seatsEl.innerHTML = "";
+      show("err", "Couldn't reach the table. Make sure you're on the bar's Wi-Fi.");
+    }
+  }
+
+  function selectSeat(puckIndex, btn) {
+    if (busy) return;
+    selected = puckIndex;
+    [...seatsEl.children].forEach((c) => c.classList.remove("sel"));
+    btn.classList.add("sel");
+    bind();
+  }
+
+  async function bind() {
+    if (selected == null || busy) return;
+    busy = true;
+    const display_name = (nameEl.value || "").trim();
+    const phone = (phoneEl.value || "").trim();
+    let token = null;
+    try { token = localStorage.getItem(TOKEN_KEY); } catch (e) {}
+    const body = { puck_index: selected };
+    if (token) body.token = token;
+    if (display_name) body.display_name = display_name;
+    if (phone) body.phone = phone;
+    show("ok", "Locking you in…");
+    try {
+      const res = await fetch(`/api/runtime/match/${MATCH_ID}/bind`, {
+        method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 409) show("err", "This game already ended — you'll make the next one.");
+        else show("err", data.error || "Couldn't lock you in. Try another puck.");
+        busy = false; return;
+      }
+      // Persist identity for the next visit.
+      try {
+        if (data.token) localStorage.setItem(TOKEN_KEY, data.token);
+        if (display_name) localStorage.setItem(NAME_KEY, display_name);
+      } catch (e) {}
+      show("ok", `You're locked in${display_name ? ", " + display_name : ""}! Watch the TV.`);
+    } catch (e) {
+      show("err", "Network hiccup — tap your puck again.");
+      busy = false;
+    }
+  }
+
+  loadSeats();
+</script>
+</body>
+</html>

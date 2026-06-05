@@ -39,7 +39,7 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, render_template, request
 
 from runtime import (
     PairingManager,
@@ -115,6 +115,14 @@ def init_runtime_routes(app, socketio) -> None:
     global _socketio
     _socketio = socketio
     app.register_blueprint(runtime_bp)
+
+    @app.route("/play/<match_id>")
+    def play_page(match_id):  # noqa: ANN001,ANN202
+        """The patron's phone bind page (ADR 0005). Reached by scanning the
+        TV's QR. Self-contained: it reads the match's seats and binds via
+        /api/runtime/match/<id>/bind, persisting the player token on the
+        device for return visits."""
+        return render_template("play.html", match_id=match_id)
 
     from flask_socketio import join_room, leave_room, emit
 
@@ -558,6 +566,45 @@ def match_bind(match_id: str):
             "token": token if minted else None,
         }
     )
+
+
+@runtime_bp.route("/match/<match_id>/qr", methods=["GET"])
+def match_qr(match_id: str):
+    """QR (PNG data URI) the TV displays so a patron's phone can open the
+    bind page for this match (ADR 0005). It encodes the /play/<id> URL on
+    THIS host — the box the TV reached, which a phone on the same venue LAN
+    can also reach — so the TV renders it as a plain image, no native QR
+    dependency. `play_url` is returned too as a text fallback (and so the TV
+    can show it if QR rendering isn't available)."""
+    mm: MatchManager = _get_container()["manager"]
+    if mm.matches.get(match_id) is None:
+        return _bad("Match not found", 404)
+    play_url = f"{request.host_url}play/{match_id}"
+    qr_code = _qr_data_uri(play_url)
+    return jsonify({"play_url": play_url, "qr_code": qr_code})
+
+
+def _qr_data_uri(url: str) -> Optional[str]:
+    """A base64 PNG data URI for `url`, or None when the QR lib isn't
+    available (the caller falls back to showing the URL as text)."""
+    try:
+        import base64
+        from io import BytesIO
+
+        import qrcode
+
+        qr = qrcode.QRCode(version=1, box_size=10, border=2)
+        qr.add_data(url)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        return "data:image/png;base64," + base64.b64encode(
+            buf.getvalue()
+        ).decode("ascii")
+    except Exception:  # noqa: BLE001
+        _log.exception("QR generation failed for %s", url)
+        return None
 
 
 @runtime_bp.route("/match/<match_id>/state", methods=["GET"])
