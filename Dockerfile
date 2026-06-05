@@ -50,12 +50,21 @@ USER tablewars
 # Expose port
 EXPOSE 5001
 
-# Health check
+# Health check — uses the DB-free /api/runtime/health (cheaper + truer
+# liveness than /api/stats, which queries the database).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5001/api/stats').read()" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5001/api/runtime/health').read()" || exit 1
 
-# Run with gunicorn for production
-# Using geventwebsocket.gunicorn.workers.GeventWebSocketWorker for WebSocket support
+# Run with gunicorn for production.
+# GeventWebSocketWorker provides WebSocket support for the legacy
+# Socket.IO flows.
+#
+# --workers 1 is REQUIRED, not a default: the multi-game runtime keeps
+# authoritative match state in process memory and runs the tick loop in
+# this worker. Until per-match ownership claiming lands (see
+# server/runtime/CONTEXT.md), additional workers would double-tick matches.
+# Scale by running one container per venue (LOCATION_ID), not by adding
+# workers. HTTP concurrency within a venue is handled by the gevent worker.
 CMD ["gunicorn", \
      "--worker-class", "geventwebsocket.gunicorn.workers.GeventWebSocketWorker", \
      "--workers", "1", \

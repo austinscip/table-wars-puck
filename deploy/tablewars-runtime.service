@@ -1,0 +1,39 @@
+# systemd unit for a bare-metal venue box (no Docker).
+#
+# Install:
+#   sudo cp deploy/tablewars-runtime.service /etc/systemd/system/
+#   sudo cp deploy/tablewars.env.example /etc/tablewars/tablewars.env  # then edit
+#   sudo systemctl daemon-reload && sudo systemctl enable --now tablewars-runtime
+#
+# --workers 1 is required (authoritative in-process match state + tick
+# loop). Scale per venue, not per worker. See server/runtime/CONTEXT.md.
+
+[Unit]
+Description=Table Wars runtime (Flask + multi-game runtime)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tablewars
+Group=tablewars
+WorkingDirectory=/opt/tablewars/server
+EnvironmentFile=/etc/tablewars/tablewars.env
+ExecStart=/opt/tablewars/venv/bin/gunicorn \
+  --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker \
+  --workers 1 \
+  --bind 0.0.0.0:5001 \
+  --timeout 120 \
+  --access-logfile - \
+  --error-logfile - \
+  --log-level info \
+  app:app
+Restart=on-failure
+RestartSec=3
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
