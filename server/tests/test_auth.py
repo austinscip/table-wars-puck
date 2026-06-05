@@ -11,7 +11,14 @@ from __future__ import annotations
 import jwt
 import pytest
 
-from runtime import AuthError, MatchTokenAuthority, MatchManager, PairingManager, registry
+from runtime import (
+    AuthError,
+    MatchTokenAuthority,
+    TvMatchTokenAuthority,
+    MatchManager,
+    PairingManager,
+    registry,
+)
 
 from conftest import FakeWriter
 
@@ -129,3 +136,21 @@ def test_pairing_token_is_none_without_authority():
     pm = _pairing(token_authority=None)
     resp = pm.request_code(1, "speed_pyramid", "loc-1", 1)
     assert resp["token"] is None
+
+
+# --- TV match token ---
+
+
+def test_tv_token_carries_anon_role_and_match_claims():
+    auth = TvMatchTokenAuthority(SECRET)
+    token = auth.issue(match_id="m-123", location_id="loc-9")  # real-time exp
+    claims = jwt.decode(token, SECRET, algorithms=["HS256"])
+    assert claims["role"] == "anon"
+    assert claims["match_id"] == "m-123"
+    assert claims["location_id"] == "loc-9"
+    assert claims["exp"] > claims["iat"]
+
+
+def test_tv_token_requires_secret():
+    with pytest.raises(ValueError):
+        TvMatchTokenAuthority("")

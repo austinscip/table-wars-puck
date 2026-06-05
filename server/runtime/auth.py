@@ -138,3 +138,49 @@ class MatchTokenAuthority:
             issued_at=int(claims["iat"]),
             expires_at=exp,
         )
+
+
+# Default TV-token lifetime — long enough to watch a match through, short
+# enough to expire by close.
+DEFAULT_TV_TTL_SECONDS = 2 * 60 * 60
+
+
+class TvMatchTokenAuthority:
+    """Mints the token a TV presents to Supabase Realtime so anon RLS lets
+    it read exactly one match (see migration
+    20260605000000_anon_match_token_rls.sql).
+
+    Signed with the SUPABASE JWT SECRET (not the puck secret) because
+    Supabase must accept it. The `role: anon` claim keeps the session on
+    the anon role; the `match_id` / `location_id` claims are what the
+    anon RLS policies key off. The TV passes the token via
+    `supabase.realtime.setAuth(token)`.
+
+    The minting endpoint runs on the venue's own Flask box (pinned to one
+    LOCATION_ID), so a request can never obtain a token for another
+    venue's match — the location is the server's, not the caller's.
+    """
+
+    def __init__(
+        self, supabase_jwt_secret: str, ttl_seconds: int = DEFAULT_TV_TTL_SECONDS
+    ) -> None:
+        if not supabase_jwt_secret:
+            raise ValueError("TvMatchTokenAuthority requires the Supabase JWT secret")
+        self._secret = supabase_jwt_secret
+        self._ttl = ttl_seconds
+
+    def issue(
+        self,
+        match_id: str,
+        location_id: str,
+        now: Optional[int] = None,
+    ) -> str:
+        iat = int(now if now is not None else time.time())
+        claims = {
+            "role": "anon",
+            "match_id": str(match_id),
+            "location_id": str(location_id),
+            "iat": iat,
+            "exp": iat + self._ttl,
+        }
+        return jwt.encode(claims, self._secret, algorithm=_ALGORITHM)

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './supabase';
+import { fetchTvToken } from './runtimeApi';
 
 // Subscribes to a match's row in Supabase and surfaces the JSONB
 // snapshot column plus the status field. The runtime writes the
@@ -85,12 +86,22 @@ export function useMatchState(matchId: string | null): MatchRowState {
       attempt += 1;
       retryTimer = setTimeout(() => {
         retryTimer = null;
-        connect();
+        void connect();
       }, delay);
     };
 
-    const connect = () => {
+    const connect = async () => {
       if (disposed) return;
+      // Scope this TV's anon Realtime session to just this match. The
+      // venue Flask box mints a token the anon RLS policies accept; without
+      // it, RLS exposes zero rows in prod. Best-effort: if minting isn't
+      // configured (dev) the call returns null and we proceed on the plain
+      // anon key.
+      const minted = await fetchTvToken(matchId);
+      if (disposed) return;
+      if (minted?.token) {
+        supabase.realtime.setAuth(minted.token);
+      }
       if (channel) {
         supabase.removeChannel(channel);
         channel = null;
@@ -143,7 +154,7 @@ export function useMatchState(matchId: string | null): MatchRowState {
     };
 
     void resync();
-    connect();
+    void connect();
 
     return () => {
       disposed = true;

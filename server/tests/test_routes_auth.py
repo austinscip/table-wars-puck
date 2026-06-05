@@ -15,6 +15,7 @@ from runtime import (
     IdempotencyCache,
     MatchManager,
     MatchTokenAuthority,
+    TvMatchTokenAuthority,
     registry,
 )
 
@@ -124,3 +125,51 @@ def test_token_in_body_also_accepted():
         json={"puck_index": 1, "tilt_y": 30, "button_tap": True, "token": token},
     )
     assert r.status_code == 200
+
+
+# --- TV match-token mint endpoint ---
+
+
+def _setup_with_tv(tv_authority, location_id):
+    writer = FakeWriter()
+    mm = MatchManager(
+        registry=registry, writer=writer, idempotency=IdempotencyCache()
+    )
+    match = mm.create(
+        location_id=location_id,
+        game_slug="speed_pyramid",
+        table_number=1,
+        players=make_players(2),
+        questions=_fixture(),
+    )
+    container = {
+        "manager": mm,
+        "token_authority": None,
+        "tv_token_authority": tv_authority,
+    }
+    return _client_with(container), match
+
+
+def test_tv_token_minted_for_own_location(monkeypatch):
+    monkeypatch.setenv("LOCATION_ID", "loc-here")
+    tv = TvMatchTokenAuthority(SECRET)
+    client, match = _setup_with_tv(tv, location_id="loc-here")
+    r = client.post(f"/api/runtime/match/{match.id}/tv-token")
+    assert r.status_code == 200
+    assert r.get_json()["token"]
+
+
+def test_tv_token_refused_for_other_location(monkeypatch):
+    monkeypatch.setenv("LOCATION_ID", "loc-here")
+    tv = TvMatchTokenAuthority(SECRET)
+    # Match belongs to a DIFFERENT location than the server's LOCATION_ID.
+    client, match = _setup_with_tv(tv, location_id="loc-elsewhere")
+    r = client.post(f"/api/runtime/match/{match.id}/tv-token")
+    assert r.status_code == 403
+
+
+def test_tv_token_503_when_unconfigured(monkeypatch):
+    monkeypatch.setenv("LOCATION_ID", "loc-here")
+    client, match = _setup_with_tv(None, location_id="loc-here")
+    r = client.post(f"/api/runtime/match/{match.id}/tv-token")
+    assert r.status_code == 503

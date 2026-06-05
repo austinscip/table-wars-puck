@@ -27,7 +27,7 @@ from .pairing import PairingManager, PairingError, color_for
 from .scheduler import TickScheduler
 from .heartbeat import HeartbeatTracker, STALE_THRESHOLD_S
 from .idempotency import IdempotencyCache
-from .auth import MatchTokenAuthority, AuthError
+from .auth import MatchTokenAuthority, TvMatchTokenAuthority, AuthError
 from .ratelimit import RateLimiter
 from .log import (
     configure_logging,
@@ -68,6 +68,7 @@ __all__ = [
     "STALE_THRESHOLD_S",
     "IdempotencyCache",
     "MatchTokenAuthority",
+    "TvMatchTokenAuthority",
     "AuthError",
     "RateLimiter",
     "configure_logging",

@@ -49,6 +49,7 @@ from runtime import (
     HeartbeatTracker,
     IdempotencyCache,
     MatchTokenAuthority,
+    TvMatchTokenAuthority,
     AuthError,
     RateLimiter,
     configure_logging,
@@ -122,6 +123,14 @@ def _get_container() -> dict:
             "puck tokens on match input"
         )
 
+    # TV match-token authority, signed with the Supabase JWT secret so
+    # Realtime accepts it. Lets the TV read exactly one match under the
+    # anon RLS policies. Enabled when SUPABASE_JWT_SECRET is set.
+    supabase_secret = os.environ.get("SUPABASE_JWT_SECRET")
+    tv_token_authority = (
+        TvMatchTokenAuthority(supabase_secret) if supabase_secret else None
+    )
+
     manager = MatchManager(
         registry=game_registry,
         writer=writer,
@@ -144,6 +153,7 @@ def _get_container() -> dict:
         "heartbeat": heartbeat,
         "idempotency": idempotency,
         "token_authority": token_authority,
+        "tv_token_authority": tv_token_authority,
         "rate_limiter": RateLimiter(),
     }
     # Every secret has now been read into a long-lived object (the pool's
@@ -325,6 +335,30 @@ def match_input(match_id: str):
     except KeyError:
         return _bad("Match not found", 404)
     return jsonify({"state": update.state, "status": match.status})
+
+
+@runtime_bp.route("/match/<match_id>/tv-token", methods=["POST"])
+def match_tv_token(match_id: str):
+    """Mint the Supabase Realtime token the TV uses to read this match
+    under the anon RLS policies. The location is the SERVER's
+    (LOCATION_ID), never the caller's, and we verify the match belongs to
+    it — so this endpoint can only ever produce a token for a match at
+    this venue, even though it's unauthenticated within the venue LAN."""
+    container = _get_container()
+    authority: Optional[TvMatchTokenAuthority] = container.get(
+        "tv_token_authority"
+    )
+    if authority is None:
+        return _bad("TV auth not configured (set SUPABASE_JWT_SECRET)", 503)
+    mm: MatchManager = container["manager"]
+    match = mm.matches.get(match_id)
+    if match is None:
+        return _bad("Match not found", 404)
+    if match.location_id != _location_id():
+        # A match at another venue — refuse, don't mint a cross-venue token.
+        return _bad("Match not at this location", 403)
+    token = authority.issue(match_id=match_id, location_id=match.location_id)
+    return jsonify({"token": token, "match_id": match_id})
 
 
 @runtime_bp.route("/match/<match_id>/state", methods=["GET"])

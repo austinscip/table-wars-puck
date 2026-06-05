@@ -52,6 +52,38 @@ async function getJSON<T>(path: string): Promise<T | null> {
   }
 }
 
+async function postJSON<T>(path: string): Promise<T | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) {
+      if (__DEV__) {
+        console.warn(`[runtimeApi] POST ${path} returned ${res.status}`);
+      }
+      return null;
+    }
+    return (await res.json()) as T;
+  } catch (e) {
+    if (__DEV__) {
+      console.warn(`[runtimeApi] POST ${path} failed`, e);
+    }
+    return null;
+  }
+}
+
+// Mint the Supabase Realtime token that scopes this TV's anon session to a
+// single match (see the anon-match-token RLS migration). The venue's own
+// Flask box issues it for matches at this location only. Returns null when
+// TV auth isn't configured (dev/open mode) — the caller then relies on
+// whatever the plain anon key can read.
+export function fetchTvToken(
+  matchId: string,
+): Promise<{ token: string; match_id: string } | null> {
+  return postJSON(`/api/runtime/match/${matchId}/tv-token`);
+}
+
 export function fetchLobbyState(): Promise<LobbyStateWire | null> {
   return getJSON<LobbyStateWire>('/api/runtime/pair/lobby-state');
 }
