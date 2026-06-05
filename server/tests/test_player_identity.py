@@ -282,3 +282,42 @@ def test_phone_recovery_roundtrip(dsn):
     assert w.find_player_id_by_phone_hash(ph) is None  # not linked yet
     w.attach_phone_hash(pid, ph)
     assert w.find_player_id_by_phone_hash(ph) == pid  # now recoverable
+
+
+def test_end_to_end_resolve_bind_final_attributes_to_player(dsn):
+    # The full identity flow through the real writer + trigger: a patron's
+    # token resolves to a player, binds to their seat, and their final score
+    # attributes to them in player_leaderboards.
+    from runtime import PlayerIdentity
+
+    w = _writer(dsn)
+    ident = PlayerIdentity()
+    pid, _ = w.resolve_or_create_player(
+        ident.hash_token("e2e-token"), display_name="E2E"
+    )
+
+    m = "5a000000-0000-0000-0000-0000000000e2"
+    mp = "8a000000-0000-0000-0000-0000000000e2"
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "insert into matches(id,location_id,game_id,table_number,status) "
+                "select %s,%s,g.id,1,'active' from games g where g.slug='speed_pyramid'",
+                (m, LOC_P),
+            )
+            cur.execute(
+                "insert into match_pucks(id,match_id,puck_id,role) values "
+                "(%s,%s,'6a000000-0000-0000-0000-000000000001','host')",
+                (mp, m),
+            )
+
+    w.bind_player_to_match_puck(mp, pid, display_name="E2E")
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        _final(conn, m, mp, 1234)
+        with conn.cursor() as cur:
+            cur.execute(
+                "select high_score from player_leaderboards "
+                "where player_id=%s and period='all_time'",
+                (pid,),
+            )
+            assert cur.fetchone()[0] == 1234

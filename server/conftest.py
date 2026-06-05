@@ -48,6 +48,12 @@ class FakeWriter:
         self.abandoned: list[tuple[str, datetime]] = []
         self._match_seq = 0
         self._puck_seq = 0
+        # Player identity (ADR 0005).
+        self.players_by_token: dict[str, str] = {}
+        self.player_names: dict[str, str | None] = {}
+        self.bindings: list[tuple[str, str, str | None]] = []
+        self.phone_hashes: dict[str, str] = {}
+        self._player_seq = 0
 
     def create_match(
         self,
@@ -108,6 +114,32 @@ class FakeWriter:
 
     def update_match_snapshot(self, match_id: str, snapshot: dict) -> None:
         self.snapshots.append((match_id, snapshot))
+
+    # === Players (ADR 0005) ===
+
+    def resolve_or_create_player(self, token_hash, display_name=None):
+        pid = self.players_by_token.get(token_hash)
+        if pid is not None:
+            if display_name and self.player_names.get(pid) is None:
+                self.player_names[pid] = display_name
+            return pid, False
+        self._player_seq += 1
+        pid = f"player-{self._player_seq}"
+        self.players_by_token[token_hash] = pid
+        self.player_names[pid] = display_name
+        return pid, True
+
+    def bind_player_to_match_puck(self, match_puck_id, player_id, display_name=None):
+        self.bindings.append((match_puck_id, player_id, display_name))
+
+    def find_player_id_by_phone_hash(self, phone_hash):
+        for pid, ph in self.phone_hashes.items():
+            if ph == phone_hash:
+                return pid
+        return None
+
+    def attach_phone_hash(self, player_id, phone_hash):
+        self.phone_hashes[player_id] = phone_hash
 
     # === Test conveniences ===
 

@@ -46,6 +46,7 @@ from runtime import (
     PairingError,
     MatchManager,
     PersistenceQueue,
+    PlayerIdentity,
     TickScheduler,
     HeartbeatTracker,
     IdempotencyCache,
@@ -249,6 +250,11 @@ def _get_container() -> dict:
         "token_authority": token_authority,
         "tv_token_authority": tv_token_authority,
         "rate_limiter": RateLimiter(),
+        # Player identity (ADR 0005). Phone recovery is enabled only when
+        # PLAYER_PHONE_PEPPER is set (otherwise phone hashing returns None).
+        "player_identity": PlayerIdentity(
+            os.environ.get("PLAYER_PHONE_PEPPER")
+        ),
     }
     # Every secret has now been read into a long-lived object (the pool's
     # conninfo, the authority's key, database.py's module constant). If
@@ -479,6 +485,79 @@ def match_tv_token(match_id: str):
         return _bad("Match not at this location", 403)
     token = authority.issue(match_id=match_id, location_id=match.location_id)
     return jsonify({"token": token, "match_id": match_id})
+
+
+@runtime_bp.route("/match/<match_id>/bind", methods=["POST"])
+def match_bind(match_id: str):
+    """Bind a Player to a Match Participant — the binding moment (ADR 0005).
+
+    The patron's phone (having scanned the TV's QR) POSTs their existing
+    player token + the puck_index (seat) they're in. With no token we mint a
+    new one and return it for the device to persist. Bindable only while the
+    match is live (lobby/active); once it's over the final score has already
+    written, so a late bind wouldn't count toward the leaderboard.
+
+    The token is the patron's capability — possession identifies the Player —
+    so within the venue LAN this needs no other auth (consistent with the
+    other runtime endpoints). We never echo a token the caller already sent;
+    only a freshly-minted one is returned."""
+    body = request.get_json(silent=True) or {}
+    try:
+        puck_index = int(body["puck_index"])
+    except (KeyError, ValueError, TypeError):
+        return _bad("puck_index required")
+
+    container = _get_container()
+    mm: MatchManager = container["manager"]
+    match = mm.matches.get(match_id)
+    if match is None:
+        return _bad("Match not found", 404)
+    if match.location_id != _location_id():
+        return _bad("Match not at this location", 403)
+    if match.status not in ("lobby", "active"):
+        return _bad("Match already over; cannot bind a player", 409)
+    mp_id = match.match_puck_ids.get(puck_index)
+    if mp_id is None:
+        return _bad("puck_index not in this match", 404)
+
+    writer = container["writer"]
+    ident: PlayerIdentity = container["player_identity"]
+
+    provided = (body.get("token") or "").strip() or None
+    display_name = (body.get("display_name") or "").strip() or None
+    token = provided or ident.new_token()
+    minted = provided is None
+
+    try:
+        player_id, created = writer.resolve_or_create_player(
+            ident.hash_token(token), display_name=display_name
+        )
+        writer.bind_player_to_match_puck(
+            mp_id, player_id, display_name=display_name
+        )
+        phone = (body.get("phone") or "").strip()
+        phone_linked = False
+        if phone and ident.phone_recovery_enabled:
+            phone_hash = ident.hash_phone(phone)
+            if phone_hash:
+                writer.attach_phone_hash(player_id, phone_hash)
+                phone_linked = True
+    except Exception:  # noqa: BLE001
+        _log.exception(
+            "player bind failed (match=%s puck=%s)", match_id, puck_index
+        )
+        return _bad("bind failed", 503)
+
+    return jsonify(
+        {
+            "player_id": player_id,
+            "puck_index": puck_index,
+            "created": created,
+            "phone_linked": phone_linked,
+            # Only return a token we minted — never echo the caller's own.
+            "token": token if minted else None,
+        }
+    )
 
 
 @runtime_bp.route("/match/<match_id>/state", methods=["GET"])
