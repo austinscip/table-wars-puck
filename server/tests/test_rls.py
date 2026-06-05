@@ -14,70 +14,11 @@ Skips cleanly when local Postgres binaries (initdb/pg_ctl) aren't present.
 
 from __future__ import annotations
 
-import glob
-import os
-import shutil
-import subprocess
-import tempfile
-import time
-
 import psycopg
 import pytest
 
+from pg_harness import bootstrap_migrated_db, pg_available
 
-_MIGRATIONS_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "supabase", "migrations")
-)
-
-_PG_BIN_DIRS = [
-    "/opt/homebrew/opt/postgresql@14/bin",
-    "/usr/local/opt/postgresql@14/bin",
-    "/opt/homebrew/bin",
-    "/usr/local/bin",
-]
-# Debian/Ubuntu (CI) install Postgres binaries here, not on PATH.
-_PG_BIN_GLOBS = ["/usr/lib/postgresql/*/bin", "/usr/pgsql-*/bin"]
-
-
-def _find(binary: str) -> str | None:
-    for d in _PG_BIN_DIRS:
-        cand = os.path.join(d, binary)
-        if os.path.exists(cand):
-            return cand
-    for pattern in _PG_BIN_GLOBS:
-        for d in sorted(glob.glob(pattern), reverse=True):
-            cand = os.path.join(d, binary)
-            if os.path.exists(cand):
-                return cand
-    return shutil.which(binary)
-
-
-# --- Supabase-auth shim: just enough for the real migrations + RLS to run.
-_SHIM_SQL = """
-create schema if not exists auth;
-create table if not exists auth.users (
-  id uuid primary key default gen_random_uuid(),
-  email text,
-  raw_user_meta_data jsonb default '{}'::jsonb
-);
-create or replace function auth.uid() returns uuid language sql stable as $$
-  select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
-$$;
-create or replace function auth.jwt() returns jsonb language sql stable as $$
-  select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb
-$$;
-do $$ begin
-  if not exists (select from pg_roles where rolname='anon') then create role anon nologin; end if;
-  if not exists (select from pg_roles where rolname='authenticated') then create role authenticated nologin; end if;
-  if not exists (select from pg_roles where rolname='service_role') then create role service_role nologin bypassrls; end if;
-end $$;
-grant usage on schema public, auth to anon, authenticated, service_role;
-"""
-
-_GRANTS_SQL = """
-grant select, insert, update, delete on all tables in schema public to authenticated, service_role;
-grant select on all tables in schema public to anon;
-"""
 
 # Fixed UUIDs for two isolated orgs + their users/matches.
 ORG_A = "22222222-0000-0000-0000-00000000000a"
@@ -122,63 +63,10 @@ insert into lobbies(location_id,table_number,snapshot) values
 
 @pytest.fixture(scope="module")
 def rls_dsn():
-    initdb, pg_ctl = _find("initdb"), _find("pg_ctl")
-    if not initdb or not pg_ctl:
+    if not pg_available():
         pytest.skip("local Postgres (initdb/pg_ctl) not available")
-
-    root = tempfile.mkdtemp(prefix="tw_rls_test_")
-    data = os.path.join(root, "data")
-    sock = os.path.join(root, "sock")
-    os.makedirs(sock)
-    port = "5601"
-    try:
-        subprocess.run(
-            [initdb, "-D", data, "-U", "postgres", "--auth=trust"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            [pg_ctl, "-D", data, "-o",
-             f"-k {sock} -p {port} -c listen_addresses=''",
-             "-l", os.path.join(root, "log"), "start"],
-            check=True,
-            capture_output=True,
-        )
-
-        admin_dsn = f"host={sock} port={port} user=postgres dbname=postgres"
-        deadline = time.time() + 15
-        while True:
-            try:
-                with psycopg.connect(admin_dsn, autocommit=True) as c:
-                    c.execute("select 1")
-                break
-            except Exception:
-                if time.time() > deadline:
-                    raise
-                time.sleep(0.25)
-
-        with psycopg.connect(admin_dsn, autocommit=True) as c:
-            c.execute("create database tw")
-
-        db_dsn = f"host={sock} port={port} user=postgres dbname=tw"
-        migrations = sorted(
-            os.path.join(_MIGRATIONS_DIR, f)
-            for f in os.listdir(_MIGRATIONS_DIR)
-            if f.endswith(".sql")
-        )
-        with psycopg.connect(db_dsn, autocommit=True) as c:
-            c.execute(_SHIM_SQL)
-            for path in migrations:
-                with open(path) as fh:
-                    c.execute(fh.read())
-            c.execute(_GRANTS_SQL)
-            c.execute(_SEED_SQL)
-
-        yield db_dsn
-    finally:
-        subprocess.run([pg_ctl, "-D", data, "stop", "-m", "immediate"],
-                       capture_output=True)
-        shutil.rmtree(root, ignore_errors=True)
+    with bootstrap_migrated_db(extra_sql=_SEED_SQL, port="5601") as dsn:
+        yield dsn
 
 
 def _count_as(dsn, table, *, role, sub=None, claims=None, where=""):
