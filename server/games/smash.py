@@ -123,6 +123,7 @@ class Smash(Game):
     min_players = 2
     max_players = 4
     input_schema = ("tilt_x", "tilt_y", "shake", "button_tap")
+    serializable = True
 
     def __init__(self, players: list[Player], **_options: Any) -> None:
         self.players = players
@@ -268,6 +269,54 @@ class Smash(Game):
         return StateUpdate(
             state=self.get_state(), cues=cues, is_final=self.finished
         )
+
+    # === Durability ===
+
+    def serialize(self) -> dict[str, Any]:
+        # match_time is tick_count-based (absolute); no clock conversion.
+        return {
+            "tick_count": self.tick_count,
+            "finished": self.finished,
+            "winner_index": self.winner_index,
+            "fighters": {
+                str(i): {
+                    "x": f.x, "y": f.y,
+                    "damage_pct": f.damage_pct,
+                    "stocks": f.stocks,
+                    "facing_x": f.facing_x, "facing_y": f.facing_y,
+                    "move_vx": f.move_vx, "move_vy": f.move_vy,
+                    "knockback_vx": f.knockback_vx, "knockback_vy": f.knockback_vy,
+                    "special_ready_at": f.special_ready_at,
+                    "kos_landed": f.kos_landed,
+                    "eliminated": f.eliminated,
+                    "last_hit_by": f.last_hit_by,
+                }
+                for i, f in self.fighters.items()
+            },
+        }
+
+    @classmethod
+    def deserialize(cls, players: list[Player], data: dict[str, Any]) -> "Smash":
+        game = cls(players)
+        game._pending_cues = []
+        game.tick_count = data["tick_count"]
+        game.finished = data["finished"]
+        game.winner_index = data["winner_index"]
+        for key, fd in data["fighters"].items():
+            f = game.fighters.get(int(key))
+            if f is None:
+                continue
+            f.x, f.y = fd["x"], fd["y"]
+            f.damage_pct = fd["damage_pct"]
+            f.stocks = fd["stocks"]
+            f.facing_x, f.facing_y = fd["facing_x"], fd["facing_y"]
+            f.move_vx, f.move_vy = fd["move_vx"], fd["move_vy"]
+            f.knockback_vx, f.knockback_vy = fd["knockback_vx"], fd["knockback_vy"]
+            f.special_ready_at = fd["special_ready_at"]
+            f.kos_landed = fd["kos_landed"]
+            f.eliminated = fd["eliminated"]
+            f.last_hit_by = fd["last_hit_by"]
+        return game
 
     def is_over(self) -> bool:
         return self.finished

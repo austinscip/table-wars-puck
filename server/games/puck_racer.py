@@ -117,6 +117,7 @@ class PuckRacer(Game):
     min_players = 2
     max_players = 8
     input_schema = ("tilt_x", "shake", "button_hold")
+    serializable = True
 
     def __init__(self, players: list[Player], **_options: Any) -> None:
         self.players = players
@@ -269,6 +270,54 @@ class PuckRacer(Game):
             score_events=score_events,
             is_final=self.finished,
         )
+
+    # === Durability ===
+
+    def serialize(self) -> dict[str, Any]:
+        # Race time is tick_count-based (absolute), so no clock conversion.
+        return {
+            "tick_count": self.tick_count,
+            "first_finish_time": self.first_finish_time,
+            "finished": self.finished,
+            "warning_fired": self.warning_fired,
+            "racers": {
+                str(i): {
+                    "lane": r.lane,
+                    "position": r.position,
+                    "speed": r.speed,
+                    "throttle_held": r.throttle_held,
+                    "boosts_remaining": r.boosts_remaining,
+                    "boost_until": r.boost_until,
+                    "finished": r.finished,
+                    "finish_time": r.finish_time,
+                    "disconnected": r.disconnected,
+                }
+                for i, r in self.racers.items()
+            },
+        }
+
+    @classmethod
+    def deserialize(cls, players: list[Player], data: dict[str, Any]) -> "PuckRacer":
+        game = cls(players)
+        game._pending_cues = []  # don't replay match_start on restore
+        game.tick_count = data["tick_count"]
+        game.first_finish_time = data["first_finish_time"]
+        game.finished = data["finished"]
+        game.warning_fired = data["warning_fired"]
+        for key, rd in data["racers"].items():
+            r = game.racers.get(int(key))
+            if r is None:
+                continue
+            r.lane = rd["lane"]
+            r.position = rd["position"]
+            r.speed = rd["speed"]
+            r.throttle_held = rd["throttle_held"]
+            r.boosts_remaining = rd["boosts_remaining"]
+            r.boost_until = rd["boost_until"]
+            r.finished = rd["finished"]
+            r.finish_time = rd["finish_time"]
+            r.disconnected = rd["disconnected"]
+        return game
 
     def is_over(self) -> bool:
         return self.finished

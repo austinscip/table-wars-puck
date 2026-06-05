@@ -116,6 +116,7 @@ class PuckGolf(Game):
     min_players = 1
     max_players = 8
     input_schema = ("tilt_x", "tilt_y", "shake", "button_tap")
+    serializable = True
 
     def __init__(
         self,
@@ -234,6 +235,68 @@ class PuckGolf(Game):
         return StateUpdate(
             state=self.get_state(), cues=cues, is_final=self.finished
         )
+
+    # === Durability ===
+
+    def serialize(self) -> dict[str, Any]:
+        now = time.monotonic()
+        return {
+            "course": [
+                {
+                    "number": h.number,
+                    "distance": h.distance,
+                    "par": h.par,
+                    "hole_radius": h.hole_radius,
+                }
+                for h in self.course
+            ],
+            "hole_index": self.hole_index,
+            "turn_queue": list(self.turn_queue),
+            "turn_index": self.turn_index,
+            "finished": self.finished,
+            "player_state": {
+                str(i): {
+                    "aim_x": s.aim_x,
+                    "aim_y": s.aim_y,
+                    "power": s.power,
+                    # monotonic -> elapsed offset, re-based on restore
+                    "power_elapsed_s": now - s.last_power_update,
+                    "holes_strokes": list(s.holes_strokes),
+                    "hole_done": s.hole_done,
+                    "distance_remaining": s.distance_remaining,
+                    "ball_x": s.ball_x,
+                    "ball_y": s.ball_y,
+                    "disconnected": s.disconnected,
+                }
+                for i, s in self.player_state.items()
+            },
+        }
+
+    @classmethod
+    def deserialize(
+        cls, players: list[Player], data: dict[str, Any]
+    ) -> "PuckGolf":
+        course = [Hole(**hd) for hd in data["course"]]
+        game = cls(players, course=course)
+        game._pending_cues = []
+        game.hole_index = data["hole_index"]
+        game.turn_queue = [int(x) for x in data["turn_queue"]]
+        game.turn_index = data["turn_index"]
+        game.finished = data["finished"]
+        now = time.monotonic()
+        for key, sd in data["player_state"].items():
+            s = game.player_state.get(int(key))
+            if s is None:
+                continue
+            s.aim_x, s.aim_y = sd["aim_x"], sd["aim_y"]
+            s.power = sd["power"]
+            s.last_power_update = now - sd["power_elapsed_s"]
+            s.holes_strokes = list(sd["holes_strokes"])
+            s.hole_done = sd["hole_done"]
+            s.distance_remaining = sd["distance_remaining"]
+            s.ball_x, s.ball_y = sd["ball_x"], sd["ball_y"]
+            s.disconnected = sd["disconnected"]
+        return game
 
     def is_over(self) -> bool:
         return self.finished

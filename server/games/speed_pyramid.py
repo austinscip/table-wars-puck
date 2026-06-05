@@ -216,6 +216,7 @@ class SpeedPyramid(Game):
     min_players = 1
     max_players = 8
     input_schema = ("tilt_x", "tilt_y", "button_tap")
+    serializable = True
 
     def __init__(
         self,
@@ -428,6 +429,56 @@ class SpeedPyramid(Game):
             cues.extend(self._pending_cues)
             self._pending_cues = []
         return score_events, cues
+
+    # === Durability ===
+
+    def serialize(self) -> dict[str, Any]:
+        # round_started_at is monotonic — persist it as an elapsed offset
+        # and re-base on restore (monotonic doesn't survive a restart).
+        round_elapsed_ms = (
+            0
+            if self.finished
+            else int((time.monotonic() - self.round_started_at) * 1000)
+        )
+        return {
+            "questions": [
+                {
+                    "id": q.id,
+                    "setup": q.setup,
+                    "question": q.question,
+                    "answers": q.answers,
+                    "correct": q.correct,
+                    "category": q.category,
+                    "time_limit_ms": q.time_limit_ms,
+                }
+                for q in self.questions
+            ],
+            "scores": {str(k): v for k, v in self.scores.items()},
+            "round_index": self.round_index,
+            "round_elapsed_ms": round_elapsed_ms,
+            "selected": {str(k): v for k, v in self.selected.items()},
+            "locked": {str(k): v for k, v in self.locked.items()},
+            "disconnected": sorted(self.disconnected),
+            "finished": self.finished,
+        }
+
+    @classmethod
+    def deserialize(
+        cls, players: list[Player], data: dict[str, Any]
+    ) -> "SpeedPyramid":
+        questions = [Question(**qd) for qd in data["questions"]]
+        game = cls(players, questions=questions)
+        game._pending_cues = []  # don't replay match_start/round_start
+        game.scores = {int(k): v for k, v in data["scores"].items()}
+        game.round_index = data["round_index"]
+        game.selected = {int(k): v for k, v in data["selected"].items()}
+        game.locked = {int(k): v for k, v in data["locked"].items()}
+        game.disconnected = set(data["disconnected"])
+        game.finished = data["finished"]
+        game.round_started_at = (
+            time.monotonic() - data["round_elapsed_ms"] / 1000.0
+        )
+        return game
 
     def is_over(self) -> bool:
         return self.finished

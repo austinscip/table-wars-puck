@@ -106,7 +106,28 @@ def _get_container() -> dict:
     # when psycopg_pool isn't installed.
     writer = SupabaseWriter.with_pool()
     heartbeat = HeartbeatTracker()
-    idempotency = IdempotencyCache()
+
+    # Durable match store + shared idempotency when REDIS_URL is set. The
+    # store lets a restarted worker recover active matches (and is the
+    # foundation for multi-worker state sharing). Falls back to in-process
+    # idempotency + no store when Redis isn't configured/available.
+    store = None
+    idempotency: IdempotencyCache = IdempotencyCache()
+    redis_url = os.environ.get("REDIS_URL")
+    if redis_url:
+        try:
+            import redis as _redis
+            from runtime import RedisMatchStore, RedisIdempotencyCache
+
+            _client = _redis.Redis.from_url(redis_url)
+            _client.ping()
+            store = RedisMatchStore(_client)
+            idempotency = RedisIdempotencyCache(_client)
+            _log.info("Redis store + idempotency enabled (REDIS_URL set)")
+        except Exception:  # noqa: BLE001
+            _log.exception(
+                "REDIS_URL set but Redis init failed; using in-process state"
+            )
 
     # Puck auth: enforced only when PUCK_JWT_SECRET is configured. In prod
     # set it to require signed tokens on every input; unset in dev for the
@@ -136,6 +157,7 @@ def _get_container() -> dict:
         writer=writer,
         heartbeat=heartbeat,
         idempotency=idempotency,
+        store=store,
     )
     scheduler = TickScheduler(match_manager=manager)
     manager.scheduler = scheduler
@@ -146,6 +168,16 @@ def _get_container() -> dict:
         lobby_writer=writer,
     )
     scheduler.start()
+    # Restart recovery: rebuild any active matches the store still holds.
+    # (Single-worker safe; multi-worker ownership claiming is the next step
+    # — see CONTEXT.md.)
+    if store is not None:
+        try:
+            recovered = manager.recover()
+            if recovered:
+                _log.info("recovered %d active match(es) on boot", len(recovered))
+        except Exception:  # noqa: BLE001
+            _log.exception("match recovery failed on boot")
     _container = {
         "writer": writer,
         "manager": manager,

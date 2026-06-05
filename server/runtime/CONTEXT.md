@@ -168,21 +168,36 @@ keyed by `match:{id}` and the call sites don't change.
   as the in-process `_lock_for`.
 Both are exercised against fakeredis in CI and verified against real redis.
 
-**The remaining blocker for true multi-worker is shared match STATE, not
-coordination.** `MatchManager.matches` holds live `Game` objects in one
-worker's memory. A request that load-balances to a different worker can't
-process that match — the Game isn't there. Closing this needs the game
-state itself serialised to Redis and reconstructed per request, which is a
-deeper change to every `Game` (a `to_dict`/`from_dict` round-trip, or
-rebuilding from the snapshot + an event log). Until then:
+**Match state is now serializable and recoverable.** Every game implements
+`serialize()` / `deserialize(players, data)` (`serializable = True`), with
+process-local `time.monotonic()` timers stored as elapsed offsets and
+re-based on load. `serialize_match` / `deserialize_match` wrap a whole
+`Match` (game + players + bookkeeping). A `MatchStore`
+(`InMemoryMatchStore` / `RedisMatchStore`) persists active matches; the
+`MatchManager` saves on every state change and `recover()` rebuilds them
+on boot.
 
-1. Run a single runtime worker (gunicorn `--workers 1`), OR pin a match's
-   traffic to its owning worker (sticky routing by match_id).
-2. The Redis lock + idempotency above are ready to wire the moment state
-   is shared; the call sites already go through the injected seams.
+What this gives us today:
+- **Restart recovery** (closes the old "server restart loses match state"
+  gap): with `REDIS_URL` set, a redeploy/crash mid-match recovers active
+  matches on boot. Verified end-to-end (`test_match_recovery.py`): a fresh
+  manager recovers from the store and continues the match to completion.
 
-No premature distribution — the coordination seams are in place and
-tested; the state-sharing work is scoped but deliberately not yet done.
+What's still needed for true multi-worker:
+- **Per-match ownership claiming.** `recover()` and per-request processing
+  are single-worker-safe as written; with N workers, two could both load
+  and tick the same match. The fix is to wrap match processing in the
+  `RedisLock` (already built + tested) so exactly one worker owns a match
+  at a time — load-under-lock, process, save-under-lock. The serialization
+  + store + lock are all in place; wiring them into the per-request path is
+  the remaining step.
+
+Until that lands, run a **single runtime worker** (gunicorn `--workers 1`)
+or pin a match's traffic to its owner (sticky routing by match_id). Note
+the primary scaling axis is per-venue: `LOCATION_ID` already pins one box
+per bar, and one process trivially handles a venue's ≤4 tables at 10 Hz —
+multi-worker is a resilience/redeploy concern, which restart-recovery now
+covers, more than a compute one.
 
 ## Multi-lobby (one server, many tables)
 

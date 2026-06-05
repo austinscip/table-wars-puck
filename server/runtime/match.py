@@ -99,10 +99,62 @@ class Match:
     cue_seq: int = 0
 
 
+def serialize_match(match: "Match") -> dict:
+    """Full persistable snapshot of a Match (incl. the game's own state).
+    Monotonic `last_input_at` is stored as an elapsed offset and re-based
+    on deserialize, since monotonic doesn't survive a restart."""
+    return {
+        "id": match.id,
+        "location_id": match.location_id,
+        "game_slug": match.game_slug,
+        "table_number": match.table_number,
+        "status": match.status,
+        "started_at": match.started_at.isoformat(),
+        "ended_at": match.ended_at.isoformat() if match.ended_at else None,
+        "cue_seq": match.cue_seq,
+        "last_input_elapsed_s": time.monotonic() - match.last_input_at,
+        "match_puck_ids": {str(k): v for k, v in match.match_puck_ids.items()},
+        "players": [
+            {
+                "puck_uuid": p.puck_uuid,
+                "puck_index": p.puck_index,
+                "name": p.name,
+                "color": p.color,
+                "is_active": p.is_active,
+            }
+            for p in match.players
+        ],
+        "game": match.game.serialize(),
+    }
+
+
+def deserialize_match(data: dict, registry: GameRegistry) -> "Match":
+    """Rebuild a Match (and its live game) from a serialize_match() dict."""
+    players = [Player(**pd) for pd in data["players"]]
+    game_class = registry.get(data["game_slug"])
+    game = game_class.deserialize(players, data["game"])
+    ended = data["ended_at"]
+    return Match(
+        id=data["id"],
+        location_id=data["location_id"],
+        game_slug=data["game_slug"],
+        table_number=data["table_number"],
+        players=players,
+        game=game,
+        match_puck_ids={int(k): v for k, v in data["match_puck_ids"].items()},
+        status=data["status"],
+        started_at=datetime.fromisoformat(data["started_at"]),
+        ended_at=datetime.fromisoformat(ended) if ended else None,
+        last_input_at=time.monotonic() - data["last_input_elapsed_s"],
+        cue_seq=data["cue_seq"],
+    )
+
+
 class MatchManager:
     """Owns active matches in memory and writes every state-changing
-    event to Supabase. Single-process for now; if we shard across
-    workers, store match state in Redis and lock per match_id."""
+    event to Supabase. A serializable game's full state can also be
+    persisted to a `store` so a match survives a restart and can be shared
+    across workers (see runtime/CONTEXT.md)."""
 
     # A match with no input AND every puck stale for this long is treated
     # as abandoned (everyone left). Must comfortably exceed the heartbeat
@@ -117,10 +169,16 @@ class MatchManager:
         heartbeat: Optional[HeartbeatTracker] = None,
         idempotency: Optional[IdempotencyCache] = None,
         abandon_after_s: Optional[float] = None,
+        store=None,
     ) -> None:
         self.registry = registry
         self.writer = writer
         self.scheduler = scheduler
+        # Optional durable match store (InMemoryMatchStore / RedisMatchStore).
+        # When set, serializable games are persisted on every state change
+        # so a restart recovers active matches. Non-serializable games are
+        # skipped silently.
+        self.store = store
         # One tracker shared across all matches. Each tick sweeps just
         # the current match. If unset (tests, minimal envs), heartbeat
         # logic is skipped entirely.
@@ -158,6 +216,48 @@ class MatchManager:
         finished match just makes a fresh lock and hits the status guard."""
         with self._match_locks_guard:
             self._match_locks.pop(match_id, None)
+
+    def _persist(self, match: Match) -> None:
+        """Save the match to the durable store if one is configured and the
+        game supports serialization. Best-effort — a store hiccup must not
+        break gameplay."""
+        if self.store is None or not getattr(match.game, "serializable", False):
+            return
+        try:
+            self.store.save(match.id, serialize_match(match))
+        except Exception:  # noqa: BLE001
+            logger.exception("failed to persist match %s", match.id)
+
+    def recover(self) -> list[str]:
+        """Rebuild active matches from the store on boot (restart recovery).
+        Returns the ids recovered. Finished/abandoned rows are dropped from
+        the store rather than re-loaded."""
+        if self.store is None:
+            return []
+        recovered: list[str] = []
+        for match_id in self.store.load_all_ids():
+            data = self.store.load(match_id)
+            if not data:
+                continue
+            if data.get("status") != "active":
+                self.store.delete(match_id)
+                continue
+            try:
+                match = deserialize_match(data, self.registry)
+            except Exception:  # noqa: BLE001
+                logger.exception("failed to recover match %s; dropping", match_id)
+                self.store.delete(match_id)
+                continue
+            self.matches[match.id] = match
+            if self.heartbeat is not None:
+                self.heartbeat.register(
+                    match.id, [p.puck_index for p in match.players]
+                )
+            if self.scheduler is not None:
+                self.scheduler.register(match.id)
+            recovered.append(match.id)
+            logger.info("recovered match %s (%s)", match.id, match.game_slug)
+        return recovered
 
     # === Create ===
 
@@ -230,6 +330,7 @@ class MatchManager:
 
         if self.scheduler is not None:
             self.scheduler.register(match_id)
+        self._persist(match)
         logger.info(
             "match %s created: game=%s table=%s players=%d",
             match_id,
@@ -293,6 +394,8 @@ class MatchManager:
         )
         if update.is_final or match.game.is_over():
             self._finalize(match)
+        else:
+            self._persist(match)
         if key is not None:
             # Store the JSON-able response state for replay (see the get
             # path above). A Redis cache serialises this directly.
@@ -357,6 +460,9 @@ class MatchManager:
             # abandoned so it doesn't sit 'active' forever. Checked after
             # finalisation so a game that ends itself wins the race.
             self._abandon(match)
+        elif update.score_events or update.cues:
+            # State changed this tick — persist the durable snapshot.
+            self._persist(match)
         return update
 
     # === Finalise ===
@@ -390,6 +496,8 @@ class MatchManager:
         if self.heartbeat is not None:
             self.heartbeat.drop_match(match.id)
         self._drop_lock(match.id)
+        if self.store is not None:
+            self.store.delete(match.id)
         logger.info("match %s finished", match.id)
 
     def _is_abandoned(self, match: Match) -> bool:
@@ -416,6 +524,8 @@ class MatchManager:
         if self.heartbeat is not None:
             self.heartbeat.drop_match(match.id)
         self._drop_lock(match.id)
+        if self.store is not None:
+            self.store.delete(match.id)
         logger.info("match %s abandoned (all pucks stale, no input)", match.id)
 
     # === Internals ===

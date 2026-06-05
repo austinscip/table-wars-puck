@@ -163,3 +163,33 @@ class Game(ABC):
     def final_scores(self) -> dict[int, int]:
         """Map puck_index -> final score. Called by the manager exactly
         once when the match finalises."""
+
+    # === Durability (optional) ===
+    # A serializable game can be persisted to a store (Redis) and rebuilt,
+    # so an active match survives a server restart/redeploy and is the
+    # foundation for sharing match state across workers. Games opt in by
+    # setting serializable=True and implementing the pair below.
+    #
+    # Time handling: any process-local `time.monotonic()` timestamp held in
+    # state must be serialized as an ELAPSED offset and re-based against a
+    # fresh monotonic clock on deserialize, since monotonic is meaningless
+    # across processes/restarts. Tick-count-based games (Racer, Smash) need
+    # no conversion. Transient `_pending_cues` are intentionally NOT
+    # persisted — losing a queued polish beat on the rare restart is fine.
+
+    serializable: bool = False
+
+    def serialize(self) -> dict[str, Any]:
+        """Return a JSON-serialisable dict capturing the full game state.
+        Override in serializable games."""
+        raise NotImplementedError(
+            f"{type(self).__name__} is not serializable"
+        )
+
+    @classmethod
+    def deserialize(
+        cls, players: list["Player"], data: dict[str, Any]
+    ) -> "Game":
+        """Rebuild a game from `players` + a dict produced by serialize().
+        Override in serializable games."""
+        raise NotImplementedError(f"{cls.__name__} is not deserializable")
