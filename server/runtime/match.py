@@ -3,10 +3,13 @@ Match — one play-through of a Game. MatchManager owns the lifecycle
 (create -> input/tick -> finalise) and persists every interesting state
 change to Supabase via the SupabaseWriter.
 
-The TV doesn't poll the manager; it subscribes to Supabase Realtime on
-the match's row + its scores. That keeps the latency profile WebSocket-
-shaped per Mike's "WebSockets, not POST/reply" advice without us
-maintaining a Socket.IO server.
+The TV renders gameplay local-first (ADR 0004): the manager pushes each
+state change to the venue's TV over a LAN Flask-SocketIO connection via an
+injected, transport-agnostic `state_sink` (so this module stays free of any
+Flask-SocketIO import). The cloud snapshot/score writes are demoted to an
+asynchronous persistence/analytics sink + a cold-standby fallback the TV
+reads only when the local socket is down. Every snapshot carries a
+monotonic `snapshot_seq` so the TV never renders an older frame on failover.
 """
 
 from __future__ import annotations
@@ -73,6 +76,16 @@ class SchedulerProtocol(Protocol):
     def unregister(self, match_id: str) -> None: ...
 
 
+class StateSink(Protocol):
+    """The local push transport the manager emits each state change to
+    (ADR 0004). The app wires this to a Flask-SocketIO room emit; tests
+    inject a fake that records envelopes. Implementations MUST NOT raise —
+    a transport hiccup must never break gameplay (the manager guards the
+    call regardless)."""
+
+    def __call__(self, envelope: dict) -> None: ...
+
+
 @dataclass
 class Match:
     id: str  # UUID matching Supabase matches.id
@@ -97,6 +110,12 @@ class Match:
     # to a snapshot. The TV dedupes cues on this strictly-increasing seq
     # instead of a wall-clock ts (which NTP/restart can run backwards).
     cue_seq: int = 0
+    # Per-match monotonic counter stamped onto every *snapshot* (one per
+    # state-changing write), distinct from the per-cue cue_seq. Carried on
+    # both the local SocketIO emit and the cloud snapshot write so the TV's
+    # source-selector (local-primary, cloud-fallback) never renders an
+    # older frame over a newer one on failover. See ADR 0004.
+    snapshot_seq: int = 0
 
 
 def serialize_match(match: "Match") -> dict:
@@ -112,6 +131,7 @@ def serialize_match(match: "Match") -> dict:
         "started_at": match.started_at.isoformat(),
         "ended_at": match.ended_at.isoformat() if match.ended_at else None,
         "cue_seq": match.cue_seq,
+        "snapshot_seq": match.snapshot_seq,
         "last_input_elapsed_s": time.monotonic() - match.last_input_at,
         "match_puck_ids": {str(k): v for k, v in match.match_puck_ids.items()},
         "players": [
@@ -147,6 +167,9 @@ def deserialize_match(data: dict, registry: GameRegistry) -> "Match":
         ended_at=datetime.fromisoformat(ended) if ended else None,
         last_input_at=time.monotonic() - data["last_input_elapsed_s"],
         cue_seq=data["cue_seq"],
+        # Tolerate snapshots written before snapshot_seq existed: a missing
+        # key recovers as 0 rather than KeyError-ing the whole match.
+        snapshot_seq=data.get("snapshot_seq", 0),
     )
 
 
@@ -171,10 +194,17 @@ class MatchManager:
         abandon_after_s: Optional[float] = None,
         store=None,
         lock_provider=None,
+        state_sink: Optional["StateSink"] = None,
     ) -> None:
         self.registry = registry
         self.writer = writer
         self.scheduler = scheduler
+        # Optional transport-agnostic push sink. When set, the manager calls
+        # state_sink(envelope) on every state-changing input/tick — OUTSIDE
+        # the per-match lock — so the TV gets the frame over the LAN socket
+        # without the runtime importing Flask-SocketIO. Default None = no
+        # local push (tests, cloud-only fallback). See ADR 0004.
+        self.state_sink = state_sink
         # Optional distributed lock provider (e.g. RedisLock) exposing
         # lock_for(match_id) -> context manager. When set, it replaces the
         # in-process per-match RLock — the seam for cross-worker mutual
@@ -366,7 +396,13 @@ class MatchManager:
     ) -> StateUpdate:
         match = self._must_get(match_id)
         with self._lock_cm(match_id):
-            return self._on_input_locked(match, match_id, event, event_id)
+            update, payload = self._on_input_locked(
+                match, match_id, event, event_id
+            )
+        # Push to the local TV sink OUTSIDE the lock — never hold the
+        # per-match lock across the socket write (ADR 0004).
+        self._emit(match, payload)
+        return update
 
     def _on_input_locked(
         self,
@@ -374,7 +410,7 @@ class MatchManager:
         match_id: str,
         event: InputEvent,
         event_id: Optional[str],
-    ) -> StateUpdate:
+    ) -> tuple[StateUpdate, Optional[dict]]:
         # Idempotency: a retried request (same logical event_id from the
         # same puck in the same match) replays the first response without
         # re-applying the input. Checked before the status guard so a
@@ -390,11 +426,11 @@ class MatchManager:
                 # path works whether the cache is in-process or Redis-
                 # backed. The side effects (scores, snapshot) already
                 # happened on the first arrival; a replay re-emits no cues
-                # or score events.
-                return StateUpdate(state=cached)
+                # or score events — and no local frame (payload None).
+                return StateUpdate(state=cached), None
 
         if match.status != "active":
-            return StateUpdate(state=match.game.get_state())
+            return StateUpdate(state=match.game.get_state()), None
 
         match.last_input_at = time.monotonic()
         if self.heartbeat is not None:
@@ -404,10 +440,10 @@ class MatchManager:
         self._persist_scores(match, update.score_events)
         # Always write a snapshot on input — every input is, by
         # definition, something the player did that the TV should react
-        # to.
-        self.writer.update_match_snapshot(
-            match_id, self._snapshot_payload(match, update)
-        )
+        # to. The same payload is emitted to the local sink (outside the
+        # lock, by the caller) so local and cloud carry the same seq.
+        payload = self._snapshot_payload(match, update)
+        self.writer.update_match_snapshot(match_id, payload)
         if update.is_final or match.game.is_over():
             self._finalize(match)
         else:
@@ -416,16 +452,23 @@ class MatchManager:
             # Store the JSON-able response state for replay (see the get
             # path above). A Redis cache serialises this directly.
             self.idempotency.put(key, update.state)
-        return update
+        return update, payload
 
     def tick(self, match_id: str) -> StateUpdate:
         match = self._must_get(match_id)
         with self._lock_cm(match_id):
-            return self._tick_locked(match, match_id)
+            update, payload = self._tick_locked(match, match_id)
+        # Push to the local TV sink OUTSIDE the lock (ADR 0004). payload is
+        # None on a no-op tick (no state change), so quiet ticks emit
+        # nothing — emit volume tracks meaningful change, not 10 Hz.
+        self._emit(match, payload)
+        return update
 
-    def _tick_locked(self, match: Match, match_id: str) -> StateUpdate:
+    def _tick_locked(
+        self, match: Match, match_id: str
+    ) -> tuple[StateUpdate, Optional[dict]]:
         if match.status != "active":
-            return StateUpdate(state=match.game.get_state())
+            return StateUpdate(state=match.game.get_state()), None
 
         update = match.game.tick()
 
@@ -462,13 +505,15 @@ class MatchManager:
         # the same write path as the tick's own scores.
         self._persist_scores(match, update.score_events)
 
-        # Only persist snapshot on tick if the tick produced score
+        # Only persist + emit a snapshot on tick if the tick produced score
         # events, fired cues, or finalised the match. Otherwise 10 Hz
-        # ticks would spam the matches row with no state change.
+        # ticks would spam the matches row (and the socket) with no state
+        # change. payload stays None on a quiet tick so the caller emits
+        # nothing.
+        payload: Optional[dict] = None
         if update.score_events or update.cues or update.is_final:
-            self.writer.update_match_snapshot(
-                match_id, self._snapshot_payload(match, update)
-            )
+            payload = self._snapshot_payload(match, update)
+            self.writer.update_match_snapshot(match_id, payload)
         if update.is_final or match.game.is_over():
             self._finalize(match)
         elif self._is_abandoned(match):
@@ -479,7 +524,7 @@ class MatchManager:
         elif update.score_events or update.cues:
             # State changed this tick — persist the durable snapshot.
             self._persist(match)
-        return update
+        return update, payload
 
     # === Finalise ===
 
@@ -574,7 +619,13 @@ class MatchManager:
 
         Cues are ephemeral — they don't accumulate in the snapshot across
         updates because each write replaces the column. The seq is what
-        lets the TV tell a genuinely new cue from a redelivered one."""
+        lets the TV tell a genuinely new cue from a redelivered one.
+
+        The whole payload also carries a match-level `snapshot_seq` (one per
+        write, distinct from the per-cue seq). The TV reconciles local vs
+        cloud frames on it, so it MUST be stamped here — the single point
+        every snapshot flows through — to guarantee local and cloud carry
+        the same seq for the same frame (ADR 0004)."""
         payload = dict(update.state)
         if update.cues:
             cue_dicts = []
@@ -584,4 +635,30 @@ class MatchManager:
                 match.cue_seq += 1
                 cue_dicts.append(d)
             payload["cues"] = cue_dicts
+        payload["snapshot_seq"] = match.snapshot_seq
+        match.snapshot_seq += 1
         return payload
+
+    def _emit_envelope(self, match: Match, payload: dict) -> dict:
+        """Wrap a snapshot payload in the local-push envelope the TV's
+        socket handler consumes. Symmetrical with the cloud shape — cloud
+        gives {status (column), snapshot (jsonb)}; this gives the same —
+        so the TV normalises both to {status, snapshot, seq} trivially. The
+        seq lives inside `snapshot` in both paths."""
+        return {
+            "match_id": match.id,
+            "status": match.status,
+            "snapshot": payload,
+        }
+
+    def _emit(self, match: Match, payload: Optional[dict]) -> None:
+        """Push a frame to the local TV sink, OUTSIDE the per-match lock.
+        Guarded: a transport failure must never break gameplay — the cloud
+        snapshot write already carries the same frame for persistence and
+        the fallback path."""
+        if self.state_sink is None or payload is None:
+            return
+        try:
+            self.state_sink(self._emit_envelope(match, payload))
+        except Exception:  # noqa: BLE001
+            logger.exception("state_sink emit failed for match %s", match.id)
