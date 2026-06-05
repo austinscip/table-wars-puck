@@ -86,6 +86,52 @@ DEV_FALLBACK_LOCATION_ID = "10c079c1-a034-442e-9075-dba4ac9bcf15"
 
 _container: Optional[dict] = None
 
+# Set by init_runtime_routes() at app startup. The local-first TV push
+# (ADR 0004) emits each frame to a LAN SocketIO room; keeping the reference
+# at module scope (read late, at emit time) lets the runtime package stay
+# Flask-SocketIO-free — the import lives only inside init_runtime_routes.
+_socketio = None
+
+
+def _state_sink(envelope: dict) -> None:
+    """MatchManager.state_sink: push one frame to the TVs subscribed to this
+    match's LAN SocketIO room. No-op until a socketio is wired (tests, or
+    before startup). Read _socketio late so wiring order doesn't matter."""
+    sio = _socketio
+    if sio is None:
+        return
+    match_id = envelope.get("match_id")
+    sio.emit("state_update", envelope, room=f"match:{match_id}")
+
+
+def init_runtime_routes(app, socketio) -> None:
+    """Register the runtime blueprint and wire the local-first TV path
+    (ADR 0004): TVs join/leave a per-match SocketIO room and the
+    MatchManager's state_sink emits each frame into it. Called once at app
+    startup. The flask_socketio import is local so importing this module
+    (e.g. in the runtime pytest job, which has no flask_socketio) never
+    needs it."""
+    global _socketio
+    _socketio = socketio
+    app.register_blueprint(runtime_bp)
+
+    from flask_socketio import join_room, leave_room, emit
+
+    @socketio.on("join_match")
+    def _on_join_match(data):
+        """TV subscribes to a match's room to receive state_update frames
+        over the LAN — the local-first render path."""
+        match_id = (data or {}).get("match_id")
+        if isinstance(match_id, str) and match_id:
+            join_room(f"match:{match_id}")
+            emit("joined_match", {"match_id": match_id})
+
+    @socketio.on("leave_match")
+    def _on_leave_match(data):
+        match_id = (data or {}).get("match_id")
+        if isinstance(match_id, str) and match_id:
+            leave_room(f"match:{match_id}")
+
 
 def _get_container() -> dict:
     global _container
@@ -166,6 +212,9 @@ def _get_container() -> dict:
         heartbeat=heartbeat,
         idempotency=idempotency,
         store=store,
+        # Local-first TV push (ADR 0004): emit each frame to the match's LAN
+        # SocketIO room. No-op until init_runtime_routes wires a socketio.
+        state_sink=_state_sink,
     )
     scheduler = TickScheduler(match_manager=manager)
     manager.scheduler = scheduler

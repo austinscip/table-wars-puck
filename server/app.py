@@ -820,8 +820,10 @@ init_pair_routes(app, socketio)  # Speed Pyramid v1 — pair-code flow
 
 # Track G multi-game runtime. Mounts /api/runtime/* alongside the
 # Speed Pyramid v1 /api/pair/* flow so the cut-over is non-disruptive.
-from runtime_routes import runtime_bp
-app.register_blueprint(runtime_bp)
+# init_runtime_routes also wires the local-first TV path (ADR 0004): the
+# MatchManager pushes each frame to a per-match SocketIO room the TV joins.
+from runtime_routes import init_runtime_routes
+init_runtime_routes(app, socketio)
 
 if __name__ == '__main__':
     print("╔═══════════════════════════════════════════╗")
