@@ -23,6 +23,8 @@ from .game import Game, Player, InputEvent, ScoreEvent, StateUpdate, InputKind
 from .registry import GameRegistry, registry
 from .match import Match, MatchManager
 from .inputs import event_from_dict
+from .pairing import PairingManager, PairingError, color_for
+from .scheduler import TickScheduler
 
 __all__ = [
     "Game",
@@ -36,4 +38,8 @@ __all__ = [
     "Match",
     "MatchManager",
     "event_from_dict",
+    "PairingManager",
+    "PairingError",
+    "color_for",
+    "TickScheduler",
 ]

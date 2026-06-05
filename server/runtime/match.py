@@ -49,6 +49,20 @@ class SupabaseWriterProtocol(Protocol):
         self, match_id: str, ended_at: datetime
     ) -> None: ...
 
+    def update_match_snapshot(
+        self, match_id: str, snapshot: dict
+    ) -> None: ...
+
+
+class SchedulerProtocol(Protocol):
+    """The slice of TickScheduler the manager calls into on lifecycle
+    transitions. Optional dependency — manager works without it for
+    tests and games that don't need a tick loop."""
+
+    def register(self, match_id: str) -> None: ...
+
+    def unregister(self, match_id: str) -> None: ...
+
 
 @dataclass
 class Match:
@@ -77,9 +91,11 @@ class MatchManager:
         self,
         registry: GameRegistry,
         writer: SupabaseWriterProtocol,
+        scheduler: Optional[SchedulerProtocol] = None,
     ) -> None:
         self.registry = registry
         self.writer = writer
+        self.scheduler = scheduler
         self.matches: dict[str, Match] = {}
 
     # === Create ===
@@ -129,6 +145,13 @@ class MatchManager:
             match_puck_ids=match_puck_ids,
         )
         self.matches[match_id] = match
+
+        # Seed the initial snapshot so the TV's Realtime subscription
+        # gets a usable state on first paint without waiting for a tick.
+        self.writer.update_match_snapshot(match_id, game.get_state())
+
+        if self.scheduler is not None:
+            self.scheduler.register(match_id)
         return match
 
     # === Drive ===
@@ -140,6 +163,10 @@ class MatchManager:
 
         update = match.game.on_input(event)
         self._persist_scores(match, update.score_events)
+        # Always write a snapshot on input — every input is, by
+        # definition, something the player did that the TV should react
+        # to.
+        self.writer.update_match_snapshot(match_id, update.state)
         if update.is_final or match.game.is_over():
             self._finalize(match)
         return update
@@ -151,6 +178,11 @@ class MatchManager:
 
         update = match.game.tick()
         self._persist_scores(match, update.score_events)
+        # Only persist snapshot on tick if the tick produced score
+        # events or finalised the match. Otherwise 10 Hz ticks would
+        # spam the matches row with no state change.
+        if update.score_events or update.is_final:
+            self.writer.update_match_snapshot(match_id, update.state)
         if update.is_final or match.game.is_over():
             self._finalize(match)
         return update
@@ -181,6 +213,8 @@ class MatchManager:
         self.writer.update_match_finished(
             match_id=match.id, ended_at=match.ended_at
         )
+        if self.scheduler is not None:
+            self.scheduler.unregister(match.id)
 
     # === Internals ===
 

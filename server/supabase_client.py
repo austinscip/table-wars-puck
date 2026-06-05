@@ -117,3 +117,62 @@ class SupabaseWriter:
                         event_type,
                     ),
                 )
+
+    def update_match_snapshot(self, match_id: str, snapshot: dict) -> None:
+        """Write the current game state snapshot to matches.snapshot so
+        the TV Realtime subscription wakes up. Called from MatchManager
+        after every input or tick that changes visible state."""
+        import json
+
+        with psycopg.connect(self.dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "update matches set snapshot = %s::jsonb where id = %s",
+                    (json.dumps(snapshot), match_id),
+                )
+
+    # === Pucks ===
+
+    def ensure_puck(self, puck_index: int, location_id: str) -> str:
+        """Look up the UUID for a (location_id, puck_index) pair. If no
+        puck has been provisioned yet at this index, auto-create one
+        plus its puck_assignments row. Returns the pucks.id UUID.
+
+        Auto-provisioning keeps the dev / pilot flow simple — no manual
+        seeding needed before first pair. Production would gate this
+        behind explicit fleet management (admin assigns serial -> index
+        before the puck ships).
+        """
+        with psycopg.connect(self.dsn, row_factory=dict_row) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "select p.id from pucks p "
+                    "join puck_assignments pa on pa.puck_id = p.id "
+                    "where pa.location_id = %s "
+                    "  and pa.removed_at is null "
+                    "  and p.puck_index = %s",
+                    (location_id, puck_index),
+                )
+                row = cur.fetchone()
+                if row is not None:
+                    return row["id"]
+
+                # Auto-provision. Serial number is a synthetic
+                # location-scoped slug — replaceable later when the real
+                # hardware serial is known.
+                serial_no = f"auto-{location_id[:8]}-{puck_index}"
+                cur.execute(
+                    "insert into pucks "
+                    "(serial_no, hw_revision, puck_index, is_online) "
+                    "values (%s, 'RevB', %s, false) "
+                    "returning id",
+                    (serial_no, puck_index),
+                )
+                puck_uuid = cur.fetchone()["id"]
+                cur.execute(
+                    "insert into puck_assignments "
+                    "(puck_id, location_id) "
+                    "values (%s, %s)",
+                    (puck_uuid, location_id),
+                )
+                return puck_uuid
