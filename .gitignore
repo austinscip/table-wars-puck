@@ -23,6 +23,11 @@ Thumbs.db
 # Node.js
 node_modules/
 package-lock.json
+# ...but the TV app's lockfile MUST be committed: CI's tv-tests job runs
+# `npm ci` (which requires a lockfile) and caches on it via
+# actions/setup-node cache-dependency-path. Without it the job fails at the
+# cache step before any code runs.
+!TableWarsTV/package-lock.json
 
 # Playwright
 tests/playwright-report/
