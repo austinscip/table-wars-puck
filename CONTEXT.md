@@ -26,14 +26,16 @@ Domain glossary for Table Wars. One sentence per term. The `_Avoid_:` lines list
 
 ## Identity
 
-- **Player** — The human holding a Puck. Identified by Puck ID for now. _Avoid_: user.
+- **Player** — A persistent human identity, **global and tenant-independent**: one human is one `players` row across every venue/operator (not scoped to a Bar Account, unlike all other gameplay tables). Identified by an opaque player token (delivered via QR), optionally recoverable by phone. A Player is distinct from the hardware they hold (a Puck) and from staff (`users`/`auth.users`). Sign-in is **optional** — a Match can be played with no Player attached. See ADR 0005. _Avoid_: user (that's staff), account.
+- **Match Participant** — The per-Match binding of a Puck (and optionally a Player) to one Match: the `match_pucks` row. Carries `player_name` and a nullable `player_id`. This is the transient "a puck at a table for one match" role; the persistent human is the Player. _Avoid_: player (the Participant is per-match; the Player is persistent).
 - **Puck ID** — Stable 1-byte ID assigned per puck at provisioning time. _Avoid_: device ID.
 - **Table** — The physical bar/restaurant table that a set of pucks belongs to. Identified by 6-digit pair code at runtime. _Avoid_: room, group.
 - **Bar Account** — The Supabase row representing the venue. _Avoid_: tenant, customer, org.
 
 ## TV / web
 
-- **TV View** — The cloud-hosted web page the smart TV browser navigates to. URL: `https://<host>/bar/<6-digit-code>`. _Avoid_: dashboard, display, screen.
+- **TV View** — The `TableWarsTV` React Native app (Apple TV / Android TV, `react-native-tvos`) installed on the venue's smart TV, showing the live lobby + match. It is local-first: it renders gameplay from the venue **Flask box** over a LAN SocketIO connection and falls back to **Supabase Realtime** when the local socket is down (see ADR 0004). _Avoid_: dashboard, display, screen.
+- **Legacy TV Page** — The older cloud-hosted web bundle the TV browser navigated to at `https://<host>/bar/<6-digit-code>` (`server/static/games/speed-pyramid/`), predating the runtime + native TV View. _Avoid_: using "TV View" for this — TV View is the native runtime app.
 - **Pair Code** — The 6-digit code displayed by the TV View and entered on the Host Puck via tilt-select to bind the table to the TV. _Avoid_: session code, room code.
 - **Polish Gate** — The pre-ship review where a TV game is screenshotted next to a Jackbox / HQ Trivia / Bar Rescue reference and judged. _Avoid_: QA.
 
