@@ -9,6 +9,25 @@ from runtime import InputEvent
 from conftest import make_players
 
 from games.smash import Smash, ARENA_X
+from games.speed_pyramid import SpeedPyramid
+
+
+def test_speed_pyramid_threads_exclude_ids_to_db(monkeypatch):
+    """exclude_ids reaches get_questions so a caller can dedup recently-seen
+    questions across matches."""
+    import trivia_database
+
+    captured: dict = {}
+
+    def fake_get_questions(count, category_id=None, difficulty=None, exclude_ids=None):
+        captured["count"] = count
+        captured["exclude_ids"] = exclude_ids
+        return []  # empty -> SpeedPyramid falls back to DEFAULT_QUESTIONS
+
+    monkeypatch.setattr(trivia_database, "get_questions", fake_get_questions)
+    SpeedPyramid(players=make_players(1), question_count=5, exclude_ids=[10, 20, 30])
+    assert captured["exclude_ids"] == [10, 20, 30]
+    assert captured["count"] == 5
 
 
 def test_smash_ko_credited_to_last_hitter_not_high_ko_player():

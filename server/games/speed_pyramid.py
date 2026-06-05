@@ -54,11 +54,18 @@ def _load_questions_from_db(
     *,
     difficulty: str | None = None,
     category_id: int | None = None,
+    exclude_ids: list[int] | None = None,
 ) -> list["Question"]:
     """Pull N questions from the trivia SQLite DB and convert each row
     into a Question dataclass. Import is local so the games package can
     still be imported in test environments where trivia_database
     requires SQLite to be present.
+
+    `exclude_ids` is passed through to get_questions so a caller can avoid
+    re-serving questions a player has recently seen. (Sourcing those ids —
+    per-puck answer history — is a separate piece: the runtime doesn't yet
+    persist question_id, so today the caller must supply them; see the
+    hardening review.)
 
     Falls back to DEFAULT_QUESTIONS when the DB is unavailable so the
     smoke tests + first-boot dev flow don't break."""
@@ -71,6 +78,7 @@ def _load_questions_from_db(
         count=count,
         difficulty=difficulty,
         category_id=category_id,
+        exclude_ids=exclude_ids,
     )
     if not rows:
         return list(DEFAULT_QUESTIONS)
@@ -225,6 +233,7 @@ class SpeedPyramid(Game):
         question_count: int = 5,
         difficulty: str | None = None,
         category_id: int | None = None,
+        exclude_ids: list[int] | None = None,
         **_options: Any,
     ) -> None:
         self.players = players
@@ -234,11 +243,13 @@ class SpeedPyramid(Game):
         else:
             # Production path: pull from the trivia DB at match creation
             # time. Falls back to DEFAULT_QUESTIONS when the DB is empty
-            # or unavailable.
+            # or unavailable. exclude_ids lets the caller avoid re-serving
+            # recently-seen questions (dedup across matches).
             self.questions = _load_questions_from_db(
                 count=question_count,
                 difficulty=difficulty,
                 category_id=category_id,
+                exclude_ids=exclude_ids,
             )
         self.scores: dict[int, int] = {p.puck_index: 0 for p in players}
         self.round_index = 0

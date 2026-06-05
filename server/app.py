@@ -551,7 +551,7 @@ def api_register_puck_to_bar(bar_slug):
     except Exception as e:
         # Older schemas may not have bar_id on pucks; fail soft so the
         # endpoint still answers without a 500.
-        print(f"[register_puck_to_bar] bar_id update skipped: {e}")
+        _flask_log.warning("register_puck_to_bar: bar_id update skipped: %s", e)
 
     return jsonify({
         'ok': True,
@@ -741,7 +741,7 @@ def register_core_socketio_handlers(sio):
         client emits with or without a payload."""
         join_room("lobby")
 
-    print("✅ Core WebSocket handlers registered")
+    _flask_log.info("core WebSocket handlers registered")
 
 # ============================================================================
 # GAME GALLERY
@@ -872,6 +872,6 @@ if __name__ == '__main__':
                                       "tablewars-server")
             advertise_mdns(port=port, instance=instance)
         except Exception as e:  # noqa: BLE001
-            print(f"[app] mDNS advertise failed: {e}")
+            _flask_log.warning("mDNS advertise failed: %s", e)
 
     socketio.run(app, host=host, port=port, debug=debug, allow_unsafe_werkzeug=True)
