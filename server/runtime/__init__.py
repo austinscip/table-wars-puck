@@ -19,7 +19,15 @@ See server/runtime/CONTEXT.md for the contract a game class must satisfy
 and the lifecycle MatchManager drives.
 """
 
-from .game import Game, Player, InputEvent, ScoreEvent, StateUpdate, InputKind
+from .game import (
+    Game,
+    Player,
+    InputEvent,
+    ScoreEvent,
+    StateUpdate,
+    InputKind,
+    DEFAULT_TICK_DT,
+)
 from .registry import GameRegistry, registry
 from .match import (
     Match,
@@ -65,6 +73,7 @@ __all__ = [
     "InputKind",
     "ScoreEvent",
     "StateUpdate",
+    "DEFAULT_TICK_DT",
     "GameRegistry",
     "registry",
     "Match",

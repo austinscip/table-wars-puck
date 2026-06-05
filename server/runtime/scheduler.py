@@ -26,6 +26,12 @@ logger = get_logger("scheduler")
 class TickScheduler:
     TICK_HZ = 10  # ticks per second per match
     TICK_INTERVAL = 1.0 / TICK_HZ
+    # Upper bound on the real dt fed to a tick. A GC pause / overload can
+    # make one loop interval huge; without a clamp, a timed game would
+    # integrate that whole gap at once (a racer could teleport across the
+    # finish line). Clamping caps per-tick advancement at 5× nominal — a
+    # severe stall loses a little game-time rather than producing a jump.
+    MAX_TICK_DT = 0.5
 
     def __init__(self, match_manager: MatchManager) -> None:
         self.match_manager = match_manager
@@ -43,6 +49,13 @@ class TickScheduler:
     def unregister(self, match_id: str) -> None:
         with self._lock:
             self._active.discard(match_id)
+
+    @classmethod
+    def _clamp_dt(cls, raw: float) -> float:
+        """Bound the measured tick dt to [0, MAX_TICK_DT] — non-negative
+        (a clock blip can't run a game backwards) and capped so a long stall
+        can't teleport physics."""
+        return min(cls.MAX_TICK_DT, max(0.0, raw))
 
     # === Loop ===
 
@@ -62,8 +75,14 @@ class TickScheduler:
             self._thread = None
 
     def _run(self) -> None:
+        prev = time.perf_counter()
         while not self._stop.is_set():
             tick_start = time.perf_counter()
+            # Real elapsed since the previous iteration — the dt each match
+            # is advanced by, so timed games track wall-clock even when a
+            # tick runs late. Clamped so a long stall can't teleport physics.
+            dt = self._clamp_dt(tick_start - prev)
+            prev = tick_start
             with self._lock:
                 snapshot = list(self._active)
 
@@ -77,7 +96,7 @@ class TickScheduler:
                 if match.status != "active":
                     continue
                 try:
-                    self.match_manager.tick(match_id)
+                    self.match_manager.tick(match_id, dt)
                 except Exception:  # noqa: BLE001
                     # A buggy game must not crash the scheduler thread —
                     # the whole table would freeze. Log with traceback

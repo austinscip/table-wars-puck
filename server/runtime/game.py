@@ -12,6 +12,13 @@ from typing import Any, Literal, Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from .cues import CueEvent
 
+# Nominal seconds-per-tick at the target 10 Hz cadence. It's the DEFAULT
+# `dt` passed to tick(), so synthetic test ticks advance a fixed step (and
+# stay deterministic) while the live scheduler passes the REAL elapsed time
+# between ticks — so a lagging box runs timed games at wall-clock speed
+# instead of slow motion (ADR/handoff gap #5b).
+DEFAULT_TICK_DT = 0.1
+
 # The set of input channels a game can declare interest in. Pucks send
 # the union of these every tick; games receive an InputEvent already
 # normalised to floats / bools regardless of firmware revision.
@@ -118,9 +125,15 @@ class Game(ABC):
         """Process one puck input frame. Return the new state snapshot
         plus any score events to persist."""
 
-    def tick(self) -> StateUpdate:
+    def tick(self, dt: float = DEFAULT_TICK_DT) -> StateUpdate:
         """Called by the manager at a fixed cadence (e.g. 10 Hz) for
         time-based progression — countdowns, idle players, hazards.
+
+        `dt` is the REAL elapsed seconds since the previous tick (the live
+        scheduler measures it; it defaults to the nominal step so synthetic
+        test ticks stay deterministic). Time-driven games MUST integrate by
+        `dt`, not by a fixed per-tick constant, or they run in slow motion
+        when the box can't hold 10 Hz (gap #5b).
 
         Default no-op. Override for time-driven games (racing, brawler).
         """

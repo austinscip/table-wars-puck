@@ -133,7 +133,10 @@ class Smash(Game):
             self.fighters[p.puck_index] = Fighter(
                 puck_index=p.puck_index, x=sx, y=sy
             )
+        # Match time = sum of real per-tick dt (gap #5b), so the brawl runs
+        # at wall-clock speed on a lagging box. tick_count is telemetry only.
         self.tick_count = 0
+        self.elapsed_s = 0.0
         self.finished = False
         self.winner_index: Optional[int] = None
         self._pending_cues: list[CueEvent] = [
@@ -192,23 +195,28 @@ class Smash(Game):
             is_final=self.finished,
         )
 
-    def tick(self) -> StateUpdate:
+    def tick(self, dt: float = TICK_DT) -> StateUpdate:
         cues = self._drain_pending()
         if self.finished:
             return StateUpdate(state=self.get_state(), cues=cues)
 
         self.tick_count += 1
+        self.elapsed_s += dt
         score_events: list[ScoreEvent] = []
+        # Knockback is an exponential per-tick decay; raise it to dt/TICK_DT
+        # so the bleed-off keeps the same half-life in wall-time regardless
+        # of the real tick interval (gap #5b).
+        decay = KNOCKBACK_DECAY ** (dt / TICK_DT)
 
         for fighter in self.fighters.values():
             if fighter.eliminated:
                 continue
-            # Integrate movement + knockback into position.
-            fighter.x += (fighter.move_vx + fighter.knockback_vx) * TICK_DT
-            fighter.y += (fighter.move_vy + fighter.knockback_vy) * TICK_DT
+            # Integrate movement + knockback into position (by real dt).
+            fighter.x += (fighter.move_vx + fighter.knockback_vx) * dt
+            fighter.y += (fighter.move_vy + fighter.knockback_vy) * dt
             # Knockback bleeds off so the fighter recovers.
-            fighter.knockback_vx *= KNOCKBACK_DECAY
-            fighter.knockback_vy *= KNOCKBACK_DECAY
+            fighter.knockback_vx *= decay
+            fighter.knockback_vy *= decay
             if (
                 abs(fighter.knockback_vx) < 0.1
                 and abs(fighter.knockback_vy) < 0.1
@@ -273,9 +281,10 @@ class Smash(Game):
     # === Durability ===
 
     def serialize(self) -> dict[str, Any]:
-        # match_time is tick_count-based (absolute); no clock conversion.
+        # match_time is an accumulated-dt float (absolute); no clock conversion.
         return {
             "tick_count": self.tick_count,
+            "elapsed_s": self.elapsed_s,
             "finished": self.finished,
             "winner_index": self.winner_index,
             "fighters": {
@@ -300,6 +309,7 @@ class Smash(Game):
         game = cls(players)
         game._pending_cues = []
         game.tick_count = data["tick_count"]
+        game.elapsed_s = data.get("elapsed_s", data["tick_count"] * TICK_DT)
         game.finished = data["finished"]
         game.winner_index = data["winner_index"]
         for key, fd in data["fighters"].items():
@@ -458,7 +468,7 @@ class Smash(Game):
 
     @property
     def _match_time(self) -> float:
-        return self.tick_count * TICK_DT
+        return self.elapsed_s
 
     @staticmethod
     def _in_arena(x: float, y: float) -> bool:

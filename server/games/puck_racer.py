@@ -124,10 +124,12 @@ class PuckRacer(Game):
         self.racers: dict[int, RacerState] = {
             p.puck_index: RacerState(puck_index=p.puck_index) for p in players
         }
-        # We track race time as ticks * TICK_DT rather than wall clock
-        # so tests are deterministic and a real-time tick scheduler
-        # can be replaced by a slower test loop without state drift.
+        # Race time is the sum of the REAL dt of each tick (gap #5b), so a
+        # lagging box runs the race at wall-clock speed instead of slow
+        # motion. Tests pass the nominal dt, so they stay deterministic.
+        # tick_count is kept purely as a frame counter for telemetry.
         self.tick_count = 0
+        self.elapsed_s = 0.0
         self.first_finish_time: Optional[float] = None
         self.finished = False
         self.warning_fired = False
@@ -178,12 +180,13 @@ class PuckRacer(Game):
 
         return StateUpdate(state=self.get_state(), cues=cues)
 
-    def tick(self) -> StateUpdate:
+    def tick(self, dt: float = TICK_DT) -> StateUpdate:
         cues = self._drain_pending()
         if self.finished:
             return StateUpdate(state=self.get_state(), cues=cues)
 
         self.tick_count += 1
+        self.elapsed_s += dt
         race_t = self._race_time
 
         # Time-based warning beat.
@@ -198,7 +201,7 @@ class PuckRacer(Game):
         for racer in self.racers.values():
             if racer.finished or racer.disconnected:
                 continue
-            self._integrate(racer, race_t)
+            self._integrate(racer, race_t, dt)
             if racer.position >= FINISH_DISTANCE and not racer.finished:
                 racer.finished = True
                 racer.finish_time = race_t
@@ -274,9 +277,11 @@ class PuckRacer(Game):
     # === Durability ===
 
     def serialize(self) -> dict[str, Any]:
-        # Race time is tick_count-based (absolute), so no clock conversion.
+        # Race time is an accumulated-dt float (absolute), so no clock
+        # conversion is needed across a restart.
         return {
             "tick_count": self.tick_count,
+            "elapsed_s": self.elapsed_s,
             "first_finish_time": self.first_finish_time,
             "finished": self.finished,
             "warning_fired": self.warning_fired,
@@ -301,6 +306,7 @@ class PuckRacer(Game):
         game = cls(players)
         game._pending_cues = []  # don't replay match_start on restore
         game.tick_count = data["tick_count"]
+        game.elapsed_s = data.get("elapsed_s", data["tick_count"] * TICK_DT)
         game.first_finish_time = data["first_finish_time"]
         game.finished = data["finished"]
         game.warning_fired = data["warning_fired"]
@@ -378,22 +384,22 @@ class PuckRacer(Game):
 
     @property
     def _race_time(self) -> float:
-        return self.tick_count * TICK_DT
+        return self.elapsed_s
 
-    def _integrate(self, racer: RacerState, race_t: float) -> None:
+    def _integrate(self, racer: RacerState, race_t: float, dt: float) -> None:
         # Clear an expired boost.
         if racer.boost_until is not None and race_t >= racer.boost_until:
             racer.boost_until = None
 
         target = MAX_SPEED if racer.throttle_held else BASE_SPEED
         if racer.speed < target:
-            racer.speed = min(target, racer.speed + ACCEL * TICK_DT)
+            racer.speed = min(target, racer.speed + ACCEL * dt)
         elif racer.speed > target:
-            racer.speed = max(target, racer.speed - DECEL * TICK_DT)
+            racer.speed = max(target, racer.speed - DECEL * dt)
 
         effective = racer.speed * (BOOST_MULT if racer.boost_until else 1.0)
         racer.position = min(
-            FINISH_DISTANCE, racer.position + effective * TICK_DT
+            FINISH_DISTANCE, racer.position + effective * dt
         )
 
     def _finalize(

@@ -40,6 +40,7 @@ from runtime import (
     InputEvent,
     ScoreEvent,
     StateUpdate,
+    DEFAULT_TICK_DT,
     Cue,
     CueEvent,
     cue_match_start,
@@ -182,7 +183,10 @@ class PuckGolf(Game):
             is_final=self.finished,
         )
 
-    def tick(self) -> StateUpdate:
+    def tick(self, dt: float = DEFAULT_TICK_DT) -> StateUpdate:
+        # Golf measures its power meter from time.monotonic() (real
+        # wall-clock), so it's already fidelity-correct; dt is accepted for
+        # the uniform tick contract but unused.
         cues = self._drain_pending()
         if self.finished:
             return StateUpdate(state=self.get_state(), cues=cues)

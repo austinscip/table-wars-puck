@@ -38,6 +38,7 @@ from runtime import (
     InputEvent,
     ScoreEvent,
     StateUpdate,
+    DEFAULT_TICK_DT,
     Cue,
     CueEvent,
     cue_match_start,
@@ -328,7 +329,10 @@ class SpeedPyramid(Game):
             is_final=self.finished,
         )
 
-    def tick(self) -> StateUpdate:
+    def tick(self, dt: float = DEFAULT_TICK_DT) -> StateUpdate:
+        # The question timer is measured from time.monotonic() (real
+        # wall-clock), so it's already fidelity-correct; dt is accepted for
+        # the uniform tick contract but unused.
         cues: list[CueEvent] = []
         score_events: list[ScoreEvent] = []
         if self._pending_cues:

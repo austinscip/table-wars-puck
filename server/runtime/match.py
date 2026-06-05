@@ -20,7 +20,14 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional, Protocol
 
-from .game import Game, Player, InputEvent, ScoreEvent, StateUpdate
+from .game import (
+    DEFAULT_TICK_DT,
+    Game,
+    Player,
+    InputEvent,
+    ScoreEvent,
+    StateUpdate,
+)
 from .cues import Cue, CueEvent
 from .heartbeat import HeartbeatTracker
 from .idempotency import IdempotencyCache
@@ -454,10 +461,16 @@ class MatchManager:
             self.idempotency.put(key, update.state)
         return update, payload
 
-    def tick(self, match_id: str) -> StateUpdate:
+    def tick(
+        self, match_id: str, dt: float = DEFAULT_TICK_DT
+    ) -> StateUpdate:
+        """Advance one tick. `dt` is the real elapsed seconds since the last
+        tick — the live scheduler measures and passes it so timed games run
+        at wall-clock speed even when the box can't hold 10 Hz (gap #5b).
+        Defaults to the nominal step so synthetic test ticks are deterministic."""
         match = self._must_get(match_id)
         with self._lock_cm(match_id):
-            update, payload = self._tick_locked(match, match_id)
+            update, payload = self._tick_locked(match, match_id, dt)
         # Push to the local TV sink OUTSIDE the lock (ADR 0004). payload is
         # None on a no-op tick (no state change), so quiet ticks emit
         # nothing — emit volume tracks meaningful change, not 10 Hz.
@@ -465,12 +478,12 @@ class MatchManager:
         return update
 
     def _tick_locked(
-        self, match: Match, match_id: str
+        self, match: Match, match_id: str, dt: float = DEFAULT_TICK_DT
     ) -> tuple[StateUpdate, Optional[dict]]:
         if match.status != "active":
             return StateUpdate(state=match.game.get_state()), None
 
-        update = match.game.tick()
+        update = match.game.tick(dt)
 
         # Heartbeat sweep — any puck that hasn't pinged in
         # STALE_THRESHOLD_S gets a PLAYER_LEFT cue appended to this
