@@ -166,7 +166,9 @@ class MatchManager:
         # Always write a snapshot on input — every input is, by
         # definition, something the player did that the TV should react
         # to.
-        self.writer.update_match_snapshot(match_id, update.state)
+        self.writer.update_match_snapshot(
+            match_id, self._snapshot_payload(update)
+        )
         if update.is_final or match.game.is_over():
             self._finalize(match)
         return update
@@ -179,10 +181,12 @@ class MatchManager:
         update = match.game.tick()
         self._persist_scores(match, update.score_events)
         # Only persist snapshot on tick if the tick produced score
-        # events or finalised the match. Otherwise 10 Hz ticks would
-        # spam the matches row with no state change.
-        if update.score_events or update.is_final:
-            self.writer.update_match_snapshot(match_id, update.state)
+        # events, fired cues, or finalised the match. Otherwise 10 Hz
+        # ticks would spam the matches row with no state change.
+        if update.score_events or update.cues or update.is_final:
+            self.writer.update_match_snapshot(
+                match_id, self._snapshot_payload(update)
+            )
         if update.is_final or match.game.is_over():
             self._finalize(match)
         return update
@@ -236,3 +240,14 @@ class MatchManager:
         if match_id not in self.matches:
             raise KeyError(f"Match {match_id} not found")
         return self.matches[match_id]
+
+    @staticmethod
+    def _snapshot_payload(update: StateUpdate) -> dict:
+        """Merge game state with any cues fired this update. The TV
+        diffs snapshot.cues across updates to detect new emissions.
+        Cues are ephemeral — they don't accumulate in the snapshot
+        across updates because each write replaces the column."""
+        payload = dict(update.state)
+        if update.cues:
+            payload["cues"] = [c.to_dict() for c in update.cues]
+        return payload

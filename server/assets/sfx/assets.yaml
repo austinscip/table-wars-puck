@@ -1,0 +1,15 @@
+# SFX manifest — short ambient effects, < 500ms. Channel: sfx.
+# Files live alongside this manifest at server/assets/sfx/<file>.
+# Add a row when you drop a new file. The TV build packages only
+# referenced entries; anything not listed here is excluded.
+
+assets: []
+
+# Example row when assets land:
+#
+# - cue: player_correct
+#   file: player_correct.mp3
+#   source: freesound.org/people/<user>/sounds/<id>/
+#   license: CC0
+#   duration_ms: 320
+#   notes: short upward chime, matches the gold-tier score moment

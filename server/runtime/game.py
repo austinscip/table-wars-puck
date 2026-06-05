@@ -7,7 +7,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .cues import CueEvent
 
 # The set of input channels a game can declare interest in. Pucks send
 # the union of these every tick; games receive an InputEvent already
@@ -74,7 +77,8 @@ class ScoreEvent:
 @dataclass
 class StateUpdate:
     """Returned by on_input and tick. Bundles the new state snapshot for
-    the TV with any score events the manager should persist.
+    the TV with any score events the manager should persist and any
+    cues to play.
 
     is_final flags that the game has reached its terminal state; the
     MatchManager will run finalisation (emit any remaining final scores,
@@ -83,6 +87,7 @@ class StateUpdate:
 
     state: dict[str, Any]
     score_events: list[ScoreEvent] = field(default_factory=list)
+    cues: list["CueEvent"] = field(default_factory=list)
     is_final: bool = False
 
 

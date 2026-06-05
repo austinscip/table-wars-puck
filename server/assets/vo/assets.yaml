@@ -1,0 +1,22 @@
+# Voice-over manifest. Channel: vo. Each entry maps a cue to the line
+# the host says + the rendered audio file.
+#
+# Rendered by scripts/build_vo.py from this YAML using Kokoro TTS. To
+# regenerate after editing text, run:
+#
+#     python scripts/build_vo.py --voice am_michael
+#
+# voice values map to Kokoro voice ids. am_michael is the production
+# pick; alternatives live in ../voices/ as samples.
+
+voice: am_michael
+
+assets: []
+
+# Example row:
+#
+# - cue: match_start
+#   text: "Let's get this thing rolling!"
+#   file: match_start.mp3
+#   duration_ms: 1200
+#   notes: keep upbeat, no music gap before

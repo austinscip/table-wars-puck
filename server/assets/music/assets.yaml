@@ -1,0 +1,16 @@
+# Music bed manifest. Channel: music. Beds loop quietly under host VO
+# and SFX. Most entries are 30-90s seamlessly-looping clips, with a
+# short fade tail used when the cue transitions to another bed.
+
+assets: []
+
+# Example row:
+#
+# - cue: round_start
+#   file: round_start_loop.mp3
+#   source: pixabay.com/music/<id>
+#   license: Pixabay CC0
+#   loop_ms: 32000
+#   fade_out_ms: 600
+#   notes: drives the question-active state, swap for higher tempo on
+#         final round

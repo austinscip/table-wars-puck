@@ -25,6 +25,17 @@ from .match import Match, MatchManager
 from .inputs import event_from_dict
 from .pairing import PairingManager, PairingError, color_for
 from .scheduler import TickScheduler
+from .cues import (
+    Cue,
+    CueChannel,
+    CueEvent,
+    cue_player_correct,
+    cue_player_wrong,
+    cue_match_start,
+    cue_match_end,
+    cue_round_start,
+    cue_timer_warning,
+)
 
 __all__ = [
     "Game",
@@ -42,4 +53,13 @@ __all__ = [
     "PairingError",
     "color_for",
     "TickScheduler",
+    "Cue",
+    "CueChannel",
+    "CueEvent",
+    "cue_player_correct",
+    "cue_player_wrong",
+    "cue_match_start",
+    "cue_match_end",
+    "cue_round_start",
+    "cue_timer_warning",
 ]
