@@ -49,7 +49,14 @@ app = Flask(__name__)
 
 # Sprint 1E: Use environment variables for production configuration
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'tablewars_secret_2024_dev')
-CORS(app)
+# CORS: lock to explicit origins in prod via CORS_ALLOWED_ORIGINS
+# (comma-separated). Defaults to '*' for dev — the portal is a separate
+# origin, so set this to the portal/TV origins before going live.
+_cors_origins = os.environ.get('CORS_ALLOWED_ORIGINS', '*').strip()
+if _cors_origins and _cors_origins != '*':
+    CORS(app, origins=[o.strip() for o in _cors_origins.split(',') if o.strip()])
+else:
+    CORS(app)  # dev: allow all
 
 # Structured logging + optional Sentry for the runtime AND this Flask app.
 # When SENTRY_DSN is set (and sentry-sdk is installed) Sentry auto-

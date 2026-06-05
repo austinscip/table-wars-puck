@@ -205,6 +205,32 @@ def _bad(message: str, status: int = 400):
     return jsonify({"error": message}), status
 
 
+# === Health ===
+
+
+@runtime_bp.route("/health", methods=["GET"])
+def health():
+    """Liveness/readiness for load balancers + deploy checks. Stays cheap
+    and DB-free: it never forces the (DB-touching) container to build, so a
+    health probe works even before the first real request or if the DB is
+    briefly unreachable."""
+    import games  # noqa: F401 — ensure the registry is populated
+
+    info: dict = {
+        "status": "ok",
+        "games": game_registry.list_slugs(),
+        "runtime_initialized": _container is not None,
+    }
+    if _container is not None:
+        mm: MatchManager = _container["manager"]
+        info["active_matches"] = sum(
+            1 for m in mm.matches.values() if m.status == "active"
+        )
+        info["puck_auth"] = _container.get("token_authority") is not None
+        info["durable_store"] = mm.store is not None
+    return jsonify(info), 200
+
+
 # === Pair endpoints ===
 
 
