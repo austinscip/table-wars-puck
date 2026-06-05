@@ -50,6 +50,15 @@ app = Flask(__name__)
 # Sprint 1E: Use environment variables for production configuration
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'tablewars_secret_2024_dev')
 CORS(app)
+
+# Structured logging + optional Sentry for the runtime AND this Flask app.
+# When SENTRY_DSN is set (and sentry-sdk is installed) Sentry auto-
+# instruments Flask + the logging path, so the error handler below and any
+# logger.exception() ship off-box; otherwise both no-op cleanly.
+from runtime import configure_logging, init_sentry, get_logger
+configure_logging()
+init_sentry()
+_flask_log = get_logger("flask")
 # async_mode='threading' avoids the werkzeug websocket-upgrade quirk
 # on Python 3.14 dev server ("write() before start_response"). It also
 # eliminates the noisy 500 in logs when the client opens a websocket.
@@ -77,12 +86,11 @@ def _robust_exception_handler(e):
     from werkzeug.exceptions import HTTPException
     if isinstance(e, HTTPException):
         return e
-    # Log to stderr so dev still sees the trace; production should also
-    # have a real logger configured.
-    import traceback, sys
-    print(f"[robust_exception_handler] {type(e).__name__}: {e}",
-          file=sys.stderr)
-    traceback.print_exc(file=sys.stderr)
+    # Structured log with traceback — captured by Sentry's logging
+    # integration when configured, and visible in dev either way.
+    _flask_log.exception(
+        "unhandled error on %s %s", request.method, request.path
+    )
     return jsonify({
         "error": "server",
         "message": "transient server error, retry",

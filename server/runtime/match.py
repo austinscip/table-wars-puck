@@ -11,6 +11,7 @@ maintaining a Socket.IO server.
 
 from __future__ import annotations
 
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -132,6 +133,31 @@ class MatchManager:
             abandon_after_s if abandon_after_s is not None else self.ABANDON_AFTER_S
         )
         self.matches: dict[str, Match] = {}
+        # One reentrant lock per match, serialising every mutation of that
+        # match's state. The scheduler thread (tick) and Flask request
+        # threads (on_input) both touch a match's game object; without
+        # this they race on game internals AND on the idempotency
+        # check-then-act. Reentrant so finalize/abandon (called from
+        # inside a locked on_input/tick) don't deadlock. This is the seam
+        # that becomes a Redis per-match lock when state moves out of
+        # process (see runtime/CONTEXT.md).
+        self._match_locks: dict[str, threading.RLock] = {}
+        self._match_locks_guard = threading.Lock()
+
+    def _lock_for(self, match_id: str) -> threading.RLock:
+        with self._match_locks_guard:
+            lock = self._match_locks.get(match_id)
+            if lock is None:
+                lock = threading.RLock()
+                self._match_locks[match_id] = lock
+            return lock
+
+    def _drop_lock(self, match_id: str) -> None:
+        """Release the per-match lock entry once a match is terminal so
+        the map doesn't grow without bound. Safe: a late request for a
+        finished match just makes a fresh lock and hits the status guard."""
+        with self._match_locks_guard:
+            self._match_locks.pop(match_id, None)
 
     # === Create ===
 
@@ -151,6 +177,14 @@ class MatchManager:
                 f"{game_class.min_players}-{game_class.max_players} players, "
                 f"got {n}"
             )
+
+        # puck_index must be unique — it keys match_puck_ids, scoring, and
+        # all game state. A duplicate would silently collapse two players
+        # into one. Pairing guarantees uniqueness today; this guard makes
+        # it impossible for any caller to bypass before a DB write lands.
+        indices = [p.puck_index for p in players]
+        if len(set(indices)) != len(indices):
+            raise ValueError(f"duplicate puck_index in players: {indices}")
 
         # Build the game first so its initial state seeds the snapshot in
         # the SAME transaction as the match + puck rows. A game
@@ -214,7 +248,16 @@ class MatchManager:
         event_id: Optional[str] = None,
     ) -> StateUpdate:
         match = self._must_get(match_id)
+        with self._lock_for(match_id):
+            return self._on_input_locked(match, match_id, event, event_id)
 
+    def _on_input_locked(
+        self,
+        match: Match,
+        match_id: str,
+        event: InputEvent,
+        event_id: Optional[str],
+    ) -> StateUpdate:
         # Idempotency: a retried request (same logical event_id from the
         # same puck in the same match) replays the first response without
         # re-applying the input. Checked before the status guard so a
@@ -250,6 +293,10 @@ class MatchManager:
 
     def tick(self, match_id: str) -> StateUpdate:
         match = self._must_get(match_id)
+        with self._lock_for(match_id):
+            return self._tick_locked(match, match_id)
+
+    def _tick_locked(self, match: Match, match_id: str) -> StateUpdate:
         if match.status != "active":
             return StateUpdate(state=match.game.get_state())
 
@@ -334,6 +381,7 @@ class MatchManager:
             self.scheduler.unregister(match.id)
         if self.heartbeat is not None:
             self.heartbeat.drop_match(match.id)
+        self._drop_lock(match.id)
         logger.info("match %s finished", match.id)
 
     def _is_abandoned(self, match: Match) -> bool:
@@ -359,6 +407,7 @@ class MatchManager:
             self.scheduler.unregister(match.id)
         if self.heartbeat is not None:
             self.heartbeat.drop_match(match.id)
+        self._drop_lock(match.id)
         logger.info("match %s abandoned (all pucks stale, no input)", match.id)
 
     # === Internals ===

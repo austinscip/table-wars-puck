@@ -7,31 +7,97 @@ Used by the runtime MatchManager and any other server-side write path
 that should not be subject to RLS (puck telemetry, firmware manifest
 updates, etc.).
 
-The class is a thin wrapper around psycopg connections. Every method
-opens a fresh connection from the pool, runs its SQL, and closes — no
-sessions are held across requests. If write volume grows, swap to a
-psycopg_pool.ConnectionPool.
+The class routes every write through `_connection()`. By default that
+opens a fresh psycopg connection per call (simple, no shared state). In
+production, build the writer with `SupabaseWriter.with_pool(...)` so calls
+borrow from a `psycopg_pool.ConnectionPool` instead of paying TCP+TLS
+setup on every score write. The method bodies are identical either way —
+only where the connection comes from changes.
 """
 
 from __future__ import annotations
 
 import json
 import os
-from datetime import datetime
-from typing import Optional
+from contextlib import contextmanager
+from typing import Iterator, Optional
 
 import psycopg
 from psycopg.rows import dict_row
 
+from datetime import datetime
+
+try:  # psycopg_pool is optional — the direct-connect path needs only psycopg.
+    from psycopg_pool import ConnectionPool
+except ImportError:  # pragma: no cover - exercised only where the lib is absent
+    ConnectionPool = None  # type: ignore[assignment, misc]
+
 
 class SupabaseWriter:
-    def __init__(self, dsn: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        dsn: Optional[str] = None,
+        pool: Optional["ConnectionPool"] = None,
+    ) -> None:
+        if pool is not None:
+            # Pooled mode: the pool owns the DSN + connection config.
+            self._pool = pool
+            self.dsn: Optional[str] = None
+            return
         dsn = dsn or os.environ.get("DATABASE_URL")
         if not dsn:
             raise RuntimeError(
                 "DATABASE_URL is not set. Source ~/tablewars/.env first."
             )
         self.dsn = dsn
+        self._pool = None
+
+    @classmethod
+    def with_pool(
+        cls,
+        dsn: Optional[str] = None,
+        *,
+        min_size: int = 1,
+        max_size: int = 8,
+    ) -> "SupabaseWriter":
+        """Build a writer backed by a connection pool. Falls back to the
+        poolless writer when psycopg_pool isn't installed, so a minimal
+        deploy still works. The pool fills lazily in the background, so
+        construction doesn't block on (or fail because of) the database
+        being momentarily unreachable."""
+        if ConnectionPool is None:
+            return cls(dsn=dsn)
+        dsn = dsn or os.environ.get("DATABASE_URL")
+        if not dsn:
+            raise RuntimeError(
+                "DATABASE_URL is not set. Source ~/tablewars/.env first."
+            )
+        pool = ConnectionPool(
+            dsn,
+            min_size=min_size,
+            max_size=max_size,
+            kwargs={"row_factory": dict_row},
+            open=True,
+        )
+        return cls(pool=pool)
+
+    @contextmanager
+    def _connection(self) -> Iterator["psycopg.Connection"]:
+        """Yield a connection — borrowed from the pool when one is
+        configured, otherwise freshly opened. Either way the context
+        commits on success and rolls back on exception, so callers wrap
+        multi-statement work in `with conn.transaction():` as before."""
+        if self._pool is not None:
+            with self._pool.connection() as conn:
+                yield conn
+        else:
+            with psycopg.connect(self.dsn, row_factory=dict_row) as conn:
+                yield conn
+
+    def close(self) -> None:
+        """Close the pool if we own one. No-op in direct-connect mode."""
+        if self._pool is not None:
+            self._pool.close()
 
     # === Matches ===
 
@@ -52,7 +118,7 @@ class SupabaseWriter:
         order. Returns (match_id, match_puck_ids) where match_puck_ids is
         in the same order as pucks.
         """
-        with psycopg.connect(self.dsn, row_factory=dict_row) as conn:
+        with self._connection() as conn:
             with conn.transaction():
                 with conn.cursor() as cur:
                     cur.execute(
@@ -96,7 +162,7 @@ class SupabaseWriter:
     def insert_match(
         self, location_id: str, game_slug: str, table_number: int
     ) -> str:
-        with psycopg.connect(self.dsn, row_factory=dict_row) as conn:
+        with self._connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "select id from games where slug = %s", (game_slug,)
@@ -117,7 +183,7 @@ class SupabaseWriter:
     def update_match_finished(
         self, match_id: str, ended_at: datetime
     ) -> None:
-        with psycopg.connect(self.dsn) as conn:
+        with self._connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "update matches "
@@ -134,7 +200,7 @@ class SupabaseWriter:
         result from a dead table. No final scores are written (there's no
         meaningful result). Guarded to only touch a still-active row so a
         late sweep can't stomp a match that finished in the meantime."""
-        with psycopg.connect(self.dsn) as conn:
+        with self._connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "update matches "
@@ -152,7 +218,7 @@ class SupabaseWriter:
         role: str,
         player_name: Optional[str],
     ) -> str:
-        with psycopg.connect(self.dsn, row_factory=dict_row) as conn:
+        with self._connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "insert into match_pucks "
@@ -177,7 +243,7 @@ class SupabaseWriter:
         score_total: int,
         event_type: str,
     ) -> None:
-        with psycopg.connect(self.dsn) as conn:
+        with self._connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "insert into scores "
@@ -198,7 +264,7 @@ class SupabaseWriter:
         """Write the current game state snapshot to matches.snapshot so
         the TV Realtime subscription wakes up. Called from MatchManager
         after every input or tick that changes visible state."""
-        with psycopg.connect(self.dsn) as conn:
+        with self._connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "update matches set snapshot = %s::jsonb where id = %s",
@@ -217,7 +283,7 @@ class SupabaseWriter:
         behind explicit fleet management (admin assigns serial -> index
         before the puck ships).
         """
-        with psycopg.connect(self.dsn, row_factory=dict_row) as conn:
+        with self._connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "select p.id from pucks p "

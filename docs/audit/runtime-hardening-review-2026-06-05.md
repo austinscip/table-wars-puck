@@ -109,3 +109,37 @@ is a real product gap:
 - **Untested by automation:** item 7 reconnect (needs live-socket
   integration), and the real Supabase transaction semantics (verified
   structurally via a faked driver + by code review).
+
+---
+
+## Addendum (same day) — Open items closed + Tier 2 started
+
+Follow-up work after the review above:
+
+**Open items closed.**
+- **2.3 duplicate `puck_index`** → **Handled.** `MatchManager.create`
+  rejects duplicate indices before any DB write
+  (`test_concurrency.py::test_duplicate_puck_index_rejected`).
+- **3.2 idempotency under concurrency** → **Handled.** A per-match
+  reentrant lock now wraps `on_input`/`tick`/`finalize`/`abandon`, making
+  the idempotency check-then-act atomic and serialising the scheduler
+  thread against request threads. Concurrency tests fire 20 threads at one
+  key and assert a single application
+  (`test_concurrency.py`). This is also the seam the Tier 2 Redis lock
+  drops into.
+- **7.3 Flask logging/Sentry** → **Handled (Flask).** `app.py` calls
+  `configure_logging()` + `init_sentry()` at boot and its 503 handler now
+  `logger.exception`s (Sentry-captured when configured). RN-side Sentry
+  remains **Open** (needs the `@sentry/react-native` dep + native config).
+
+**Tier 2 started.**
+- **Item 9 (Redis state)** → lock + idempotency **seams in place**
+  in-process; the Redis swap is now a drop-in (see `CONTEXT.md`).
+- **Item 10 (multi-lobby)** → **Handled.** `PairingManager` keyed by
+  `(location_id, table_number)`; 11 tests in `test_pairing.py`.
+- **Item 11 (connection pool)** → **Handled.** `SupabaseWriter.with_pool`;
+  graceful fallback when `psycopg_pool` is absent;
+  `test_connection_pool.py`.
+- **Item 12 (lobby via Realtime)** → **Open**, documented in `CONTEXT.md`.
+
+**Test coverage now:** 44 pytest + 6 jest, all green.

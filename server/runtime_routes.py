@@ -93,7 +93,10 @@ def _get_container() -> dict:
     configure_logging()
     init_sentry()
 
-    writer = SupabaseWriter()
+    # Pooled writer in the live runtime so a score write doesn't pay a
+    # fresh TCP+TLS handshake each time. Falls back to per-call connect
+    # when psycopg_pool isn't installed.
+    writer = SupabaseWriter.with_pool()
     heartbeat = HeartbeatTracker()
     idempotency = IdempotencyCache()
     manager = MatchManager(
@@ -220,7 +223,13 @@ def pair_cancel():
 @runtime_bp.route("/pair/lobby-state", methods=["GET"])
 def pair_lobby_state():
     pm: PairingManager = _get_container()["pairing"]
-    return jsonify(pm.lobby_snapshot())
+    # ?table_number=N scopes to one table; omitted returns the sole lobby
+    # (single-table pilot) or a list when several tables are active.
+    table_number = request.args.get("table_number", type=int)
+    location_id = _location_id() if table_number is not None else None
+    return jsonify(
+        pm.lobby_snapshot(location_id=location_id, table_number=table_number)
+    )
 
 
 # === Match endpoints ===

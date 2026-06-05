@@ -145,18 +145,49 @@ and asserts the game reacted, not just that a cue fired.
   initial schema migration. The leaderboards trigger upserts day/week/
   month/all_time buckets when this row lands.
 
-## Why MatchManager is in-process
+## Why MatchManager is in-process (and the lock seam)
 
 Pilot scale is one bar, ≤4 concurrent matches. Storing match state in a
-Python dict keyed by match_id is the simplest thing that works. When we
-need to shard across workers (multi-bar, multi-process), the swap is:
+Python dict keyed by match_id is the simplest thing that works.
+
+**The per-match lock is already in place.** `MatchManager` holds one
+reentrant lock per match (`_lock_for`) and wraps `on_input` and `tick`
+(and the finalise/abandon they call) in it. This already serialises the
+scheduler thread against Flask request threads *within* a process, and it
+closes the idempotency check-then-act window. It is also the exact seam
+the multi-worker migration needs: swap `threading.RLock` for a Redis lock
+keyed by `match:{id}` and the call sites don't change.
+
+When we shard across workers (multi-bar, multi-process), the swap is:
 
 1. Move `MatchManager.matches` to Redis with `match:{id}` keys.
-2. Take a per-match Redis lock around `on_input` / `tick` so two
-   workers can't double-process the same input frame.
-3. Everything else (game class, Supabase writer) stays.
+2. Replace the in-process `_lock_for` RLock with a Redis lock (e.g.
+   `redis-py` `Lock`) of the same per-match granularity. The
+   `IdempotencyCache` likewise moves to Redis `SETNX` + TTL on the same
+   key. Both are already isolated behind small interfaces.
+3. Everything else (game class, Supabase writer, the connection pool)
+   stays. `SupabaseWriter.with_pool` already shares one pool per process.
 
-No premature distribution.
+No premature distribution — only the seams are in place.
+
+## Multi-lobby (one server, many tables)
+
+`PairingManager` keys lobbies by `(location_id, table_number)`, so a
+single server runs many tables at once. A puck's later calls
+(dial/confirm/start/cancel) carry only `puck_index`; the manager resolves
+the puck's lobby via a `puck_index -> lobby key` locator populated at
+`request_code`. Constraint: `puck_index` is unique per location for the
+pilot fleet. When a location outgrows a single index space, the puck
+calls must carry `table_number` explicitly (the route already threads it
+through `lobby-state`).
+
+**Deferred — lobby state via Realtime (Tier 2 item 12).** The TV still
+polls `/api/runtime/pair/lobby-state` at 1 Hz. The planned move is to
+mirror each lobby mutation into a Supabase table the TV subscribes to via
+Realtime (same channel mechanism as `matches`), which removes the poll
+and makes lobby state shared across workers for free. Not yet done — it
+needs a `lobbies` table + RLS + the PairingManager writing on every
+mutation; tracked here so it isn't lost.
 
 ## How the TV sees state
 
@@ -176,17 +207,27 @@ state-shape stabilises).
 
 ## Production-hardening status (2026-06-05 pass)
 
-Landed: per-game disconnect adapters; pytest + jest harness with CI;
-transactional match creation; input idempotency; abandoned-match sweep;
-monotonic cue `seq` (server + TV dedupe); TV Realtime resubscribe;
-structured logging + optional Sentry. Full edge-case review:
+**Tier 1 (all):** per-game disconnect adapters; pytest + jest harness with
+CI; transactional match creation; input idempotency; abandoned-match
+sweep; monotonic cue `seq` (server + TV dedupe); TV Realtime resubscribe;
+structured logging + optional Sentry.
+
+**Tier 2 (in progress):** per-match lock (the Redis-lock seam, done
+in-process); `SupabaseWriter.with_pool` connection pool; multi-lobby per
+`(location_id, table_number)`. Deferred: Redis-backed match state (lock +
+idempotency seams in place), lobby-via-Realtime (item 12).
+
+**Review Open items closed this pass:** duplicate-`puck_index` guard;
+idempotency check-then-act now atomic under the per-match lock; Flask boot
+logging + Sentry-capturing error handler.
+
+Full edge-case review:
 `docs/audit/runtime-hardening-review-2026-06-05.md`.
 
 Known-accepted limitations (see the review): a disconnected puck is
-retired for the match (no mid-match reconnect); idempotency is best-effort
-without the per-match lock (Tier 2 Redis); a server restart mid-match
+retired for the match (no mid-match reconnect); a server restart mid-match
 loses in-memory state (and resets cue `seq`) until runtime state is
-Redis-backed.
+Redis-backed; RN-side Sentry not yet wired (Flask + runtime are).
 
 ## Open items not yet wired
 
