@@ -20,17 +20,23 @@ runs in safe/open mode when they're absent.
 | `LOCATION_ID` | Pins the Flask box to one venue. | Already used; confirm it's set per venue. |
 | `REDIS_URL` | Enables the durable match store + restart recovery + shared idempotency. | Set it + run Redis; a redeploy/crash mid-match then recovers active matches on boot. |
 | `CORS_ALLOWED_ORIGINS` | Locks CORS to the portal/TV origins (comma-separated). | Defaults to `*` (dev). Set before launch. |
+| `PLAYER_PHONE_PEPPER` | Enables optional phone-based player recovery (ADR 0005). | **Optional, ≥32 bytes.** Without it, phone numbers are never hashed/stored — the QR token is the only identity. The pepper makes the (enumerable) phone space safe to key on; keep it secret + stable (rotating it orphans existing phone links). |
 
 ## 2. Supabase — apply migrations + enable Realtime
 
 These I cannot push to your live project (I won't touch `~/tablewars/.env`
 without you). On the Supabase project (`tfctjqjrtjfaduirtcyk`):
 
-1. **Apply the two new migrations** (in order):
+1. **Apply the new migrations** (in order):
    - `supabase/migrations/20260605000000_anon_match_token_rls.sql` — anon
      read scoped by signed match token.
    - `supabase/migrations/20260605000001_lobbies_realtime.sql` — lobbies
      table + RLS.
+   - `supabase/migrations/20260605000002_player_identity.sql` — players +
+     player_secrets + match_pucks.player_id + player_leaderboards + the
+     extended final-score trigger + RLS (ADR 0005). Verified end-to-end
+     against local Postgres (test_player_identity*, incl. the adversarial
+     RLS suite).
    Use the Supabase CLI (`supabase db push`) or paste into the SQL editor.
 2. **Enable Realtime** on the `matches` and `lobbies` tables (Dashboard →
    Database → Replication / Publications → add them to
@@ -137,3 +143,22 @@ listed so nothing's lost:
      post-gevent-monkey-patch).
   `createLocalSocketSource` already lazy-loads `socket.io-client` and
   degrades to cloud if it's missing, so step 1 is the activation switch.
+
+- **Player-bind front-end (ADR 0005)** — the server side ships: the bind
+  endpoint (`POST /api/runtime/match/<id>/bind`), token mint/resolve, the
+  `match_pucks.player_id` link, and the `player_leaderboards` trigger are all
+  done and tested (incl. real-DB + adversarial RLS). Still UI work, not done:
+  1. **TV QR** — render a QR on the TV that deep-links to the phone profile
+     with the match/table context (the TV already knows its `match_id`).
+  2. **Phone web profile** — a lightweight page where a returning patron is
+     auto-identified by their stored token (or a new one is minted), picks
+     their seat/colour in the live lobby, and POSTs the bind. This is the
+     "pick your colour" step from the ADR; it's the patron-facing surface
+     and needs a North Star pass.
+  3. **Live name reflection (optional polish)** — reflect a mid-match bind on
+     the TV immediately (in-memory participant rename + re-emit a frame).
+     Attribution already works without it; this is cosmetic.
+  4. **Engagement surfaces** — "you're #3 this week" / personal stats now
+     have a data source (`player_leaderboards`, scoped per
+     `(player_id, game_id, location_id, period)`); wire them into the TV /
+     phone profile when the front-end lands.
