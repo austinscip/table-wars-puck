@@ -6,6 +6,7 @@ import { TitleScreen } from './src/screens/TitleScreen';
 import { AttractScreen } from './src/screens/AttractScreen';
 import { PairScreen } from './src/screens/PairScreen';
 import { LobbyScreen } from './src/screens/LobbyScreen';
+import { GameScreen } from './src/screens/GameScreen';
 import { ScoreboardScreen } from './src/screens/ScoreboardScreen';
 import type { RootStackParamList } from './src/navigation';
 import { colors } from './src/theme';
@@ -40,21 +41,16 @@ export default function App() {
           screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
           <Stack.Screen name="Title" component={TitleScreen} />
           <Stack.Screen name="Attract" component={AttractScreen} />
+          {/* Pair is reachable via firmware / dev tooling but not by
+              the main flow — Lobby covers the pre-match surface. */}
           <Stack.Screen
             name="Pair"
             component={PairScreen}
-            initialParams={{ code: '482917', progress: [null, null, null, null, null, null] }}
+            initialParams={{ code: '000000', progress: [null, null, null, null, null, null] }}
           />
-          <Stack.Screen
-            name="Lobby"
-            component={LobbyScreen}
-            initialParams={{ code: '482917', players: [], hostPuckId: 1 }}
-          />
-          <Stack.Screen
-            name="Scoreboard"
-            component={ScoreboardScreen}
-            initialParams={{ players: [], totalRounds: 0 }}
-          />
+          <Stack.Screen name="Lobby" component={LobbyScreen} />
+          <Stack.Screen name="Game" component={GameScreen} />
+          <Stack.Screen name="Scoreboard" component={ScoreboardScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

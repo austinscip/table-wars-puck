@@ -24,8 +24,10 @@ export type RootStackParamList = {
     players: LobbyPlayer[];
     hostPuckId: number;
   };
+  Game: {
+    matchId: string;
+  };
   Scoreboard: {
-    players: ScoreboardPlayer[];
-    totalRounds: number;
+    matchId: string;
   };
 };

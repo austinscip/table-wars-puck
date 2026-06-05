@@ -1,12 +1,46 @@
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { colors, fonts } from '../theme';
+import { useLobbyState } from '../lib/useLobbyState';
 import type { RootStackParamList } from '../navigation';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Lobby'>;
+// Live lobby. Reads from the polling hook directly instead of
+// route.params so the screen stays in sync if the lobby grows /
+// shrinks / starts a match while we're already mounted.
 
-export function LobbyScreen({ route }: Props) {
-  const { code, players, hostPuckId } = route.params;
+export function LobbyScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const lobby = useLobbyState(1000);
+
+  // When the host taps start, the runtime sets match_id. Hand off to
+  // the in-match GameScreen which subscribes to matches.snapshot.
+  useEffect(() => {
+    if (lobby.active && lobby.match_id) {
+      navigation.navigate('Game', { matchId: lobby.match_id });
+    }
+  }, [lobby, navigation]);
+
+  // Lobby cleared (host cancelled, ttl expired, server bounced) ->
+  // back to Title so attract / idle paths take over.
+  useEffect(() => {
+    if (!('loading' in lobby) && !lobby.active) {
+      navigation.navigate('Title');
+    }
+  }, [lobby, navigation]);
+
+  if (!lobby.active) {
+    return (
+      <View style={styles.root}>
+        <Text style={styles.heading}>LOBBY</Text>
+        <Text style={styles.empty}>Waiting for a puck to start pairing…</Text>
+      </View>
+    );
+  }
+
+  const players = lobby.players;
+  const hostPuckIndex = lobby.host_puck_index;
 
   return (
     <View style={styles.root}>
@@ -14,7 +48,7 @@ export function LobbyScreen({ route }: Props) {
 
       <View style={styles.codeBlock}>
         <Text style={styles.codeLabel}>Code to join</Text>
-        <Text style={styles.code}>{code}</Text>
+        <Text style={styles.code}>{lobby.code}</Text>
       </View>
 
       <View style={styles.playersBlock}>
@@ -25,12 +59,14 @@ export function LobbyScreen({ route }: Props) {
         </Text>
         <View style={styles.playersRow}>
           {players.map((p) => (
-            <View key={p.puckId} style={styles.playerCol}>
+            <View key={p.puck_index} style={styles.playerCol}>
               <View style={[styles.avatar, { backgroundColor: p.color }]}>
-                <Text style={styles.avatarText}>{p.puckId}</Text>
+                <Text style={styles.avatarText}>{p.puck_index}</Text>
               </View>
               <Text style={styles.playerName}>
-                {p.puckId === hostPuckId ? `Puck ${p.puckId} · HOST` : `Puck ${p.puckId}`}
+                {p.puck_index === hostPuckIndex
+                  ? `Puck ${p.puck_index} · HOST`
+                  : `Puck ${p.puck_index}`}
               </Text>
             </View>
           ))}
@@ -40,7 +76,7 @@ export function LobbyScreen({ route }: Props) {
       {players.length > 0 && (
         <View style={styles.hints}>
           <Text style={styles.hintPrimary}>
-            Host (Puck {hostPuckId}): tap your puck to start
+            Host (Puck {hostPuckIndex}): tap your puck to start
           </Text>
           <Text style={styles.hintSecondary}>
             Other players: hold your puck button for 1 second to join
@@ -67,6 +103,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     letterSpacing: -2,
   },
+  empty: { fontFamily: fonts.body, fontSize: 24, color: colors.textDim },
   codeBlock: { alignItems: 'center', gap: 12 },
   codeLabel: {
     fontFamily: fonts.body,
