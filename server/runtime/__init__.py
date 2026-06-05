@@ -30,6 +30,7 @@ from .match import (
 )
 from .match_store import InMemoryMatchStore, RedisMatchStore
 from .persistence import PersistenceQueue
+from .identity import PlayerIdentity
 from .inputs import event_from_dict
 from .pairing import PairingManager, PairingError, color_for
 from .scheduler import TickScheduler
@@ -74,6 +75,7 @@ __all__ = [
     "InMemoryMatchStore",
     "RedisMatchStore",
     "PersistenceQueue",
+    "PlayerIdentity",
     "event_from_dict",
     "PairingManager",
     "PairingError",

@@ -187,3 +187,98 @@ def test_delete_player_setnull_keeps_history_and_cascades_lb(dsn):
                 "'8a000000-0000-0000-0000-0000000000de' and event_type='final'"
             )
             assert cur.fetchone()[0] == 1
+
+
+# ---------------------------------------------------------------------------
+# SupabaseWriter player methods (ADR 0005) against the real DB.
+# ---------------------------------------------------------------------------
+
+
+def _writer(dsn):
+    from supabase_client import SupabaseWriter
+
+    return SupabaseWriter(dsn=dsn)
+
+
+def test_resolve_or_create_player_is_idempotent_by_token(dsn):
+    from runtime import PlayerIdentity
+
+    w = _writer(dsn)
+    th = PlayerIdentity.hash_token("token-resolve-1")
+    pid1, created1 = w.resolve_or_create_player(th, display_name="Ada")
+    pid2, created2 = w.resolve_or_create_player(th)
+    assert created1 is True and created2 is False
+    assert pid1 == pid2  # same token -> same player
+
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute("select display_name from players where id=%s", (pid1,))
+            assert cur.fetchone()[0] == "Ada"
+            # Exactly one secrets row for the token.
+            cur.execute(
+                "select count(*) from player_secrets where token_hash=%s", (th,)
+            )
+            assert cur.fetchone()[0] == 1
+
+
+def test_resolve_does_not_clobber_existing_display_name(dsn):
+    from runtime import PlayerIdentity
+
+    w = _writer(dsn)
+    th = PlayerIdentity.hash_token("token-resolve-2")
+    pid, _ = w.resolve_or_create_player(th, display_name="Grace")
+    # A later resolve with a different name must NOT overwrite the handle.
+    w.resolve_or_create_player(th, display_name="NotGrace")
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute("select display_name from players where id=%s", (pid,))
+            assert cur.fetchone()[0] == "Grace"
+
+
+def test_bind_player_to_match_puck_sets_player_and_name(dsn):
+    from runtime import PlayerIdentity
+
+    w = _writer(dsn)
+    th = PlayerIdentity.hash_token("token-bind-1")
+    pid, _ = w.resolve_or_create_player(th)
+
+    # A fresh anonymous match_puck (own match) to bind, independent of order.
+    m4 = "5a000000-0000-0000-0000-000000000004"
+    mp = "8a000000-0000-0000-0000-0000000000b1"
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "insert into matches(id,location_id,game_id,table_number,status) "
+                "select %s,%s,g.id,1,'active' from games g where g.slug='speed_pyramid'",
+                (m4, LOC_P),
+            )
+            cur.execute(
+                "insert into match_pucks(id,match_id,puck_id,role) values "
+                "(%s,%s,'6a000000-0000-0000-0000-000000000002','sibling')",
+                (mp, m4),
+            )
+
+    w.bind_player_to_match_puck(mp, pid, display_name="Boundy")
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "select player_id, player_name from match_pucks where id=%s", (mp,)
+            )
+            got_pid, got_name = cur.fetchone()
+            assert got_pid == pid
+            assert got_name == "Boundy"
+
+
+def test_phone_recovery_roundtrip(dsn):
+    from runtime import PlayerIdentity
+
+    ident = PlayerIdentity(phone_pepper="test-pepper")
+    w = _writer(dsn)
+    th = PlayerIdentity.hash_token("token-phone-1")
+    pid, _ = w.resolve_or_create_player(th)
+
+    ph = ident.hash_phone("313-555-9000")
+    assert ph is not None
+    assert w.find_player_id_by_phone_hash(ph) is None  # not linked yet
+    w.attach_phone_hash(pid, ph)
+    assert w.find_player_id_by_phone_hash(ph) == pid  # now recoverable

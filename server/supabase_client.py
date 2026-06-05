@@ -242,6 +242,100 @@ class SupabaseWriter:
                 )
                 return cur.fetchone()["id"]
 
+    # === Players (ADR 0005) ===
+
+    def resolve_or_create_player(
+        self,
+        token_hash: str,
+        display_name: Optional[str] = None,
+    ) -> tuple[str, bool]:
+        """Look up the Player owning `token_hash`; create one (+ its secrets
+        row) if none exists. Returns (player_id, created). A display_name is
+        only filled in when the player doesn't already have one — we never
+        clobber an existing handle. Atomic so a race can't create two
+        players for one token (the token_hash unique index also backstops)."""
+        with self._connection() as conn:
+            with conn.transaction():
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "select player_id from player_secrets "
+                        "where token_hash = %s",
+                        (token_hash,),
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        pid = row["player_id"]
+                        if display_name:
+                            cur.execute(
+                                "update players "
+                                "set display_name = coalesce(display_name, %s) "
+                                "where id = %s",
+                                (display_name, pid),
+                            )
+                        return pid, False
+                    cur.execute(
+                        "insert into players(display_name) values (%s) "
+                        "returning id",
+                        (display_name,),
+                    )
+                    pid = cur.fetchone()["id"]
+                    cur.execute(
+                        "insert into player_secrets(player_id, token_hash) "
+                        "values (%s, %s)",
+                        (pid, token_hash),
+                    )
+                    return pid, True
+
+    def bind_player_to_match_puck(
+        self,
+        match_puck_id: str,
+        player_id: str,
+        display_name: Optional[str] = None,
+    ) -> None:
+        """Attach a Player to a Match Participant (the binding moment).
+        Optionally refresh the per-match display name. Scoping (which
+        match_puck) is the caller's responsibility — the runtime resolves it
+        from the live match's puck_index map."""
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                if display_name:
+                    cur.execute(
+                        "update match_pucks "
+                        "set player_id = %s, "
+                        "    player_name = coalesce(%s, player_name) "
+                        "where id = %s",
+                        (player_id, display_name, match_puck_id),
+                    )
+                else:
+                    cur.execute(
+                        "update match_pucks set player_id = %s where id = %s",
+                        (player_id, match_puck_id),
+                    )
+
+    def find_player_id_by_phone_hash(
+        self, phone_hash: str
+    ) -> Optional[str]:
+        """Cross-device recovery: the player owning this phone hash, if any."""
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "select player_id from player_secrets "
+                    "where phone_hash = %s",
+                    (phone_hash,),
+                )
+                row = cur.fetchone()
+                return row["player_id"] if row else None
+
+    def attach_phone_hash(self, player_id: str, phone_hash: str) -> None:
+        """Record a phone hash for an existing player (opt-in recovery)."""
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "update player_secrets set phone_hash = %s "
+                    "where player_id = %s",
+                    (phone_hash, player_id),
+                )
+
     # === Scores ===
 
     def insert_score(
