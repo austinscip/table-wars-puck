@@ -803,6 +803,11 @@ init_firmware_routes(app)
 init_analytics_routes(app)
 init_pair_routes(app, socketio)  # Speed Pyramid v1 — pair-code flow
 
+# Track G multi-game runtime. Mounts /api/runtime/* alongside the
+# Speed Pyramid v1 /api/pair/* flow so the cut-over is non-disruptive.
+from runtime_routes import runtime_bp
+app.register_blueprint(runtime_bp)
+
 if __name__ == '__main__':
     print("╔═══════════════════════════════════════════╗")
     print("║   TABLE WARS - Scoreboard Server v1.0    ║")
