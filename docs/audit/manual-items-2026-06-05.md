@@ -37,7 +37,17 @@ without you). On the Supabase project (`tfctjqjrtjfaduirtcyk`):
      extended final-score trigger + RLS (ADR 0005). Verified end-to-end
      against local Postgres (test_player_identity*, incl. the adversarial
      RLS suite).
+   - `supabase/migrations/20260605000003_data_retention.sql` — the
+     `purge_old_matches(retention_days)` function + index (ADR 0006).
+     Verified against local Postgres (test_data_retention).
    Use the Supabase CLI (`supabase db push`) or paste into the SQL editor.
+1b. **Schedule retention** (ADR 0006): the purge function ships but does NOT
+   self-schedule. Either enable Supabase **pg_cron** and
+   `select cron.schedule('purge-matches','0 4 * * *', $$select purge_old_matches(90)$$);`
+   or call `purge_old_matches(...)` from a Flask box maintenance task. Pick a
+   window per operator (default 90d raw data; leaderboard aggregates are kept
+   forever). There is no undo — export anything you need beyond the window
+   first.
 2. **Enable Realtime** on the `matches` and `lobbies` tables (Dashboard →
    Database → Replication / Publications → add them to
    `supabase_realtime`). Without this the TV gets no pushes.
