@@ -236,19 +236,28 @@ mutation; tracked here so it isn't lost.
 
 ## How the TV sees state
 
-Not via the MatchManager. The TV subscribes to Supabase Realtime
-channels:
+**Local-first (ADR 0004).** The native TV View renders gameplay from the
+venue Flask box over a LAN SocketIO room `match:<id>`: the `MatchManager`'s
+`state_sink` emits a `state_update` envelope `{match_id, status, snapshot}`
+on every state-changing input/tick (the emit happens *outside* the per-match
+lock; the `runtime` package stays Flask-SocketIO-free — the emit is wired in
+`runtime_routes.init_runtime_routes`). Each snapshot carries a monotonic
+`Match.snapshot_seq`.
 
-- `matches` UPDATE filtered by `id=eq.<match_id>` — status flips.
-- `match_pucks` INSERT filtered by `match_id=eq.<match_id>` — puck
-  joined the lobby.
-- `scores` INSERT filtered by `match_id=eq.<match_id>` — every score
-  event, mid-match and final.
+The TV falls back to **Supabase Realtime** only when the local socket is
+down, reconciling the two by `snapshot_seq` so failover never renders an
+older frame (`TableWarsTV/src/lib/matchSource.ts`). The cloud path the
+fallback reads:
 
-The TV reconstructs the visible state from these streams. The
-`get_state()` dict the game returns goes into a `matches.snapshot` JSONB
-column (TBD — not yet on the schema; will add when the first game's
-state-shape stabilises).
+- `matches` UPDATE filtered by `id=eq.<match_id>` — status + `snapshot`.
+- `match_pucks` INSERT filtered by `match_id=eq.<match_id>` — lobby joins.
+- `scores` INSERT filtered by `match_id=eq.<match_id>` — score events.
+
+Cloud writes are no longer on the TV's render path: the `PersistenceQueue`
+(`persistence.py`) drains the `matches.snapshot` JSONB write asynchronously
+(coalesced, best-effort), while finals/lifecycle stay synchronous. So the
+cloud copy is a persistence/analytics record + the fallback, not the live
+feed.
 
 ## Production-hardening status (2026-06-05 pass)
 

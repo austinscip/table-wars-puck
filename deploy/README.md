@@ -55,6 +55,13 @@ set, a restart/redeploy recovers active matches on boot. True multi-worker
 needs per-match ownership claiming (the seams — distributed lock,
 serialization, store — are built; see `server/runtime/CONTEXT.md`).
 
+**Do NOT add gunicorn `--preload`** (ADR 0004). The runtime's tick
+scheduler and the local-first TV SocketIO emit run on a background thread
+that must spawn *after* the gevent worker forks and monkey-patches —
+otherwise it spawns as a real thread that blocks the gevent hub. The
+container builds its runtime lazily on first request (post-fork), so the
+default (no preload) is correct; preloading would break that ordering.
+
 ## TLS
 
 Terminate TLS at a reverse proxy (Caddy/nginx) or the venue edge. Puck

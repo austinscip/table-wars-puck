@@ -116,3 +116,24 @@ listed so nothing's lost:
   `--workers 1` for the runtime). `/api/runtime/health` is now available
   for the load-balancer probe.
 - **CI for the portal/legacy app**, mypy, ESLint-in-CI.
+
+- **Activate the local-first TV path (ADR 0004)** — the server side ships
+  (the Flask box pushes match state over a LAN SocketIO room; the native TV
+  has the full source-selector + seq-reconciliation + cloud fallback). The
+  local socket is **dormant until you install the client dep and rebuild
+  the TV app**, because adding a native dep + the RN rebuild is your
+  environment, not the sandbox's. Until then the TV transparently runs on
+  the cloud-Realtime fallback (i.e. today's behaviour), so nothing breaks.
+  To activate:
+  1. `cd TableWarsTV && npm install socket.io-client` (commit the updated
+     `package.json` + `package-lock.json`).
+  2. Rebuild/redeploy the native TV app (`react-native run-ios` /
+     `run-android`, or your TV deploy path).
+  3. Set each TV's `API_BASE_URL` (in `~/tablewars/.env` → `src/config.ts`)
+     to the venue Flask box's LAN address (DHCP reservation or a `.local`
+     hostname), not `localhost`.
+  4. Keep the Flask box on gunicorn `--workers 1` and **without
+     `--preload`** (ADR 0004: the tick/emit greenlet must spawn post-fork,
+     post-gevent-monkey-patch).
+  `createLocalSocketSource` already lazy-loads `socket.io-client` and
+  degrades to cloud if it's missing, so step 1 is the activation switch.
