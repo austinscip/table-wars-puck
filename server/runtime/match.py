@@ -170,10 +170,18 @@ class MatchManager:
         idempotency: Optional[IdempotencyCache] = None,
         abandon_after_s: Optional[float] = None,
         store=None,
+        lock_provider=None,
     ) -> None:
         self.registry = registry
         self.writer = writer
         self.scheduler = scheduler
+        # Optional distributed lock provider (e.g. RedisLock) exposing
+        # lock_for(match_id) -> context manager. When set, it replaces the
+        # in-process per-match RLock — the seam for cross-worker mutual
+        # exclusion. NOTE: a distributed lock alone is not enough for
+        # multi-worker correctness (state, heartbeat, and a single ticker
+        # are also required); see runtime/CONTEXT.md.
+        self.lock_provider = lock_provider
         # Optional durable match store (InMemoryMatchStore / RedisMatchStore).
         # When set, serializable games are persisted on every state change
         # so a restart recovers active matches. Non-serializable games are
@@ -209,6 +217,14 @@ class MatchManager:
                 lock = threading.RLock()
                 self._match_locks[match_id] = lock
             return lock
+
+    def _lock_cm(self, match_id: str):
+        """The per-match critical-section lock as a context manager — the
+        injected distributed lock if one is configured, otherwise the
+        in-process reentrant lock."""
+        if self.lock_provider is not None:
+            return self.lock_provider.lock_for(match_id)
+        return self._lock_for(match_id)
 
     def _drop_lock(self, match_id: str) -> None:
         """Release the per-match lock entry once a match is terminal so
@@ -349,7 +365,7 @@ class MatchManager:
         event_id: Optional[str] = None,
     ) -> StateUpdate:
         match = self._must_get(match_id)
-        with self._lock_for(match_id):
+        with self._lock_cm(match_id):
             return self._on_input_locked(match, match_id, event, event_id)
 
     def _on_input_locked(
@@ -404,7 +420,7 @@ class MatchManager:
 
     def tick(self, match_id: str) -> StateUpdate:
         match = self._must_get(match_id)
-        with self._lock_for(match_id):
+        with self._lock_cm(match_id):
             return self._tick_locked(match, match_id)
 
     def _tick_locked(self, match: Match, match_id: str) -> StateUpdate:

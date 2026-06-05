@@ -183,14 +183,30 @@ What this gives us today:
   matches on boot. Verified end-to-end (`test_match_recovery.py`): a fresh
   manager recovers from the store and continues the match to completion.
 
-What's still needed for true multi-worker:
-- **Per-match ownership claiming.** `recover()` and per-request processing
-  are single-worker-safe as written; with N workers, two could both load
-  and tick the same match. The fix is to wrap match processing in the
-  `RedisLock` (already built + tested) so exactly one worker owns a match
-  at a time — load-under-lock, process, save-under-lock. The serialization
-  + store + lock are all in place; wiring them into the per-request path is
-  the remaining step.
+What's still needed for true multi-worker — the EXACT spec (deliberately
+not built; each half-measure is subtly wrong on its own):
+
+1. **Pluggable distributed lock — DONE.** `MatchManager(lock_provider=...)`
+   routes every `on_input`/`tick` through the injected lock
+   (`RedisLock.lock_for`); default stays the in-process RLock. Tested.
+2. **Reload-under-lock.** In distributed mode `on_input`/`tick` must load
+   the match fresh from the store inside the lock (not trust this worker's
+   in-memory copy), process, then save — so any worker can handle any
+   request. Serialization + store are ready; this is a small change gated
+   on a `distributed` flag.
+3. **A single designated ticker.** The 10 Hz tick advances `tick_count`;
+   two workers ticking the same match would double its clock even with the
+   lock. Exactly one process must run the scheduler (a dedicated ticker, or
+   leader election). Web workers then handle `on_input` statelessly.
+4. **Shared heartbeat state.** `HeartbeatTracker._beats` is per-process. In
+   distributed mode an `on_input` ping on a web worker wouldn't reach the
+   ticker's tracker, so it would false-positive disconnects. Per-puck
+   last_seen must move to Redis (a `RedisHeartbeatTracker`, same shape as
+   `RedisIdempotencyCache`) or into the serialized match state.
+
+Skipping any of 2–4 produces a *silently incorrect* runtime, which is why
+they're documented as one unit rather than partially shipped. Idempotency
+(`RedisIdempotencyCache`) and the lock are already cross-worker-ready.
 
 Until that lands, run a **single runtime worker** (gunicorn `--workers 1`)
 or pin a match's traffic to its owner (sticky routing by match_id). Note

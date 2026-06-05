@@ -143,6 +143,36 @@ def test_concurrent_distinct_pucks_no_lost_updates():
     assert any(s["match_puck_id"] == mp2 and s["event_type"] == "round" for s in writer.scores)
 
 
+def test_injected_lock_provider_is_used():
+    """on_input/tick go through an injected distributed lock provider (the
+    seam a RedisLock plugs into) instead of the in-process RLock."""
+    from contextlib import contextmanager
+
+    class RecordingLockProvider:
+        def __init__(self):
+            self.acquired: list[str] = []
+
+        @contextmanager
+        def lock_for(self, key):
+            self.acquired.append(key)
+            yield
+
+    lp = RecordingLockProvider()
+    writer = FakeWriter()
+    mgr = MatchManager(registry=registry, writer=writer, lock_provider=lp)
+    match = mgr.create(
+        location_id="loc",
+        game_slug="speed_pyramid",
+        table_number=1,
+        players=make_players(2),
+        questions=_fixture(),
+    )
+    mgr.on_input(match.id, InputEvent(puck_index=1, tilt_y=30.0, button_tap=True))
+    mgr.tick(match.id)
+    # Both on_input and tick acquired the injected lock for this match.
+    assert lp.acquired.count(match.id) >= 2
+
+
 def test_match_lock_dropped_on_finalize():
     """The per-match lock entry is released once the match is terminal so
     the lock map doesn't grow without bound across many matches."""

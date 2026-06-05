@@ -100,8 +100,18 @@ listed so nothing's lost:
   done. Largely YAGNI given per-venue boxes; do it only if one box must run
   multiple runtime workers.
 - **Legacy `app.py` logging sweep** — convert remaining `print()`s.
-- **CSRF** on Flask state-changing routes (CORS is now configurable; CSRF
-  tokens on the portal forms remain).
+- **CSRF** — assessed **not applicable**: the app has no session/cookie
+  authentication (no `session[...]`, no login), so there are no ambient
+  credentials for a cross-site request to abuse, and the state-changing
+  routes are JSON APIs called by non-browser clients (pucks, portal). Add
+  Flask-WTF `CSRFProtect` (with the `/api/*` blueprints exempted) **only if**
+  a cookie-authenticated admin UI is introduced later.
+- **Admin endpoint auth (the real gap)** — `/api/admin/*` routes (e.g.
+  `POST /api/admin/bars/<slug>/pucks`) currently have **no authentication**.
+  Gate them behind an admin token / Supabase-auth `org_admin` check before
+  exposing the portal publicly. This is an authz gap surfaced while
+  assessing CSRF; it touches the portal (which calls these), so it's
+  flagged here rather than changed blind.
 - **Deployment story** — Dockerfile audit, production WSGI unit (gunicorn
   `--workers 1` for the runtime). `/api/runtime/health` is now available
   for the load-balancer probe.
