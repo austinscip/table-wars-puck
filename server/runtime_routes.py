@@ -78,6 +78,11 @@ def _get_container() -> dict:
     global _container
     if _container is not None:
         return _container
+    # Import the games package so every game module registers itself
+    # on the runtime before the first request lands. Import is here
+    # rather than at module top-level so the routes blueprint can be
+    # registered even when DATABASE_URL is unset (e.g. test imports).
+    import games  # noqa: F401
     writer = SupabaseWriter()
     manager = MatchManager(registry=game_registry, writer=writer)
     scheduler = TickScheduler(match_manager=manager)
