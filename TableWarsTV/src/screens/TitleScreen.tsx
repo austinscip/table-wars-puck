@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BreathingDots } from '../components/BreathingDots';
 import { colors, fonts } from '../theme';
+import { useLobbyState } from '../lib/useLobbyState';
 import type { RootStackParamList } from '../navigation';
 
 // Idle threshold before the TV drops to attract mode. Picked at ~30s so
@@ -13,12 +14,38 @@ const IDLE_MS = 30_000;
 
 export function TitleScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const lobby = useLobbyState(1000);
+
+  // Idle -> Attract.
   useEffect(() => {
     const timer = setTimeout(() => {
       navigation.navigate('Attract');
     }, IDLE_MS);
     return () => clearTimeout(timer);
   }, [navigation]);
+
+  // Active lobby -> Pair (host dial in progress) or Lobby (others
+  // joining). The Pair screen is where the host's live dial mirror
+  // renders; Lobby is the waiting room once any puck has confirmed.
+  useEffect(() => {
+    if (!lobby.active) return;
+    if (lobby.players.length === 0) {
+      navigation.navigate('Pair', {
+        code: lobby.code,
+        progress: [null, null, null, null, null, null],
+      });
+    } else {
+      const lobbyPlayers = lobby.players.map((p) => ({
+        puckId: p.puck_index,
+        color: p.color,
+      }));
+      navigation.navigate('Lobby', {
+        code: lobby.code,
+        players: lobbyPlayers,
+        hostPuckId: lobby.host_puck_index,
+      });
+    }
+  }, [lobby, navigation]);
 
   return (
     <View style={styles.root}>

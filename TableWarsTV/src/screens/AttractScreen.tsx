@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { colors, fonts } from '../theme';
 import { useLeaderboardRotation } from '../lib/leaderboard';
+import { useLobbyState } from '../lib/useLobbyState';
 import { supabase } from '../lib/supabase';
 import { LOCATION_ID } from '../config';
 import type { RootStackParamList } from '../navigation';
@@ -28,9 +29,22 @@ export function AttractScreen() {
     rotateMs: 12_000,
   });
 
-  // Realtime watchdog: any new match at this location flips us back to
-  // Title so the pair flow can take over. Existing matches that flip
-  // to active also count.
+  // Two wake paths back to Title:
+  //   1. Lobby state poll catches a fresh pair request the moment the
+  //      first puck holds its button — within 1s. This is what users
+  //      mostly hit because the pair flow happens *before* any match
+  //      row exists in Supabase.
+  //   2. Realtime postgres_changes on matches catches the rarer case
+  //      where the runtime spun up a match without a lobby pass (e.g.
+  //      bar portal kicked one off, or a match was already active when
+  //      the TV booted into Attract).
+  const lobby = useLobbyState(1000);
+  useEffect(() => {
+    if (lobby.active) {
+      navigation.navigate('Title');
+    }
+  }, [lobby, navigation]);
+
   useEffect(() => {
     const channel = supabase
       .channel(`attract:${LOCATION_ID}`)
