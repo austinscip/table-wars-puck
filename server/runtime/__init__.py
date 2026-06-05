@@ -29,6 +29,7 @@ from .match import (
     deserialize_match,
 )
 from .match_store import InMemoryMatchStore, RedisMatchStore
+from .persistence import PersistenceQueue
 from .inputs import event_from_dict
 from .pairing import PairingManager, PairingError, color_for
 from .scheduler import TickScheduler
@@ -72,6 +73,7 @@ __all__ = [
     "deserialize_match",
     "InMemoryMatchStore",
     "RedisMatchStore",
+    "PersistenceQueue",
     "event_from_dict",
     "PairingManager",
     "PairingError",

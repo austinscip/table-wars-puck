@@ -45,6 +45,7 @@ from runtime import (
     PairingManager,
     PairingError,
     MatchManager,
+    PersistenceQueue,
     TickScheduler,
     HeartbeatTracker,
     IdempotencyCache,
@@ -104,7 +105,14 @@ def _get_container() -> dict:
     # Pooled writer in the live runtime so a score write doesn't pay a
     # fresh TCP+TLS handshake each time. Falls back to per-call connect
     # when psycopg_pool isn't installed.
-    writer = SupabaseWriter.with_pool()
+    base_writer = SupabaseWriter.with_pool()
+    # Decouple cloud I/O from the tick loop (ADR 0004): the PersistenceQueue
+    # implements the same writer protocol but routes high-frequency
+    # snapshots + round scores to a best-effort async drain, keeping finals,
+    # lifecycle, and create synchronous. The MatchManager calls it exactly
+    # like the raw writer.
+    writer = PersistenceQueue(base_writer)
+    writer.start()
     heartbeat = HeartbeatTracker()
 
     # Durable match store + shared idempotency when REDIS_URL is set. The
@@ -163,9 +171,12 @@ def _get_container() -> dict:
     manager.scheduler = scheduler
     pairing = PairingManager(
         match_manager=manager,
-        puck_resolver=writer,
+        # Pairing needs SupabaseWriter methods outside the writer protocol
+        # (puck resolution, lobby writes), so it gets the raw writer — the
+        # PersistenceQueue only fronts the match-lifecycle write path.
+        puck_resolver=base_writer,
         token_authority=token_authority,
-        lobby_writer=writer,
+        lobby_writer=base_writer,
     )
     scheduler.start()
     # Restart recovery: rebuild any active matches the store still holds.
@@ -179,7 +190,8 @@ def _get_container() -> dict:
         except Exception:  # noqa: BLE001
             _log.exception("match recovery failed on boot")
     _container = {
-        "writer": writer,
+        "writer": base_writer,
+        "persistence": writer,
         "manager": manager,
         "scheduler": scheduler,
         "pairing": pairing,

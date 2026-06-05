@@ -93,20 +93,39 @@ tables.
 
 ### Persistence decoupling (the latency fix)
 
-The tick loop becomes pure **in-memory mutate + non-blocking enqueue**; all
-Supabase I/O moves to an asynchronous drainer, in two lanes:
+The high-frequency writes move off the tick's critical path; the
+once-per-match truth writes stay synchronous. A `PersistenceQueue` wraps the
+`SupabaseWriter` (implementing the same protocol, so the `MatchManager` is
+unchanged) and routes by traffic class:
 
-- **Snapshots** — coalesced, latest-wins per match, best-effort, ≤ ~1 s
-  freshness target (so the cloud fallback isn't stale on failover).
-  Intermediate frames may be dropped.
-- **Scores + lifecycle** (`insert_score` round/final,
-  `update_match_finished` / `update_match_abandoned`) — durable FIFO with
-  retry, at-least-once, **re-flushed on recovery** via the existing
-  `MatchStore`. A re-flushed `final` is idempotent against the
-  `uniq_final_score_per_match_puck` index. Round scores are analytics-only
-  (they don't reach `leaderboards` — the trigger filters for `final`), so
-  they are loss-tolerant; finals and lifecycle are the truth the queue
-  guarantees.
+- **Snapshots** (`update_match_snapshot`) — the high-frequency,
+  reconstructable writes that must NOT block the 10 Hz tick → **coalesced
+  async lane**, latest-wins per match, best-effort, ≤ ~1 s freshness target
+  (so the cloud fallback isn't stale on failover). Intermediate frames may
+  be dropped.
+- **Round scores** (`insert_score` `event_type='round'`) — analytics only
+  (the `leaderboards` trigger filters for `final`), so loss-tolerant →
+  **best-effort async FIFO**.
+- **Finals + lifecycle** (`insert_score` `event_type='final'`,
+  `update_match_finished` / `update_match_abandoned`) + `create_match` —
+  leaderboard truth and transactional create → **synchronous, with bounded
+  retry**. These fire **once per match** at finalize/abandon (or at create),
+  i.e. off the 10 Hz hot path, so a synchronous write costs no gameplay
+  latency while **preserving the strong "persisted before return"
+  guarantee**.
+
+  > **Refinement from the as-signed design (recorded deliberately).** The
+  > grilled draft routed finals+lifecycle through a *durable FIFO,
+  > at-least-once, re-flushed on recovery via the `MatchStore`*. On
+  > implementation that proved both unnecessary and weaker: because
+  > finalize deletes the match from the `MatchStore`, an async final could
+  > outlive its own recovery anchor — a genuine gap. Keeping finals
+  > **synchronous-with-retry** is strictly sounder — it fires once per match
+  > (zero hot-path latency cost), needs no re-flush machinery, and never
+  > weakens the existing persisted-before-return guarantee. This **removes
+  > the one behavioral regression flagged at sign-off.** The async queue
+  > therefore carries only best-effort, loss-tolerant traffic (snapshots +
+  > round scores), so no durable data ever sits unacked in it.
 
 ### Async model (unchanged)
 
@@ -153,11 +172,12 @@ The cloud fallback keeps its existing TV-match-token RLS.
   `matches.snapshot` is no longer guaranteed to hold every intermediate
   frame, only a recent one. Anything that needs every frame must read the
   durable score/lifecycle lane, not the snapshot.
-- `final` scores move from synchronous-guaranteed-before-return to
-  **durable at-least-once** (re-flushed on recovery). No leaderboard truth
-  is lost, but the guarantee shape changed; the recovery path must re-flush
-  unacked finals on boot, and that must be covered by a real-flow
-  regression test.
+- `final` scores **keep** their synchronous persisted-before-return
+  guarantee (now with bounded retry) — see the refinement note above. The
+  durability regression flagged at sign-off does **not** ship: only
+  best-effort, reconstructable traffic (snapshots + round scores) is
+  asynchronous, so a crash can lose at most a coalesceable snapshot or an
+  analytics-only round score, never a leaderboard high score.
 - A new transport-agnostic `state_sink` seam exists on `MatchManager`;
   games and the runtime core remain Flask-SocketIO-free.
 - The `--workers 1` and **no `--preload`** constraints are now also
