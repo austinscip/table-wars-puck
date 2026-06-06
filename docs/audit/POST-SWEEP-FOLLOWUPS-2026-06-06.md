@@ -19,12 +19,21 @@ area on the `sandbox` branch → write/append an audit doc). CI = pytest + mypy
 > (closed puck protocol on isolated LAN, per `legacy-flask`); a per-puck
 > capability token is the one deferred high-leverage hardening — carried below.
 
-### Carried forward from #1: per-puck capability token (deferred)
-`puck_id` is an assertion, not a credential, on every `sp_*`/`pair_*` write. On
-the isolated bar LAN this is by-design (network isolation is the mitigation). If
-the threat model ever expands to "any phone on the bar WiFi / one tampered
-puck," issue a per-puck token at `/api/pair/confirm` and require it on every
-state-mutating write — that single change closes the whole impersonation family.
+### Carried forward from #1: per-puck capability token — ✅ DONE (2026-06-06)
+`puck_id` was an assertion, not a credential. Now closed: the server issues an
+opaque token on `/api/pair/request|confirm`, stored in the lobby (persisted,
+never leaked in a snapshot) and required (constant-time) on every state-mutating
+`sp_*`/`pair_*` write; firmware sends it. See the appendix in
+`live-speed-pyramid-2026-06-06.md`. (TV control-plane endpoints remain a separate
+operator-token concern, still deferred.)
+
+### Also done (2026-06-06): the two internal robustness items
+- **Writer-transaction atomicity for finalize** — `SupabaseWriter.finalize_match`
+  does all final scores + the status flip in ONE idempotent transaction (no more
+  stranded `active` row on a mid-batch failure). `runtime-games`/F3.
+- **Idempotency persistence across restart** — recent idempotency keys are
+  snapshotted with the match and re-seeded on recover, so a retry after a
+  crash+restart is deduped instead of re-applied. `runtime`/F6.
 
 ### Original scope (for reference)
 
