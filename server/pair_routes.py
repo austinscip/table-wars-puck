@@ -1155,27 +1155,46 @@ def _narration_url(question_id: int) -> str:
 
 
 _NARRATED_QIDS_CACHE: set | None = None
+_NARRATED_QIDS_DIR_MTIME: float | None = None
+# Files smaller than this are treated as "no narration" — a crashed/partial
+# TTS run can leave a 0-byte or truncated q_<id>.mp3 that would otherwise be
+# served as narration and either play silence or stall the question screen
+# (audit polish-2026-06-06).
+_MIN_NARRATION_BYTES = 256
 
 
 def _narrated_qids() -> set:
-    """Set of question ids that have a narration MP3 on disk. Cached at
-    first use (narration files are static content; a server restart picks
-    up newly generated ones)."""
-    global _NARRATED_QIDS_CACHE
-    if _NARRATED_QIDS_CACHE is None:
-        import os
-        import glob
-        d = os.path.join(
-            os.path.dirname(__file__),
-            "static", "games", "speed-pyramid", "audio", "questions",
-        )
+    """Set of question ids that have a (non-trivial) narration MP3 on disk.
+
+    Cached, but the cache **auto-invalidates** when the questions directory's
+    mtime changes — adding or removing a q_<id>.mp3 bumps the dir mtime, so an
+    operator who regenerates narration on a RUNNING server is picked up on the
+    next call without a restart. (Overwriting an existing file's *content*
+    doesn't change set membership; the browser cache-bust in `_narration_url`
+    handles that.) Audit polish-2026-06-06.
+    """
+    global _NARRATED_QIDS_CACHE, _NARRATED_QIDS_DIR_MTIME
+    import os
+    import glob
+    d = os.path.join(
+        os.path.dirname(__file__),
+        "static", "games", "speed-pyramid", "audio", "questions",
+    )
+    try:
+        dir_mtime: float | None = os.path.getmtime(d)
+    except OSError:
+        dir_mtime = None
+    if _NARRATED_QIDS_CACHE is None or dir_mtime != _NARRATED_QIDS_DIR_MTIME:
         ids = set()
         for p in glob.glob(os.path.join(d, "q_*.mp3")):
             try:
+                if os.path.getsize(p) < _MIN_NARRATION_BYTES:
+                    continue  # 0-byte / truncated -> not real narration
                 ids.add(int(os.path.basename(p)[2:-4]))
-            except ValueError:
+            except (ValueError, OSError):
                 pass
         _NARRATED_QIDS_CACHE = ids
+        _NARRATED_QIDS_DIR_MTIME = dir_mtime
     return _NARRATED_QIDS_CACHE
 
 

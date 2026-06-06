@@ -295,6 +295,14 @@ export default function QuestionScreen() {
         }
         a.addEventListener('ended', handoff)
         a.addEventListener('error', handoff)
+        // Absolute safety net: if the MP3 stalls mid-load on flaky bar WiFi
+        // (neither 'ended' nor 'error' nor 'loadedmetadata' ever fires), the
+        // question would hang in 'awaiting_question' forever. Force the handoff
+        // after a generous cap so the round always becomes answerable (audit
+        // polish-2026-06-06).
+        const STALL_GUARD_MS = 15000
+        const stallTimer = window.setTimeout(handoff, STALL_GUARD_MS)
+        narrationTimersRef.current.push(stallTimer)
         // 'loadedmetadata' fires once a.duration is known (typically
         // within tens of ms of starting to load). Only then can we
         // schedule a sane fallback timeout: duration + 1s grace. The
