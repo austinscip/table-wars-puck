@@ -62,6 +62,13 @@ class RedisIdempotencyCache:
     def put(self, key: str, value: Any) -> None:
         self._r.set(self._k(key), json.dumps(value), ex=self._ttl)
 
+    def keys_for_match(self, match_id: str, limit: int = 64) -> list[str]:
+        """No-op for the Redis backend: Redis already survives a restart, so
+        there's nothing to snapshot into the match record. Returns [] so the
+        manager's persist/recover path (which calls this for the in-process
+        cache, audit runtime F6) is a harmless no-op here."""
+        return []
+
 
 def _release_if_owner(client: Any, full_key: str, token: str) -> None:
     """Delete the lock key only if it still holds our token — a

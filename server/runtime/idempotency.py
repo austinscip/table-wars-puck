@@ -60,6 +60,19 @@ class IdempotencyCache:
             while len(self._store) > self._maxsize:
                 self._store.popitem(last=False)
 
+    def keys_for_match(self, match_id: str, limit: int = 64) -> list[str]:
+        """The most-recent keys whose composed prefix is this match's id
+        (`f"{match_id}:..."`). Persisted with the match snapshot so a retry
+        that arrives AFTER a crash+restart is still deduped instead of being
+        re-applied — the in-process cache is otherwise wiped by the restart
+        (audit runtime F6). Capped to the freshest `limit`; only recent events
+        fall inside any realistic retry window."""
+        prefix = f"{match_id}:"
+        with self._lock:
+            # _store is LRU-ordered (oldest first); take the freshest matches.
+            keys = [k for k in self._store if k.startswith(prefix)]
+        return keys[-limit:]
+
     def __contains__(self, key: str) -> bool:
         with self._lock:
             return key in self._store

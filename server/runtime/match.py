@@ -316,6 +316,13 @@ class MatchManager:
             # exactly-once disconnect semantics across a restart.
             if self.heartbeat is not None:
                 data["heartbeat"] = self.heartbeat.export(match.id)
+            # Persist the recent idempotency keys (audit runtime F6) so a
+            # retried input that arrives after a crash+restart is deduped
+            # rather than re-applied (double score / double lock-in).
+            if self.idempotency is not None:
+                keys = getattr(self.idempotency, "keys_for_match", None)
+                if callable(keys):
+                    data["idempotency_keys"] = keys(match.id)
             self.store.save(match.id, data)
         except Exception:  # noqa: BLE001
             logger.exception("failed to persist match %s", match.id)
@@ -341,6 +348,13 @@ class MatchManager:
                 self.store.delete(match_id)
                 continue
             self.matches[match.id] = match
+            # Re-seed the persisted idempotency keys so a retry of a pre-crash
+            # event is deduped (returns the recovered state, no re-apply)
+            # instead of double-applying after restart (audit runtime F6).
+            if self.idempotency is not None:
+                seed_state = self._safe_state(match)
+                for key in data.get("idempotency_keys") or []:
+                    self.idempotency.put(key, seed_state)
             if self.heartbeat is not None:
                 self.heartbeat.register(
                     match.id, [p.puck_index for p in match.players]
@@ -584,15 +598,18 @@ class MatchManager:
         # lock, by the caller) so local and cloud carry the same seq.
         payload = self._snapshot_payload(match, update)
         self.writer.update_match_snapshot(match_id, payload)
+        # Record the idempotency result BEFORE persisting the match, so the
+        # snapshot _persist writes includes THIS event's key (audit runtime
+        # F6 — otherwise the just-applied event isn't in the persisted key set
+        # and a post-restart retry of it would re-apply). Store the JSON-able
+        # response state for replay (see the get path above).
+        if key is not None and self.idempotency is not None:
+            self.idempotency.put(key, update.state)
         deferred: list = []
         if update.is_final or match.game.is_over():
             deferred = self._finalize(match)
         else:
             self._persist(match)
-        if key is not None and self.idempotency is not None:
-            # Store the JSON-able response state for replay (see the get
-            # path above). A Redis cache serialises this directly.
-            self.idempotency.put(key, update.state)
         return update, payload, deferred
 
     def tick(
