@@ -26,6 +26,7 @@ Speed Pyramid endpoints (unchanged from v1.1):
 """
 
 import random
+import secrets
 import string
 import os
 import time
@@ -83,6 +84,43 @@ PUCK_COLORS: dict[int, tuple[str, str]] = {
 
 def _color_for(puck_id: int) -> tuple[str, str]:
     return PUCK_COLORS.get(int(puck_id), ("#F8FAFC", "white"))
+
+
+# ============================================================================
+# Per-puck capability tokens (anti-impersonation)
+# ============================================================================
+# puck_id is an ASSERTION, not a credential — every sp_*/pair_* write trusts
+# the body's puck_id, so any LAN device could answer / fire / pick / steal AS
+# another puck. We issue an opaque token when a puck joins the lobby (stored in
+# _LOBBY["players"][pid]["token"], which is persisted+rehydrated and never
+# leaked in a snapshot), return it ONLY to that puck, and require it on every
+# state-mutating write. Closes the impersonation family
+# (live-speed-pyramid-2026-06-06 / followups). The closed-LAN network isolation
+# remains the outer layer; this stops a guest's phone / one tampered puck from
+# griefing the match.
+
+
+def _new_token() -> str:
+    return secrets.token_urlsafe(12)
+
+
+def _player_token(puck_id) -> Optional[str]:
+    """The stored token for a puck currently in the lobby, or None."""
+    if _LOBBY is None:
+        return None
+    try:
+        p = _LOBBY["players"].get(int(puck_id))
+    except (TypeError, ValueError):
+        return None
+    return p.get("token") if p else None
+
+
+def _token_ok(puck_id, provided) -> bool:
+    """Constant-time check that `provided` matches the puck's issued token."""
+    expected = _player_token(puck_id)
+    if expected is None or provided is None:
+        return False
+    return secrets.compare_digest(str(provided), str(expected))
 
 
 def _now() -> float:
@@ -195,6 +233,7 @@ def request_code():
             "color_name": color_name,
             "joined_at": _now(),
             "last_seen": _now(),  # Slice I — ghost sweep
+            "token": _new_token(),  # per-puck capability token
         }
         joiner_added = True
 
@@ -239,6 +278,9 @@ def request_code():
         # Joiners get the lobby_code on request so the puck can jump
         # straight to LOBBY_WAITING with no dial step.
         "lobby_code": _LOBBY["code"] if role == "joiner" else None,
+        # The puck's own capability token (joiners get it here; the host gets
+        # it on /confirm). Required on every later state-mutating write.
+        "token": _player_token(puck_id),
     })
 
 
@@ -337,6 +379,7 @@ def confirm_code():
             "color_name": color_name,
             "joined_at": _now(),
             "last_seen": _now(),  # Slice I — ghost sweep
+            "token": _new_token(),  # per-puck capability token
         }
 
     snapshot = _lobby_snapshot()
@@ -361,6 +404,9 @@ def confirm_code():
         "players": snapshot["players"],
         "host_puck_id": _LOBBY["host_puck_id"],
         "lobby_code": _LOBBY["code"],
+        # The puck's capability token — required on every later state-mutating
+        # write (answer / fire / pick / start / cancel).
+        "token": _player_token(puck_id),
     })
 
 
@@ -388,6 +434,10 @@ def start_match():
     puck_id = int(puck_id_raw)
     if puck_id != _LOBBY["host_puck_id"]:
         return jsonify({"error": "only host can start"}), 403
+    # The host confirmed before starting, so it has a token — require it so a
+    # spoofed host_puck_id can't start the match early.
+    if not _token_ok(puck_id, data.get("token")):
+        return jsonify({"error": "invalid_token"}), 401
 
     if not _LOBBY["players"]:
         return jsonify({"error": "no players have confirmed yet"}), 400
@@ -482,6 +532,16 @@ def cancel_lobby():
 
     if _LOBBY["started"]:
         return jsonify({"error": "match_in_progress"}), 409
+
+    # Token gate: a joined puck must present its token to cancel (so it can't be
+    # kicked/cancelled by a spoofed id). A pre-confirm host isn't in players yet
+    # (no token), so it may still cancel its own forming lobby; a stray id that
+    # is neither a member nor the host has nothing to cancel.
+    if puck_id in _LOBBY["players"]:
+        if not _token_ok(puck_id, data.get("token")):
+            return jsonify({"error": "invalid_token"}), 401
+    elif puck_id != _LOBBY["host_puck_id"]:
+        return jsonify({"ok": True, "noop": True})
 
     code = _LOBBY["code"]
     is_host = _LOBBY["host_puck_id"] == puck_id
@@ -2096,6 +2156,8 @@ def sp_power_up_activate():
         item_id = str(data["item_id"])
     except (KeyError, TypeError, ValueError):
         return jsonify({"ok": False, "reason": "bad payload"}), 400
+    if not _token_ok(puck_id, data.get("token")):
+        return jsonify({"ok": False, "reason": "invalid_token"}), 401
     target_puck_id = data.get("target_puck_id")
     state = _SP_STATE.get(sc)
     if state is None:
@@ -2195,6 +2257,8 @@ def sp_minigame_fire():
         t_ms = int(data.get("t_ms") or 0)
     except (KeyError, TypeError, ValueError):
         return jsonify({"ok": False, "reason": "bad payload"}), 400
+    if not _token_ok(pid, data.get("token")):
+        return jsonify({"ok": False, "reason": "invalid_token"}), 401
     quadrant = data.get("quadrant")
     state = _SP_STATE.get(sc)
     if state is None:
@@ -2257,6 +2321,8 @@ def sp_select_category(session_code: str):
         category_id = int(data.get("category_id"))
     except (TypeError, ValueError):
         return jsonify({"ok": False, "reason": "bad puck_id/category_id"}), 400
+    if not _token_ok(puck_id, data.get("token")):
+        return jsonify({"ok": False, "reason": "invalid_token"}), 401
     state = _SP_STATE.get(session_code)
     if state is None:
         return jsonify({"ok": False, "reason": "no session"}), 404
@@ -2362,6 +2428,8 @@ def sp_answer():
         return jsonify({"error": "session_code, puck_id, question_id, answer required"}), 400
 
     puck_id = int(puck_id_raw)
+    if not _token_ok(puck_id, data.get("token")):
+        return jsonify({"error": "invalid_token"}), 401
     state = _sp_state_for(session_code)
     if state["current_question_id"] != int(question_id):
         return jsonify({"error": "question_id does not match active round"}), 409
@@ -2476,6 +2544,8 @@ def sp_leave_match():
         return jsonify({"ok": True, "noop": True})
 
     puck_id = int(puck_id_raw)
+    if not _token_ok(puck_id, data.get("token")):
+        return jsonify({"error": "invalid_token"}), 401
 
     # Record the deliberate departure so the ghost-sweep reconnect reconcile
     # (audit SP-S2) does NOT re-add this puck if it keeps polling — a leave is

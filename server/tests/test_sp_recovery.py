@@ -94,3 +94,36 @@ def test_rebase_noop_for_zero_drift():
     sp_state = {"S": {"current_round_started_at": 500.0}}
     pair_routes._rebase_times_after_rehydrate(None, sp_state, {}, 0.0)
     assert sp_state["S"]["current_round_started_at"] == 500.0
+
+
+def test_puck_tokens_survive_rehydrate():
+    """Per-puck tokens live in _LOBBY['players'][pid]['token']; a restart must
+    preserve them (int keys + token value) so pucks aren't 401'd after recovery,
+    and the token must never appear in the public lobby snapshot."""
+    lobby = {
+        "code": "274591",
+        "host_puck_id": 1,
+        "started": True,
+        "session_code": "ABC123",
+        "players": {1: {"color": "#3B82F6", "color_name": "blue",
+                        "joined_at": 1.0, "last_seen": 1.0, "token": "tok-aaa"},
+                    2: {"color": "#EC4899", "color_name": "pink",
+                        "joined_at": 1.0, "last_seen": 1.0, "token": "tok-bbb"}},
+        "expires_at": 10.0,
+    }
+    restored = _roundtrip(lobby)
+    # Keys come back as strings from JSON...
+    assert set(restored["players"].keys()) == {"1", "2"}
+    sp.fix_int_keys_after_rehydrate(restored, {}, {})
+    assert set(restored["players"].keys()) == {1, 2}
+    assert restored["players"][1]["token"] == "tok-aaa"
+    assert restored["players"][2]["token"] == "tok-bbb"
+
+    # The public snapshot must NOT expose tokens.
+    pair_routes._LOBBY = restored
+    try:
+        snap = pair_routes._lobby_snapshot()
+        for p in snap["players"]:
+            assert "token" not in p
+    finally:
+        pair_routes._LOBBY = None

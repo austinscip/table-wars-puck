@@ -71,6 +71,10 @@ inline uint8_t _current_digit = 0;
 // lobby's started=true with a session_code).
 inline String _lobby_code = "";
 inline String _session_code = "";
+// Per-puck capability token issued by the server on /api/pair/request (joiner)
+// or /api/pair/confirm (host), required on every state-mutating write so this
+// puck can't be impersonated. Empty until paired.
+inline String _puck_token = "";
 inline bool _is_host = false;
 inline uint32_t _last_lobby_poll_ms = 0;
 
@@ -123,7 +127,18 @@ inline bool _request_pair_code(String* role_out, String* lobby_code_out) {
   if (code != 200) return false;
   if (role_out) _extract_string(resp, "role", role_out);
   if (lobby_code_out) _extract_string(resp, "pair_code", lobby_code_out);
+  // Joiners are auto-added here and get their token now (host gets it on
+  // confirm). Empty for the host's request — harmless.
+  _extract_string(resp, "token", &_puck_token);
   return true;
+}
+
+// The `,"token":"<tok>"` JSON fragment for state-mutating request bodies, or
+// "" before we have one (the server rejects a tokenless write with 401, so a
+// pre-pair stray write is correctly refused).
+inline String _token_field() {
+  if (_puck_token.length() == 0) return String("");
+  return String(",\"token\":\"") + _puck_token + "\"";
 }
 
 inline bool _post_dial(uint8_t index, uint8_t digit) {
@@ -166,6 +181,7 @@ inline bool _post_confirm_v2(String* lobby_code_out, bool* is_host_out) {
   String role;
   if (!_extract_string(resp, "lobby_code", lobby_code_out)) return false;
   if (!_extract_string(resp, "role", &role)) return false;
+  _extract_string(resp, "token", &_puck_token);  // host's capability token
   *is_host_out = (role == "host");
   return true;
 }
@@ -174,14 +190,14 @@ inline bool _post_confirm_v2(String* lobby_code_out, bool* is_host_out) {
 // emits match_started. We don't read the response; we'll learn the
 // session_code from the next /api/pair/lobby-state poll.
 inline bool _post_start() {
-  String body = "{\"puck_id\":" + String(PUCK_ID) + "}";
+  String body = "{\"puck_id\":" + String(PUCK_ID) + _token_field() + "}";
   return sp_net::post_json("/api/pair/start", body, nullptr) == 200;
 }
 
 // v2 /api/pair/cancel — HOLD_3S in lobby/pair. Host kills the lobby
 // for everyone; joiner just drops themselves.
 inline bool _post_cancel() {
-  String body = "{\"puck_id\":" + String(PUCK_ID) + "}";
+  String body = "{\"puck_id\":" + String(PUCK_ID) + _token_field() + "}";
   return sp_net::post_json("/api/pair/cancel", body, nullptr) == 200;
 }
 
@@ -241,7 +257,7 @@ inline bool _post_select_category(int category_id) {
   if (_session_code.length() == 0) return false;
   String body =
       String("{\"puck_id\":") + PUCK_ID +
-      ",\"category_id\":" + category_id + "}";
+      ",\"category_id\":" + category_id + _token_field() + "}";
   String path = "/api/sp/select-category/" + _session_code;
   return sp_net::post_json(path.c_str(), body, nullptr) == 200;
 }
@@ -324,10 +340,12 @@ inline bool _post_minigame_fire(uint32_t t_ms, char quadrant) {
   if (quadrant) {
     body += ",\"quadrant\":\"";
     body += quadrant;
-    body += "\"}";
+    body += "\"";
   } else {
-    body += ",\"quadrant\":null}";
+    body += ",\"quadrant\":null";
   }
+  body += _token_field();
+  body += "}";
   return sp_net::post_json("/api/sp/minigame/fire", body, nullptr) == 200;
 }
 
@@ -383,7 +401,7 @@ inline bool _post_answer(char letter, uint32_t response_time_ms, bool* is_correc
       ",\"puck_id\":" + String(PUCK_ID) +
       ",\"question_id\":" + String(_current_question_id) +
       ",\"answer\":\"" + String(letter) + "\"" +
-      ",\"response_time_ms\":" + String(response_time_ms) + "}";
+      ",\"response_time_ms\":" + String(response_time_ms) + _token_field() + "}";
   String resp;
   const int code = sp_net::post_json("/api/sp/answer", body, &resp);
   if (code != 200) return false;

@@ -91,18 +91,39 @@ class SPHarness:
         self.client = client
         self.sio = sio
         self.db_path = db_path
+        # Per-puck capability tokens captured from pair/request + pair/confirm,
+        # replayed on every state-mutating write (the server now requires them).
+        self.tokens: dict[int, str] = {}
+
+    def _capture_token(self, puck_id: int, resp):
+        try:
+            tok = (resp.get_json() or {}).get("token")
+        except Exception:
+            tok = None
+        if tok:
+            self.tokens[puck_id] = tok
+        return resp
 
     # --- pairing ---
     def request_code(self, puck_id: int):
-        return self.client.post("/api/pair/request", json={"puck_id": puck_id})
+        return self._capture_token(
+            puck_id,
+            self.client.post("/api/pair/request", json={"puck_id": puck_id}),
+        )
 
     def confirm(self, puck_id: int, code: str):
-        return self.client.post(
-            "/api/pair/confirm", json={"puck_id": puck_id, "code": code}
+        return self._capture_token(
+            puck_id,
+            self.client.post(
+                "/api/pair/confirm", json={"puck_id": puck_id, "code": code}
+            ),
         )
 
     def start(self, puck_id: int):
-        return self.client.post("/api/pair/start", json={"puck_id": puck_id})
+        return self.client.post(
+            "/api/pair/start",
+            json={"puck_id": puck_id, "token": self.tokens.get(puck_id)},
+        )
 
     def pair_full(self, puck_ids: list[int]) -> str:
         """request(host) -> request(joiners) -> confirm(host) -> start.
@@ -130,20 +151,30 @@ class SPHarness:
                 "question_id": qid,
                 "answer": ans,
                 "response_time_ms": rt_ms,
+                "token": self.tokens.get(puck_id),
             },
         )
 
     def select_category(self, sc: str, puck_id: int, category_id: int):
         return self.client.post(
             f"/api/sp/select-category/{sc}",
-            json={"puck_id": puck_id, "category_id": category_id},
+            json={"puck_id": puck_id, "category_id": category_id,
+                  "token": self.tokens.get(puck_id)},
         )
 
     def minigame_fire(self, sc: str, puck_id: int, t_ms: int, quadrant: str | None):
         return self.client.post(
             "/api/sp/minigame/fire",
             json={"session_code": sc, "puck_id": puck_id,
-                  "t_ms": t_ms, "quadrant": quadrant},
+                  "t_ms": t_ms, "quadrant": quadrant,
+                  "token": self.tokens.get(puck_id)},
+        )
+
+    def leave_match(self, sc: str, puck_id: int):
+        return self.client.post(
+            "/api/sp/leave-match",
+            json={"session_code": sc, "puck_id": puck_id,
+                  "token": self.tokens.get(puck_id)},
         )
 
     def advance_to_question(self, sc: str) -> dict:

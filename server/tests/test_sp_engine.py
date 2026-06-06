@@ -38,6 +38,50 @@ def test_smoke_pair_start_load_answer_reveal(monkeypatch, tmp_path):
         assert results[2]["cumulative_total"] == 0
 
 
+def test_answer_requires_valid_puck_token(monkeypatch, tmp_path):
+    """Per-puck token: a write with no token or another puck's token is 401,
+    so puck A can't lock an answer AS puck B (the impersonation family)."""
+    with sp_harness(monkeypatch, tmp_path) as h:
+        sc = h.pair_full([1, 2])
+        qid = h.advance_to_question(sc)["question"]["id"]
+
+        # No token -> 401.
+        r = h.client.post("/api/sp/answer", json={
+            "session_code": sc, "puck_id": 2, "question_id": qid,
+            "answer": "A", "response_time_ms": 100})
+        assert r.status_code == 401
+
+        # Puck 1 trying to answer AS puck 2 using puck 1's token -> 401.
+        r = h.client.post("/api/sp/answer", json={
+            "session_code": sc, "puck_id": 2, "question_id": qid,
+            "answer": "A", "response_time_ms": 100,
+            "token": h.tokens[1]})
+        assert r.status_code == 401
+
+        # Puck 2's own token works.
+        r = h.answer(sc, 2, qid, "A", rt_ms=100)
+        assert r.status_code == 200
+        assert r.get_json()["is_correct"] is True
+        # The impersonation attempts did NOT consume puck 2's answer slot.
+        assert pair_routes._SP_STATE[sc]["current_round_answers"][2]["answer"] == "A"
+
+
+def test_non_host_cannot_start_without_token(monkeypatch, tmp_path):
+    """Spoofing the host_puck_id can't start the match without the host's token."""
+    with sp_harness(monkeypatch, tmp_path) as h:
+        r = h.request_code(1)
+        code = r.get_json()["pair_code"]
+        h.request_code(2)
+        h.confirm(1, code)
+        # Spoofed host id with no token -> 401, match not started.
+        bad = h.client.post("/api/pair/start", json={"puck_id": 1})
+        assert bad.status_code == 401
+        assert pair_routes._LOBBY["started"] is False
+        # Real host token starts it.
+        ok = h.start(1)
+        assert ok.status_code == 200
+
+
 def test_double_reveal_does_not_double_score(monkeypatch, tmp_path):
     """SP-S1: under gevent the DB read inside _maybe_emit_reveal is a yield
     point, so a force-reveal and the last puck's answer can both pass the
@@ -141,8 +185,7 @@ def test_deliberate_leaver_is_not_readded(monkeypatch, tmp_path):
     with sp_harness(monkeypatch, tmp_path) as h:
         sc = h.pair_full([1, 2])
         h.advance_to_question(sc)
-        h.client.post("/api/sp/leave-match",
-                      json={"session_code": sc, "puck_id": 2})
+        h.leave_match(sc, 2)
         st = pair_routes._SP_STATE[sc]
         assert 2 not in st["expected_pucks"]
         assert 2 in st["left_match_pucks"]

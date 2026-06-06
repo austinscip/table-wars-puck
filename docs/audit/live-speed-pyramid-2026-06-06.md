@@ -169,3 +169,26 @@ posture; carried to follow-ups), client-timing tier inflation, the design/
 cosmetic nits. The single highest-leverage future hardening remains the puck
 token — the only thing standing between "isolated LAN" and "any device on the
 bar WiFi can grief a match."
+
+---
+
+## Follow-up (2026-06-06): per-puck capability token IMPLEMENTED
+
+The impersonation family was originally deferred as by-design (closed-LAN). On
+request, it's now closed with a **per-puck capability token** — `puck_id` is no
+longer a bare assertion on writes:
+
+- The server issues an opaque `secrets.token_urlsafe` token when a puck joins
+  the lobby, stored in `_LOBBY["players"][pid]["token"]` (persisted+rehydrated
+  with the lobby; **never** exposed in `_lobby_snapshot` / match-state), returned
+  ONLY to that puck on `/api/pair/request` (joiner) / `/api/pair/confirm` (host).
+- Every state-mutating write now requires it, constant-time compared
+  (`secrets.compare_digest`): `sp/answer`, `sp/minigame/fire`,
+  `sp/power-up/activate`, `sp/select-category`, `sp/leave-match`, `pair/start`,
+  `pair/cancel` → `401 invalid_token`. Puck A can no longer answer / fire / pick
+  / steal / leave AS puck B, nor can a spoofed `host_puck_id` start the match.
+- Firmware (`g_speed_pyramid.h`) captures the token from request/confirm and
+  appends it to those five write bodies (`_token_field`). Builds clean.
+
+The TV control-plane endpoints (`force-reveal`/`start-timer`/`minigame/finish`)
+remain operator-trusted (separate operator-token concern, still deferred).
