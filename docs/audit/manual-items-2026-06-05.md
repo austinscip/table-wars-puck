@@ -15,6 +15,7 @@ runs in safe/open mode when they're absent.
 | `PUCK_JWT_SECRET` | Enables puck input auth (item 13). | **≥32 bytes.** Generate: `python -c "import secrets; print(secrets.token_urlsafe(48))"`. Without it, input is unauthenticated. |
 | `SUPABASE_JWT_SECRET` | Enables the TV match-token mint (item 17). | This is your Supabase project's **JWT secret** (Dashboard → Settings → API → JWT Secret). Must match so Realtime accepts the token. |
 | `PUCK_AUTOPROVISION=0` | Locks the fleet in prod (item, Tier 4). | Unknown puck_index then raises instead of self-registering. Pre-provision pucks first. |
+| `ADMIN_API_TOKEN` | Gates the admin + firmware-management endpoints (audit 0.1). | **Required to manage firmware** (the `/firmware/upload` + `/firmware/set-latest` endpoints fail closed with 503 until it's set — they're a fleet-RCE primitive). Other `/admin/*` + trivia-admin routes run open-with-warning in dev and require the token once set. Send as `Authorization: Bearer <token>` or `X-Admin-Token`. Generate ≥32 bytes. NOTE: firmware **signature** verification (code-signing) is still a follow-up — this only gates *who* can publish, not *what*. |
 | `SCRUB_SECRETS_AFTER_BOOT=1` | Drops DATABASE_URL/secrets from env after boot (item 16). | Safe in this codebase (verified). |
 | `SENTRY_DSN` (+ `pip install sentry-sdk`) | Error reporting (item 8). | Optional `ENVIRONMENT`, `SENTRY_TRACES_SAMPLE_RATE`. |
 | `LOCATION_ID` | Pins the Flask box to one venue. | Already used; confirm it's set per venue. |

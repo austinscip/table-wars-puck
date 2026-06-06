@@ -9,6 +9,8 @@ import os
 import hashlib
 import json
 
+from admin_auth import require_admin
+
 firmware_bp = Blueprint('firmware', __name__)
 
 # ============================================================================
@@ -208,6 +210,7 @@ def report_update_failure():
 
 
 @firmware_bp.route('/firmware/fleet-status', methods=['GET'])
+@require_admin()
 def get_fleet_status():
     """
     Get firmware status of entire puck fleet
@@ -240,6 +243,7 @@ def get_fleet_status():
 
 
 @firmware_bp.route('/firmware/upload', methods=['POST'])
+@require_admin(strict=True)  # publishing firmware = fleet RCE; fail closed
 def upload_firmware():
     """
     Upload a new firmware version (admin only)
@@ -303,6 +307,7 @@ def upload_firmware():
 
 
 @firmware_bp.route('/firmware/versions', methods=['GET'])
+@require_admin()
 def list_versions():
     """
     List all available firmware versions
@@ -318,6 +323,7 @@ def list_versions():
 
 
 @firmware_bp.route('/firmware/set-latest', methods=['POST'])
+@require_admin(strict=True)  # promoting a firmware to fleet-latest = RCE
 def set_latest_version():
     """
     Set which version is the latest (rollback capability)
@@ -353,6 +359,7 @@ def set_latest_version():
 # ============================================================================
 
 @firmware_bp.route('/firmware/dashboard')
+@require_admin()
 def firmware_dashboard():
     """HTML dashboard for firmware management"""
     return """

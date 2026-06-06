@@ -45,6 +45,9 @@ from firmware_routes import init_firmware_routes
 # Import analytics routes
 from analytics_routes import init_analytics_routes
 
+# Admin auth gate (audit 0.1)
+from admin_auth import require_admin
+
 app = Flask(__name__)
 
 # Sprint 1E: Use environment variables for production configuration
@@ -193,6 +196,7 @@ def leaderboard():
     return render_template('leaderboard.html')
 
 @app.route('/admin')
+@require_admin()
 def admin_dashboard():
     """Admin dashboard for managing bars, games, and analytics"""
     return render_template('admin_dashboard.html')
@@ -513,6 +517,7 @@ def api_generate_qr(bar_slug, table_num):
     })
 
 @app.route('/api/admin/bars/<bar_slug>/pucks', methods=['POST'])
+@require_admin()
 def api_register_puck_to_bar(bar_slug):
     """Slice J — bar deployment. Register a puck to a venue + table so
     the puck shows up under that bar's leaderboard / dashboard. Used
@@ -563,6 +568,7 @@ def api_register_puck_to_bar(bar_slug):
 
 
 @app.route('/admin/qr-codes/<bar_slug>')
+@require_admin()
 def admin_qr_codes(bar_slug):
     """Admin page to generate all QR codes for a bar"""
     ph = get_placeholder()

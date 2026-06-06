@@ -14,6 +14,8 @@ from trivia_game_engines import create_game_engine
 from trivia_session_manager import TriviaSessionManager, pick_random_skill_game, get_51_skill_games
 
 # Create Blueprint
+from admin_auth import require_admin
+
 trivia_bp = Blueprint('trivia', __name__)
 
 # Store active game sessions in memory
@@ -634,6 +636,7 @@ def api_get_game_types():
 # ========================================
 
 @trivia_bp.route('/api/trivia/admin/questions', methods=['GET', 'POST'])
+@require_admin()
 def api_admin_questions():
     """
     GET: List all questions
