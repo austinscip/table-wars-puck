@@ -90,7 +90,9 @@ _flask_log = get_logger("flask")
 # async_mode='threading' avoids the werkzeug websocket-upgrade quirk
 # on Python 3.14 dev server ("write() before start_response"). It also
 # eliminates the noisy 500 in logs when the client opens a websocket.
-# Production should still run under gunicorn + eventlet.
+# Production runs under gunicorn + the gevent worker (GeventWebSocketWorker,
+# see deploy/). NOT eventlet — that dependency was unused and dropped in the
+# 2026-06-06 deps audit.
 # logger=False/engineio_logger=False mute the warning chatter.
 # Drive the websocket CORS from the SAME env as the HTTP CORS above — it used
 # to be hardcoded "*", so the socket accepted connections from ANY origin even

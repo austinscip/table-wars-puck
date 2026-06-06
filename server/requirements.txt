@@ -1,22 +1,29 @@
 # TABLE WARS - Scoreboard Server Dependencies
 #
 # Install with: pip install -r requirements.txt
+#
+# Versions bumped 2026-06-06 (audit deps-2026-06-06) off a pip-audit run.
+# These are behaviour-relevant security bumps, not blind: the full server
+# test suite + an app-boot smoke were run against the upgraded web stack.
 
-Flask==3.0.0
-flask-socketio==5.3.5
-flask-cors==4.0.0
-python-socketio==5.10.0
-eventlet==0.33.3
+Flask==3.1.3          # was 3.0.0 — CVE-2026-27205
+Werkzeug>=3.1.6       # was unpinned (transitive) — CVE-2026-21860 / CVE-2026-27199 (multipart DoS class)
+flask-socketio==5.6.1 # was 5.3.5 — REQUIRED >=5.6 for Flask 3.1 (5.3-5.5 crash on every socket event: RequestContext.session became read-only). pairs with python-socketio 5.14
+flask-cors==6.0.0     # was 4.0.0 — CVE-2024-6839 / -6844 / -6866 + PYSEC-2024-71/260/271 (origin bypass, log injection)
+python-socketio==5.14.0  # was 5.10.0 — CVE-2025-61765
+# eventlet REMOVED (was 0.33.3, CVE-2023-29483 / CVE-2025-58068): unused — the
+# deploy runs the gevent worker and SocketIO is async_mode="threading"; nothing
+# imports eventlet. Dropping it removes the dep + its CVE surface entirely.
 qrcode==7.4.2
-Pillow>=10.2.0
+Pillow>=11.3.0        # was >=10.2.0 — pull patched parsers; we only GENERATE QR PNGs from trusted data (no untrusted-image parse path)
 psycopg[binary]>=3.1.0  # PostgreSQL adapter (psycopg3 - Python 3.14 compatible)
 psycopg_pool>=3.2.0  # Connection pool for SupabaseWriter.with_pool() (runtime)
 PyJWT>=2.8.0  # Puck input auth — signed (match-scoped) capability tokens
 redis>=5.0.0  # Optional: Redis-backed idempotency + distributed lock (multi-worker)
 
 # Sprint 1E: Production deployment dependencies
-python-dotenv==1.0.0  # Environment variable management
-gunicorn==21.2.0  # Production WSGI server
+python-dotenv==1.2.2  # was 1.0.0 — CVE-2026-28684
+gunicorn==23.0.0  # was 21.2.0 — CVE-2024-1135 (HTTP request smuggling)
 gevent==24.2.1  # Async worker for Flask-SocketIO
 gevent-websocket==0.10.1  # WebSocket support for gevent
 zeroconf>=0.140.0
