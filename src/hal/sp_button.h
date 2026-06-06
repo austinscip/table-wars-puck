@@ -2,9 +2,15 @@
 //
 // One physical button on SP_PIN_BUTTON (INPUT_PULLUP, active-low). Polled
 // from the main loop. Emits debounced events: TAP (short press),
-// HOLD_1S (held >= 1000ms), HOLD_3S (held >= 3000ms). Long press emits
-// HOLD_1S on the 1s threshold AND HOLD_3S on the 3s threshold if the
-// button stays down.
+// HOLD_1S (held >= kHold1sMs) and HOLD_3S (the long-hold "cancel / new
+// player" gesture, held >= kLongHoldMs). A sustained press emits HOLD_1S at
+// the 1s threshold AND HOLD_3S at the long-hold threshold.
+//
+// NOTE: despite the enum name, the long-hold threshold ships at 5000ms, not
+// 3000ms — deliberately stiff to resist accidental cancels mid-dial (see the
+// mid-dial-cancel note in g_speed_pyramid.h). The value lives in kLongHoldMs
+// below so it's a single, honest source of truth. Product to confirm 3s vs
+// 5s (audit firmware-2026-06-06, finding M4).
 
 #pragma once
 
@@ -30,6 +36,11 @@ inline bool _hold_3s_emitted = false;
 // the last accepted edge is ignored as bounce. Empirically 30-50ms
 // covers most through-hole tactile switches.
 constexpr uint32_t kDebounceMs = 40;
+
+// Hold thresholds. kLongHoldMs backs the HOLD_3S event (named for the
+// gesture, not the duration — ships at 5s; see the header note + audit M4).
+constexpr uint32_t kHold1sMs   = 1000;
+constexpr uint32_t kLongHoldMs = 5000;
 
 inline void begin() {
 #if defined(PUCK_REV_B)
@@ -74,12 +85,12 @@ inline SpButtonEvent poll() {
 
   if (_down && raw_down) {
     const uint32_t held = now - _down_at_ms;
-    if (!_hold_3s_emitted && held >= 5000) {
+    if (!_hold_3s_emitted && held >= kLongHoldMs) {
       _hold_3s_emitted = true;
       Serial.println("[BTN] HOLD_3S");
       return SpButtonEvent::HOLD_3S;
     }
-    if (!_hold_1s_emitted && held >= 1000) {
+    if (!_hold_1s_emitted && held >= kHold1sMs) {
       _hold_1s_emitted = true;
       Serial.println("[BTN] HOLD_1S");
       return SpButtonEvent::HOLD_1S;
@@ -92,7 +103,7 @@ inline SpButtonEvent poll() {
     _last_edge_ms = now;
     _down = false;
     const uint32_t held = now - _down_at_ms;
-    if (held < 1000 && !_hold_1s_emitted) {
+    if (held < kHold1sMs && !_hold_1s_emitted) {
       Serial.printf("[BTN] TAP (held=%lums)\n", (unsigned long)held);
       return SpButtonEvent::TAP;
     }

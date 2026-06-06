@@ -27,6 +27,12 @@ namespace sp_net {
 
 inline bool connect(uint32_t timeout_ms = 15000) {
   WiFi.mode(WIFI_STA);
+  // Let the IDF transparently re-associate if the AP blips (router reboot,
+  // brief interference) without us having to notice and re-issue begin().
+  // Without this a single drop strands the puck offline until power-cycle
+  // (audit firmware-2026-06-06, finding H3).
+  WiFi.setAutoReconnect(true);
+  WiFi.persistent(false);
   WiFi.begin(SPEED_PYRAMID_WIFI_SSID, SPEED_PYRAMID_WIFI_PASS);
   uint32_t start = millis();
   while (WiFi.status() != WL_CONNECTED) {
@@ -38,6 +44,25 @@ inline bool connect(uint32_t timeout_ms = 15000) {
 
 inline bool is_connected() {
   return WiFi.status() == WL_CONNECTED;
+}
+
+// Best-effort, NON-blocking reconnect nudge. Call periodically from the main
+// loop: if the link is down, re-issue WiFi.begin() so a puck that dropped
+// while setAutoReconnect was still negotiating (or after a long outage) gets
+// kicked back into associating. Returns the current link state. Does NOT
+// busy-wait — the loop keeps polling input while the IDF reconnects in the
+// background.
+inline bool ensure_connected() {
+  if (WiFi.status() == WL_CONNECTED) return true;
+  static uint32_t _last_attempt_ms = 0;
+  const uint32_t now = millis();
+  // Throttle so we don't hammer begin() every tick during a real outage.
+  if (_last_attempt_ms == 0 || now - _last_attempt_ms > 5000) {
+    _last_attempt_ms = now;
+    Serial.println("[NET] link down — re-issuing WiFi.begin()");
+    WiFi.begin(SPEED_PYRAMID_WIFI_SSID, SPEED_PYRAMID_WIFI_PASS);
+  }
+  return false;
 }
 
 // GET <SERVER_URL><path>. Writes response body into `response_out` (if
@@ -53,7 +78,7 @@ inline int get_json(const char* path, String* response_out = nullptr) {
 
   WiFiClient client;
   HTTPClient http;
-  http.setTimeout(5000);
+  http.setTimeout(3000);  // bound the per-request loop freeze (audit M1)
 
   if (!http.begin(client, url)) {
     Serial.println("[GET] http.begin() failed (URL parse?)");
@@ -87,7 +112,7 @@ inline int post_json(const char* path, const String& body, String* response_out 
 
   WiFiClient client;
   HTTPClient http;
-  http.setTimeout(5000);  // 5 sec total
+  http.setTimeout(3000);  // bound the per-request loop freeze (audit M1)
 
   if (!http.begin(client, url)) {
     Serial.println("[POST] http.begin() failed (URL parse?)");

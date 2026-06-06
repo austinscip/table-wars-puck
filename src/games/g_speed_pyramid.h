@@ -18,6 +18,7 @@
 #include "../hal/sp_led.h"
 #include "../hal/sp_feedback.h"
 #include "../hal/sp_net.h"
+#include "../hal/sp_json.h"
 
 #ifndef PUCK_ID
 #define PUCK_ID 1
@@ -137,17 +138,10 @@ inline void _post_preview(uint8_t index, uint8_t digit) {
   sp_net::post_json("/api/pair/preview", body, nullptr);
 }
 
-// Extract a quoted-string JSON field. Returns true if found, writes to
-// `out`. Crude but works for the small response shapes we use.
+// Thin wrappers over the bounded, host-tested extractors in sp_json.h.
+// Kept so the many existing call sites read unchanged.
 inline bool _extract_string(const String& json, const char* key, String* out) {
-  String needle = String("\"") + key + "\":\"";
-  int i = json.indexOf(needle);
-  if (i < 0) return false;
-  i += needle.length();
-  int end = json.indexOf("\"", i);
-  if (end < 0) return false;
-  *out = json.substring(i, end);
-  return true;
+  return sp_json::extract_string(json, key, out);
 }
 
 // v2 /api/pair/confirm response shape: {role, color, color_name,
@@ -197,80 +191,38 @@ inline bool _poll_lobby_state(String* session_code_out) {
   return session_code_out->length() > 0;
 }
 
-// Extract an integer JSON field (very small parser — works for fields
-// shaped like "<key>":<int>).
 inline bool _extract_int(const String& json, const char* key, int* out) {
-  String needle = String("\"") + key + "\":";
-  int i = json.indexOf(needle);
-  if (i < 0) return false;
-  i += needle.length();
-  while (i < (int)json.length() && (json[i] == ' ' || json[i] == '\t')) i++;
-  int start = i;
-  if (i < (int)json.length() && (json[i] == '-' || json[i] == '+')) i++;
-  while (i < (int)json.length() && isDigit(json[i])) i++;
-  if (i == start) return false;
-  *out = json.substring(start, i).toInt();
-  return true;
+  return sp_json::extract_int(json, key, out);
 }
 
 inline bool _extract_bool(const String& json, const char* key, bool* out) {
-  String needle = String("\"") + key + "\":";
-  int i = json.indexOf(needle);
-  if (i < 0) return false;
-  i += needle.length();
-  while (i < (int)json.length() && (json[i] == ' ' || json[i] == '\t')) i++;
-  if (json.substring(i, i + 4) == "true") { *out = true; return true; }
-  if (json.substring(i, i + 5) == "false") { *out = false; return true; }
-  return false;
+  return sp_json::extract_bool(json, key, out);
 }
 
-// GET /api/sp/match-state/<session_code>. Returns whether the match is
-// truly complete. Server flips `complete` true only AFTER the post-Q7
-// load attempt fails — so simply seeing round=7 doesn't trigger an
-// end-of-match (Q7 is still being played at that point).
-inline bool _poll_match_state_complete() {
-  if (_session_code.length() == 0) return false;
-  String path = "/api/sp/match-state/" + _session_code;
-  String body;
-  const int code = sp_net::get_json(path.c_str(), &body);
-  if (code != 200) return false;
-  bool complete = false;
-  _extract_bool(body, "complete", &complete);
-  return complete;
-}
-
-// Slice E1 — peek into match-state for a pending category-pick phase.
-// Sets _pick_picker and _pick_offer_ids[0..2] (zero-padded for short
-// offers). Returns true if a pick is pending.
-inline bool _poll_pending_pick() {
-  if (_session_code.length() == 0) return false;
-  String path = "/api/sp/match-state/" + _session_code;
-  String body;
-  const int code = sp_net::get_json(path.c_str(), &body);
-  if (code != 200) return false;
+// Slice E1 — parse a pending category-pick phase out of an already-fetched
+// match-state body. Sets _pick_picker and _pick_offer_ids[0..2] (zero-padded
+// for short offers). Returns true if a pick is pending. Pure (no fetch) so
+// _poll_match_state can satisfy complete + pick + minigame from one GET.
+inline bool _parse_pending_pick(const String& body) {
+  // A `null` value (or an absent key) means no pending pick.
+  if (sp_json::value_is_null(body, "\"pending_category_pick\":")) return false;
   const int pp_at = body.indexOf("\"pending_category_pick\":");
   if (pp_at < 0) return false;
-  // null sentinel after the key means no pending pick.
-  int probe = pp_at + 24;
-  while (probe < (int)body.length() && (body[probe] == ' ' || body[probe] == '\t')) probe++;
-  if (probe < (int)body.length() && body[probe] == 'n') return false;  // "null"
   // Parse picker_puck_id (first match wins — only one in pending block).
   int picker = 0;
   if (!_extract_int(body.substring(pp_at), "picker_puck_id", &picker)) return false;
   _pick_picker = picker;
-  // Parse up to 3 "id":N occurrences within the pending block. The
-  // pending block is delimited by the outer match-state object — good
-  // enough since no other "id" field exists at top-level of
-  // match-state.
+  // Parse up to 3 "id":N occurrences within the pending block. The needle
+  // carries its own leading quote, so it matches a field literally named
+  // `id` and never the tail of "category_id"/"puck_id"/"question_id".
   String slice = body.substring(pp_at);
   for (int k = 0; k < 3; k++) _pick_offer_ids[k] = 0;
   int cursor = 0;
   for (int k = 0; k < 3; k++) {
     int hit = slice.indexOf("\"id\":", cursor);
     if (hit < 0) break;
-    String tail = slice.substring(hit);
     int v = 0;
-    if (!_extract_int(tail, "id", &v)) break;
+    if (!_extract_int(slice.substring(hit), "id", &v)) break;
     _pick_offer_ids[k] = v;
     cursor = hit + 5;
   }
@@ -287,20 +239,13 @@ inline bool _post_select_category(int category_id) {
   return sp_net::post_json(path.c_str(), body, nullptr) == 200;
 }
 
-// Slice E2 — peek into match-state for a pending minigame phase.
-// Sets _mg_flavor ('B'/'S') and _mg_target (BULLSEYE only, else 0).
-// Returns true if a minigame is pending.
-inline bool _poll_pending_minigame() {
-  if (_session_code.length() == 0) return false;
-  String path = "/api/sp/match-state/" + _session_code;
-  String body;
-  const int code = sp_net::get_json(path.c_str(), &body);
-  if (code != 200) return false;
+// Slice E2 — parse a pending minigame phase out of an already-fetched
+// match-state body. Sets _mg_flavor ('B'/'S') and _mg_target (BULLSEYE only,
+// else 0). Returns true if a minigame is pending. Pure (no fetch).
+inline bool _parse_pending_minigame(const String& body) {
+  if (sp_json::value_is_null(body, "\"pending_minigame\":")) return false;
   const int mg_at = body.indexOf("\"pending_minigame\":");
   if (mg_at < 0) return false;
-  int probe = mg_at + 19;
-  while (probe < (int)body.length() && (body[probe] == ' ' || body[probe] == '\t')) probe++;
-  if (probe < (int)body.length() && body[probe] == 'n') return false;  // "null"
   String slice = body.substring(mg_at);
   String flavor;
   if (!_extract_string(slice, "flavor", &flavor)) return false;
@@ -313,6 +258,34 @@ inline bool _poll_pending_minigame() {
     _mg_target = 0;
   }
   return _mg_flavor == 'B' || _mg_flavor == 'S';
+}
+
+// Single consolidated match-state poll. One GET to
+// /api/sp/match-state/<code>?puck_id=<n> replaces the three separate GETs we
+// used to fire per tick (one each for complete / pick / minigame) — 3x fewer
+// round-trips, 3x less heap churn, and it doubles as the puck's heartbeat:
+// the server only refreshes last_seen (ghost-sweep guard) when the poll
+// carries ?puck_id (audit firmware-2026-06-06, findings H1 + H2).
+struct MatchState {
+  bool ok = false;            // GET returned HTTP 200
+  bool complete = false;
+  bool pick_pending = false;  // also populates _pick_* members
+  bool mg_pending = false;    // also populates _mg_* members
+};
+
+inline MatchState _poll_match_state() {
+  MatchState ms;
+  if (_session_code.length() == 0) return ms;
+  String path =
+      "/api/sp/match-state/" + _session_code + "?puck_id=" + String(PUCK_ID);
+  String body;
+  const int code = sp_net::get_json(path.c_str(), &body);
+  if (code != 200) return ms;
+  ms.ok = true;
+  _extract_bool(body, "complete", &ms.complete);
+  ms.pick_pending = _parse_pending_pick(body);
+  ms.mg_pending = _parse_pending_minigame(body);
+  return ms;
 }
 
 // Slice F — POST /api/sp/minigame/preview. Best-effort aim broadcast
@@ -610,7 +583,11 @@ inline bool pair_mode_loop() {
       Serial.println("[LOBBY] host TAP -> /api/pair/start");
       sp_feedback::lock_in();
       if (!_post_start()) {
+        // Tell the host the start didn't land (was a silent no-op) so they
+        // know to tap again rather than assume the match is launching.
         Serial.println("[LOBBY] start POST failed");
+        sp_feedback::beep(300, 180);
+        sp_led::flash(sp_led::color_wrong(), 120);
       }
     }
 
@@ -655,12 +632,18 @@ inline bool pair_mode_loop() {
         now - _last_poll_ms > 500) {
       _last_poll_ms = now;
 
-      if (_poll_match_state_complete()) {
+      // One match-state fetch satisfies complete / pick / minigame (and
+      // heartbeats this puck). If the GET failed (ms.ok == false) we hold
+      // the current state and retry next tick rather than thrashing.
+      const MatchState ms = _poll_match_state();
+      if (!ms.ok) {
+        // network miss — leave state untouched, try again in 500ms.
+      } else if (ms.complete) {
         Serial.println("[STATE] -> MATCH_ENDED");
         _state = State::MATCH_ENDED;
         sp_led::victory_sweep(1500);
         sp_feedback::victory();
-      } else if (_poll_pending_pick()) {
+      } else if (ms.pick_pending) {
         if (_state != State::IN_GAME_CATEGORY_PICKING) {
           Serial.print("[STATE] -> IN_GAME_CATEGORY_PICKING picker=");
           Serial.println(_pick_picker);
@@ -671,8 +654,9 @@ inline bool pair_mode_loop() {
       } else if (_state == State::IN_GAME_CATEGORY_PICKING) {
         Serial.println("[STATE] IN_GAME_CATEGORY_PICKING -> IN_GAME_IDLE");
         _state = State::IN_GAME_IDLE;
+        _pick_idx = 0;  // don't carry a stale index into the next pick round
         sp_led::clear();
-      } else if (_poll_pending_minigame()) {
+      } else if (ms.mg_pending) {
         if (_state != State::IN_GAME_MINIGAME) {
           Serial.print("[STATE] -> IN_GAME_MINIGAME flavor=");
           Serial.print(_mg_flavor);
@@ -721,6 +705,13 @@ inline bool pair_mode_loop() {
             if (_post_select_category(chosen)) {
               _state = State::IN_GAME_IDLE;
               sp_led::clear();
+            } else {
+              // Selection didn't land — buzz so the picker re-taps instead
+              // of staring at an unchanged screen. State holds; the poll
+              // keeps us in CATEGORY_PICKING until the server records a pick.
+              sp_feedback::beep(300, 180);
+              sp_led::flash(sp_led::color_wrong(), 120);
+              Serial.println("[PICK] select-category POST failed — retry");
             }
           }
         }
@@ -830,8 +821,20 @@ inline bool pair_mode_loop() {
           if (_post_answer(letter, elapsed, &is_correct)) {
             if (is_correct) sp_feedback::correct();
             else sp_feedback::wrong();
+            _state = State::IN_GAME_LOCKED;
+          } else {
+            // POST failed (network blip / non-200). DON'T lock — the
+            // player's answer never reached the server, and silently
+            // moving to LOCKED would eat it. Buzz an error and stay in
+            // ANSWERING so they can re-tap before the browser's timer
+            // force-reveals. Safe to retry: the server answer endpoint is
+            // idempotent (409 "already answered"), so a re-tap can't
+            // double-count if the original actually landed.
+            _last_preview_letter = 0;
+            sp_feedback::beep(300, 180);
+            sp_led::flash(sp_led::color_wrong(), 120);
+            Serial.println("[ANSWER] POST failed — staying in ANSWERING for retry");
           }
-          _state = State::IN_GAME_LOCKED;
         }
       }
     } else {

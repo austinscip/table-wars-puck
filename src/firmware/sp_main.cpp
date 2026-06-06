@@ -41,6 +41,10 @@ void setup() {
 }
 
 void loop() {
+  // Keep the WiFi link alive across router blips / range dropouts. Throttled
+  // internally to one begin() per 5s while down; a no-op when connected, so
+  // it never stalls the input poll (audit firmware-2026-06-06, finding H3).
+  sp_net::ensure_connected();
   sp_game::pair_mode_loop();
   delay(8);  // ~125 Hz poll
 }
