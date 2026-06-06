@@ -65,6 +65,13 @@ class SupabaseWriterProtocol(Protocol):
         self, match_id: str, ended_at: datetime
     ) -> None: ...
 
+    def finalize_match(
+        self,
+        match_id: str,
+        ended_at: datetime,
+        finals: list[tuple[str, int]],
+    ) -> None: ...
+
     def update_match_abandoned(
         self, match_id: str, ended_at: datetime
     ) -> None: ...
@@ -703,8 +710,8 @@ class MatchManager:
         match.status = "finished"
         match.ended_at = datetime.now(timezone.utc)
 
-        deferred: list = []
         finals = match.game.final_scores()
+        final_rows: list[tuple[str, int]] = []
         for puck_index, total in finals.items():
             mp_id = match.match_puck_ids.get(puck_index)
             if mp_id is None:
@@ -716,24 +723,18 @@ class MatchManager:
                     match.id,
                 )
                 continue
-            deferred.append(
-                functools.partial(
-                    self.writer.insert_score,
-                    match_id=match.id,
-                    match_puck_id=mp_id,
-                    round_number=0,
-                    score_delta=0,
-                    score_total=total,
-                    event_type="final",
-                )
-            )
-        deferred.append(
+            final_rows.append((mp_id, total))
+        # Single ATOMIC deferred write: all final scores + the status flip in
+        # one transaction (audit runtime F3) — a partial failure can no longer
+        # strand the match 'active' with some-but-not-all final scores.
+        deferred: list = [
             functools.partial(
-                self.writer.update_match_finished,
+                self.writer.finalize_match,
                 match_id=match.id,
                 ended_at=match.ended_at,
+                finals=final_rows,
             )
-        )
+        ]
         if self.scheduler is not None:
             self.scheduler.unregister(match.id)
         if self.heartbeat is not None:

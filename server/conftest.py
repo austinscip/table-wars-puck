@@ -110,6 +110,25 @@ class FakeWriter:
     def update_match_finished(self, match_id: str, ended_at: datetime) -> None:
         self.finished.append((match_id, ended_at))
 
+    def finalize_match(
+        self, match_id: str, ended_at: datetime, finals: list
+    ) -> None:
+        # Mirror the real writer's ATOMIC finalize: record every final score
+        # AND the finished transition together. Modeled as one unit so a test
+        # can't observe a half-finalized fake (audit runtime F3).
+        for match_puck_id, score_total in finals:
+            self.scores.append(
+                {
+                    "match_id": match_id,
+                    "match_puck_id": match_puck_id,
+                    "round_number": 0,
+                    "score_delta": 0,
+                    "score_total": score_total,
+                    "event_type": "final",
+                }
+            )
+        self.finished.append((match_id, ended_at))
+
     def update_match_abandoned(self, match_id: str, ended_at: datetime) -> None:
         self.abandoned.append((match_id, ended_at))
 

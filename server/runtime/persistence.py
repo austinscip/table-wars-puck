@@ -160,6 +160,22 @@ class PersistenceQueue:
             )
         )
 
+    def finalize_match(
+        self,
+        match_id: str,
+        ended_at: datetime,
+        finals: list,
+    ) -> None:
+        # Leaderboard truth — synchronous, with the bounded retry. The
+        # underlying writer makes it ATOMIC (scores + status in one txn) and
+        # idempotent (on conflict do nothing), so a retry after a transient
+        # blip is safe and can't leave a half-finalized match (audit runtime F3).
+        self._sync_write(
+            lambda: self._writer.finalize_match(
+                match_id=match_id, ended_at=ended_at, finals=finals
+            )
+        )
+
     def update_match_abandoned(self, match_id: str, ended_at: datetime) -> None:
         self._sync_write(
             lambda: self._writer.update_match_abandoned(

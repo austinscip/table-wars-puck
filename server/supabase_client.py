@@ -429,6 +429,43 @@ class SupabaseWriter:
                     ),
                 )
 
+    def finalize_match(
+        self,
+        match_id: str,
+        ended_at: datetime,
+        finals: list[tuple[str, int]],
+    ) -> None:
+        """Atomic match finalisation: insert EVERY final score AND flip
+        matches.status to 'finished' in ONE transaction. Either the whole set
+        lands or none of it does — a mid-batch write failure can no longer
+        leave the match stranded 'active' with partial final scores (which is
+        invisible to recovery and contradicts the in-memory 'finished' state)
+        — audit runtime F3.
+
+        `finals` is a list of (match_puck_id, score_total). The final-score
+        insert is `on conflict do nothing` against the
+        uniq_final_score_per_match_puck index, so a retry of the whole call is
+        idempotent. The status flip is guarded to a still-active row so a late
+        finalise can't stomp a result that already landed."""
+        with self._connection() as conn:
+            with conn.transaction():
+                with conn.cursor() as cur:
+                    for match_puck_id, score_total in finals:
+                        cur.execute(
+                            "insert into scores "
+                            "(match_id, match_puck_id, round_number, "
+                            " score_delta, score_total, event_type) "
+                            "values (%s, %s, 0, 0, %s, 'final') "
+                            "on conflict do nothing",
+                            (match_id, match_puck_id, score_total),
+                        )
+                    cur.execute(
+                        "update matches "
+                        "set status = 'finished', ended_at = %s "
+                        "where id = %s and status = 'active'",
+                        (ended_at, match_id),
+                    )
+
     def update_match_snapshot(self, match_id: str, snapshot: dict) -> None:
         """Write the current game state snapshot to matches.snapshot so
         the TV Realtime subscription wakes up. Called from MatchManager
