@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '../lib/api'
 import { getSocket } from '../lib/socket'
 import { audio } from '../lib/audio'
+import { clamp } from '../lib/num'
 import AmbientBackground from '../components/AmbientBackground'
 
 /**
@@ -375,19 +376,25 @@ function ShotClockBar({
   fires: MinigameFireEvent[]
 }) {
   const [pos, setPos] = useState(0) // 0..1
+  // Guard a degenerate cycle so `% 0` can't yield NaN and freeze the sweep
+  // pointer off-screen (audit tv-speed-pyramid-web).
+  const safeCycleMs = cycleMs > 0 ? cycleMs : 3000
   useEffect(() => {
     let raf = 0
     const tick = () => {
       const elapsed = Date.now() - startedAtMs
-      const p = (elapsed % cycleMs) / cycleMs
+      const p = (elapsed % safeCycleMs) / safeCycleMs
       setPos(p)
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [startedAtMs, cycleMs])
+  }, [startedAtMs, safeCycleMs])
 
-  const half = greenFrac / 2
+  // Clamp so a bad green fraction can't render the zone off the track —
+  // players tap relative to where it's drawn.
+  const safeGreenFrac = clamp(greenFrac, 0, 1)
+  const half = safeGreenFrac / 2
   const greenStart = 0.5 - half
   return (
     <div className="relative h-24 w-[clamp(28rem,60vw,56rem)] overflow-hidden rounded-full bg-text/10">
@@ -396,7 +403,7 @@ function ShotClockBar({
         className="absolute inset-y-0 bg-correct/40"
         style={{
           left: `${greenStart * 100}%`,
-          width: `${greenFrac * 100}%`,
+          width: `${safeGreenFrac * 100}%`,
         }}
       />
       {/* Sweep pointer */}

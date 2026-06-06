@@ -178,12 +178,6 @@ export default function QuestionScreen() {
         return args.question
       })
       setRound(args.round)
-      // Show ROUND N intro for ~1.6s on every new question. Time-bounded
-      // hide guarantees it never persists over answer choices even if
-      // the narration handoff stalls.
-      setShowRoundIntro(true)
-      const introId = window.setTimeout(() => setShowRoundIntro(false), 1600)
-      narrationTimersRef.current.push(introId)
       setTotalRounds(args.total_rounds)
       setReveal(null)
       lastTickRef.current = -1
@@ -255,6 +249,13 @@ export default function QuestionScreen() {
           // R022b: clear pending delayed-play timers too.
           narrationTimersRef.current.forEach((id) => window.clearTimeout(id))
           narrationTimersRef.current = []
+          // Show ROUND N intro for ~1.6s on every new question.
+          // Pushed AFTER the timer-ref reset above so it isn't
+          // immediately cancelled. Self-contained timeout — does
+          // NOT go into narrationTimersRef so the next question's
+          // narration-clear can't kill it mid-animation.
+          setShowRoundIntro(true)
+          window.setTimeout(() => setShowRoundIntro(false), 1600)
           if (narrationAudioRef.current) {
             try {
               narrationAudioRef.current.pause()
@@ -430,11 +431,18 @@ export default function QuestionScreen() {
         }
         narrationAudioRef.current = null
       }
-      setReveal(p)
+      // Defensive: a malformed reveal lacking `results` would otherwise throw
+      // here, and a throw inside this socket handler isn't caught by the
+      // ErrorBoundary (it only catches render) — it would strand the TV on the
+      // answering screen with the force-reveal timer already cleared. Default
+      // to [] so the reveal still renders and the advance still schedules
+      // (audit tv-speed-pyramid-web).
+      const results = Array.isArray(p.results) ? p.results : []
+      setReveal({ ...p, results })
       setPhase('reveal')
       setLanes((prev) => {
         const next = { ...prev }
-        for (const r of p.results) {
+        for (const r of results) {
           next[r.puck_id] = {
             puck_id: r.puck_id,
             color: r.color,
@@ -455,9 +463,9 @@ export default function QuestionScreen() {
       // paths used to overlap the chord 120ms later — drop it there
       // and keep it only as the mixed-case neutral beat.
       const allCorrect =
-        p.results.length > 0 && p.results.every((r) => r.is_correct)
+        results.length > 0 && results.every((r) => r.is_correct)
       const allWrong =
-        p.results.length > 0 && p.results.every((r) => !r.is_correct)
+        results.length > 0 && results.every((r) => !r.is_correct)
       if (allCorrect) {
         audio.correct()
       } else if (allWrong) {
@@ -615,13 +623,13 @@ export default function QuestionScreen() {
       <motion.div
         key={`bg-${round}`}
         initial={{ opacity: 0 }}
-        animate={{ opacity: 0.35 }}
+        animate={{ opacity: 1 }}
         transition={{ duration: 1.2 }}
-        className="pointer-events-none absolute inset-0 -z-10"
+        className="pointer-events-none fixed inset-0 -z-10"
         style={{
-          background: `radial-gradient(circle at 20% 0%, rgba(96,165,250,0.20), transparent 60%),
-                       radial-gradient(circle at 80% 100%, rgba(251,191,36,0.18), transparent 55%),
-                       radial-gradient(circle at 50% 50%, rgba(168,85,247,0.10), transparent 70%)`,
+          background: `radial-gradient(ellipse at 15% 0%, rgba(96,165,250,0.55), transparent 55%),
+                       radial-gradient(ellipse at 85% 100%, rgba(251,191,36,0.45), transparent 55%),
+                       radial-gradient(circle at 50% 50%, rgba(168,85,247,0.30), transparent 70%)`,
         }}
       />
 

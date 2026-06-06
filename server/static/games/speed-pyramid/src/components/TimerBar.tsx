@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
+import { pctRemaining } from '../lib/num'
 
 interface Props {
   /** Total time available in seconds. */
@@ -36,7 +37,9 @@ export default function TimerBar({ durationSec, startedAt, frozen }: Props) {
     return () => cancelAnimationFrame(raf)
   }, [durationSec, startedAt, frozen])
 
-  const pct = (remainingMs / (durationSec * 1000)) * 100
+  // Guarded so a degenerate/zero duration can't produce NaN%/Infinity% and
+  // blank the bar on the unattended TV (audit tv-speed-pyramid-web).
+  const pct = pctRemaining(remainingMs, durationSec * 1000)
   const danger = pct < 30
   const critical = pct < 15
 
