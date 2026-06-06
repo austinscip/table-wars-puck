@@ -10,6 +10,7 @@ import { GameScreen } from './src/screens/GameScreen';
 import { ScoreboardScreen } from './src/screens/ScoreboardScreen';
 import type { RootStackParamList } from './src/navigation';
 import { colors } from './src/theme';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -35,6 +36,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar barStyle="light-content" backgroundColor={colors.bg} hidden />
+      <ErrorBoundary>
       <NavigationContainer theme={navTheme}>
         <Stack.Navigator
           initialRouteName="Title"
@@ -53,6 +55,7 @@ export default function App() {
           <Stack.Screen name="Scoreboard" component={ScoreboardScreen} />
         </Stack.Navigator>
       </NavigationContainer>
+      </ErrorBoundary>
     </SafeAreaProvider>
   );
 }

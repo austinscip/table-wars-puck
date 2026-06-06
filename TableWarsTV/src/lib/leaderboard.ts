@@ -91,9 +91,21 @@ export function useLeaderboardRotation(
     setLoading(false);
   }, [period, gameSlug, limit]);
 
+  // Auto-fetch on period change, guarded so a fetch that resolves AFTER the
+  // attract screen unmounts (or rotates) doesn't setState on a gone component
+  // (audit tablewars-tv-2026-06-06).
   useEffect(() => {
-    refetch();
-  }, [refetch]);
+    let active = true;
+    setLoading(true);
+    fetchLeaderboard(period, { gameSlug, limit }).then((data) => {
+      if (!active) return;
+      setRows(data);
+      setLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [period, gameSlug, limit]);
 
   useEffect(() => {
     const id = setInterval(() => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet } from 'react-native';
 import { colors } from '../theme';
 import { Cue, CueChannel, type CueDispatcher, type CueEvent } from '../lib/cues';
@@ -28,13 +28,19 @@ const TINT_BY_CUE: Partial<Record<string, string>> = {
 
 export function CueFlashOverlay({ dispatcher }: { dispatcher: CueDispatcher }) {
   const opacity = useRef(new Animated.Value(0)).current;
-  const tint = useRef<string>(colors.text);
+  // tint must be STATE, not a ref: a ref mutation doesn't re-render, so the
+  // flash would paint with the PREVIOUS cue's colour until some unrelated
+  // render happened (audit tablewars-tv-2026-06-06).
+  const [tint, setTint] = useState<string>(colors.text);
 
   useEffect(() => {
     const handler = (event: CueEvent) => {
       const colour = TINT_BY_CUE[event.cue];
       if (!colour) return;
-      tint.current = colour;
+      setTint(colour);
+      // Cancel any in-flight fade so rapid back-to-back cues each get a clean
+      // full flash rather than stacking partially-faded animations.
+      opacity.stopAnimation();
       opacity.setValue(0.6);
       Animated.timing(opacity, {
         toValue: 0,
@@ -59,7 +65,7 @@ export function CueFlashOverlay({ dispatcher }: { dispatcher: CueDispatcher }) {
       style={[
         StyleSheet.absoluteFill,
         styles.overlay,
-        { opacity, backgroundColor: tint.current },
+        { opacity, backgroundColor: tint },
       ]}
     />
   );

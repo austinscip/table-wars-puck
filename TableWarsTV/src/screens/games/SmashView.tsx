@@ -13,8 +13,11 @@ const ARENA_ASPECT = 100 / 60; // matches ARENA_X width / ARENA_Y height
 export function SmashView({ snapshot }: { snapshot: SmashSnapshot }) {
   const [arenaXMin, arenaXMax] = snapshot.arena.x;
   const [arenaYMin, arenaYMax] = snapshot.arena.y;
-  const xSpan = arenaXMax - arenaXMin;
-  const ySpan = arenaYMax - arenaYMin;
+  // `|| 1` guards a degenerate arena (min === max) so the per-fighter
+  // position math can't divide by zero and emit `Infinity%` left/bottom,
+  // which throws the fighters off-screen (audit tablewars-tv-2026-06-06).
+  const xSpan = (arenaXMax - arenaXMin) || 1;
+  const ySpan = (arenaYMax - arenaYMin) || 1;
 
   return (
     <View style={styles.root}>
