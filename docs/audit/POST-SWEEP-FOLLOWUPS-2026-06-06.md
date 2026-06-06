@@ -10,7 +10,23 @@ area on the `sandbox` branch → write/append an audit doc). CI = pytest + mypy
 (speed-pyramid web), firmware host tests. Confirm CI green after each push
 (`gh run watch`).
 
-## 1. (BIGGEST GAP) Audit the LIVE Speed Pyramid engine — it never got a dedicated pass
+## 1. ✅ DONE (2026-06-06) — Audit the LIVE Speed Pyramid engine — it never got a dedicated pass
+
+> Completed: `live-speed-pyramid-2026-06-06.md`. Fixed crash-recovery time
+> rebase, double-reveal gevent race, ghost-sweep reconnect reconcile, rehydrate
+> int-key/backfill drift, negative response-time. Built the first endpoint test
+> harness (`server/tests/sp_harness.py`). Impersonation re-graded **by-design**
+> (closed puck protocol on isolated LAN, per `legacy-flask`); a per-puck
+> capability token is the one deferred high-leverage hardening — carried below.
+
+### Carried forward from #1: per-puck capability token (deferred)
+`puck_id` is an assertion, not a credential, on every `sp_*`/`pair_*` write. On
+the isolated bar LAN this is by-design (network isolation is the mitigation). If
+the threat model ever expands to "any phone on the bar WiFi / one tampered
+puck," issue a per-puck token at `/api/pair/confirm` and require it on every
+state-mutating write — that single change closes the whole impersonation family.
+
+### Original scope (for reference)
 
 The deployed product runs on `server/pair_routes.py` (~2,550 lines),
 `server/trivia_game_engines.py` (~484, the live scoring), and

@@ -569,6 +569,43 @@ def _sweep_stale_pucks(session_code: str, state: dict) -> set[int]:
                     room=session_code,
                 )
     return dropped
+
+
+def _reconcile_reconnect(session_code: str, state: dict, puck_id: int | None) -> bool:
+    """Re-add a puck to expected_pucks when it resumes polling after a
+    ghost-sweep dropped it. Without this, a transient outage that ages out
+    EVERY puck empties expected_pucks; the match then auto-advances reveals
+    "with nobody" (the `expected and ...` gate short-circuits on an empty
+    set) and the reconnecting pucks are stranded forever — they never get
+    re-added (audit SP-S2).
+
+    Guards: only re-add a puck that (a) is a current lobby player for THIS
+    session, (b) did not deliberately leave (left_match_pucks), and (c) is
+    in an unfinished match. Returns True if the puck was re-added."""
+    if puck_id is None or _LOBBY is None:
+        return False
+    if state.get("complete"):
+        return False
+    if _LOBBY.get("session_code") != session_code:
+        return False
+    pid = int(puck_id)
+    if pid in state.get("left_match_pucks", set()):
+        return False
+    if pid not in (_LOBBY.get("players") or {}):
+        return False
+    expected = state.get("expected_pucks")
+    if expected is None:
+        return False
+    if pid in expected:
+        return False
+    expected.add(pid)
+    if _socketio is not None:
+        _socketio.emit(
+            "player_rejoined",
+            {"session_code": session_code, "puck_id": pid, "reason": "reconnect"},
+            room=session_code,
+        )
+    return True
 # {
 #   "round": int,                 # round_number of the LATEST loaded Q
 #   "asked_ids": set[int],
@@ -624,41 +661,50 @@ def _load_expected_pucks_for_session(session_code: str) -> set[int]:
     return {int(r["puck_id"]) for r in rows}
 
 
-def _sp_state_for(session_code: str) -> dict:
-    """Get or initialize the per-session state, including expected_pucks
-    loaded from DB on first access."""
-    state = _SP_STATE.get(session_code)
-    if state is None:
-        state = {
-            "round": 0,
-            "asked_ids": set(),
-            "complete": False,
-            "expected_pucks": _load_expected_pucks_for_session(session_code),
-            "current_question_id": None,
-            "current_round_started_at": None,
-            "current_round_answers": {},
-            "cumulative_scores": {},
-            "revealed_for_question_id": None,
-            # Slice E1 — category picker state.
-            "pending_category_pick": None,    # {picker_puck_id, offer, deadline_at, started_at}
-            "next_category_id": None,         # set when picker locks an offer; consumed by next load-question
-            "last_round_winner_puck_id": None,# tracked at reveal; drives subsequent picks
-            # Slice E2 — minigame state.
-            "pending_minigame": None,         # {flavor, duration_s, target_quadrant?, started_at, deadline_at, fires}
-            "minigame_resolved_round": None,  # last round we already played a minigame for (gates re-entry)
-            # Slice E3 — power-ups + sabotage.
-            "power_up_inventories": {},       # puck_id -> [{id: uuid, type}]
-            "power_up_arms": {},              # puck_id -> {double, reveal, shield, incoming_steals: [firer_puck_id]}
-        }
-        _SP_STATE[session_code] = state
-    elif "expected_pucks" not in state:
-        # Backfill missing fields for sessions created by earlier code paths.
-        state.setdefault("expected_pucks", _load_expected_pucks_for_session(session_code))
-        state.setdefault("current_question_id", None)
-        state.setdefault("current_round_started_at", None)
-        state.setdefault("current_round_answers", {})
-        state.setdefault("cumulative_scores", {})
-        state.setdefault("revealed_for_question_id", None)
+def _fresh_sp_state(expected_pucks: set) -> dict:
+    """The canonical shape of a per-session state dict. SINGLE source of
+    truth used by _sp_state_for (new sessions) AND sp_reset (Play-Again).
+    Both used to inline their own literal; sp_reset's drifted and omitted
+    every Slice E1/E2/E3 field, so the first power-up grant/activate after a
+    Play-Again hit a KeyError (audit SP-CR3). Keep them in lockstep here."""
+    return {
+        "round": 0,
+        "asked_ids": set(),
+        "complete": False,
+        "expected_pucks": expected_pucks,
+        "current_question_id": None,
+        "current_round_started_at": None,
+        "current_round_answers": {},
+        "cumulative_scores": {},
+        "revealed_for_question_id": None,
+        # Slice E1 — category picker state.
+        "pending_category_pick": None,    # {picker_puck_id, offer, deadline_at, started_at}
+        "next_category_id": None,         # set when picker locks an offer; consumed by next load-question
+        "last_round_winner_puck_id": None,# tracked at reveal; drives subsequent picks
+        # Slice E2 — minigame state.
+        "pending_minigame": None,         # {flavor, duration_s, target_quadrant?, started_at, deadline_at, fires}
+        "minigame_resolved_round": None,  # last round we already played a minigame for (gates re-entry)
+        # Slice E3 — power-ups + sabotage.
+        "power_up_inventories": {},       # puck_id -> [{id: uuid, type}]
+        "power_up_arms": {},              # puck_id -> {double, reveal, shield, incoming_steals: [firer_puck_id]}
+        # Slice I — pucks that explicitly left this match (HOLD_3S). Kept so
+        # the ghost-sweep reconnect reconcile (audit SP-S2) does NOT re-add a
+        # puck that deliberately quit, only one that dropped and came back.
+        "left_match_pucks": set(),
+    }
+
+
+def _ensure_sp_fields(state: dict) -> None:
+    """Backfill any optional field missing from an existing/rehydrated state
+    dict so direct `state[...]` reads can't KeyError. Applied to both
+    sessions created by earlier code paths AND snapshots rehydrated from an
+    older schema (audit SP-CR3 — the rehydrate path used to `_SP_STATE.update`
+    raw dicts, bypassing this backfill)."""
+    state.setdefault("current_question_id", None)
+    state.setdefault("current_round_started_at", None)
+    state.setdefault("current_round_answers", {})
+    state.setdefault("cumulative_scores", {})
+    state.setdefault("revealed_for_question_id", None)
     # Slice E1 fields can be missing on pre-E1 in-memory sessions.
     state.setdefault("pending_category_pick", None)
     state.setdefault("next_category_id", None)
@@ -669,6 +715,21 @@ def _sp_state_for(session_code: str) -> dict:
     # Slice E3 fields.
     state.setdefault("power_up_inventories", {})
     state.setdefault("power_up_arms", {})
+    # Slice I.
+    state.setdefault("left_match_pucks", set())
+
+
+def _sp_state_for(session_code: str) -> dict:
+    """Get or initialize the per-session state, including expected_pucks
+    loaded from DB on first access."""
+    state = _SP_STATE.get(session_code)
+    if state is None:
+        state = _fresh_sp_state(_load_expected_pucks_for_session(session_code))
+        _SP_STATE[session_code] = state
+    else:
+        if "expected_pucks" not in state:
+            state["expected_pucks"] = _load_expected_pucks_for_session(session_code)
+        _ensure_sp_fields(state)
     return state
 
 
@@ -1545,10 +1606,12 @@ def sp_match_state(session_code: str):
     # identifies itself. usePuckState polls match-state every 500ms in
     # IDLE/LOCKED/CATEGORY_PICKING/MINIGAME states; that's our natural
     # heartbeat channel.
+    poller_pid: int | None = None
     try:
         pid_q = request.args.get("puck_id")
         if pid_q:
-            _bump_last_seen(int(pid_q))
+            poller_pid = int(pid_q)
+            _bump_last_seen(poller_pid)
     except Exception:  # noqa: BLE001
         pass
     state = _SP_STATE.get(session_code)
@@ -1558,6 +1621,12 @@ def sp_match_state(session_code: str):
     # when state exists, sweep is O(expected_pucks).
     if state is not None:
         _sweep_stale_pucks(session_code, state)
+        # ...but a puck polling here is alive again: if a prior outage
+        # ghost-swept it, re-add it so the match doesn't march on without
+        # it (audit SP-S2). Runs after the sweep (which keeps this puck —
+        # its last_seen was just bumped) and re-adds only a genuine
+        # reconnect, never a deliberate leaver.
+        _reconcile_reconnect(session_code, state, poller_pid)
     if not state:
         # `exists: false` distinguishes "admin wiped this session" from
         # "session exists but match is over" — both return complete=false
@@ -1779,17 +1848,9 @@ def sp_reset(session_code: str):
             f"WHERE session_id = {ph}",
             (sid,),
         )
-    _SP_STATE[session_code] = {
-        "round": 0,
-        "asked_ids": set(),
-        "complete": False,
-        "expected_pucks": _load_expected_pucks_for_session(session_code),
-        "current_question_id": None,
-        "current_round_started_at": None,
-        "current_round_answers": {},
-        "cumulative_scores": {},
-        "revealed_for_question_id": None,
-    }
+    _SP_STATE[session_code] = _fresh_sp_state(
+        _load_expected_pucks_for_session(session_code)
+    )
     # Drop the cached "currently active question" too. Otherwise polling
     # /api/sp/current-question after reset returns the LAST question of
     # the previous match and pucks transition into IN_GAME_ANSWERING for
@@ -1838,6 +1899,16 @@ def _maybe_emit_reveal(session_code: str, force: bool = False) -> bool:
     answers = state["current_round_answers"]
     if not force and expected and not all(pid in answers for pid in expected):
         return False  # still waiting on someone
+
+    # CLAIM the round now, before any I/O. Under gevent (the prod worker)
+    # the DB query below is a yield point: a concurrent force-reveal (TV
+    # timer) and the last puck's answer can BOTH pass the guard above while
+    # one is blocked on that query, then both run the cumulative-score loop
+    # — double-scoring the round and corrupting the authoritative scoreboard
+    # final-results trusts. Setting the guard here, with no yield between the
+    # gate and this line, makes the claim atomic: the second caller sees the
+    # round already revealed at the early-return above and bails (audit SP-S1).
+    state["revealed_for_question_id"] = qid
 
     # Determine the correct answer + host commentary for this question.
     ph = get_placeholder()
@@ -1928,7 +1999,8 @@ def _maybe_emit_reveal(session_code: str, force: bool = False) -> bool:
         for pid in sorted(answers.keys())
     ]
 
-    state["revealed_for_question_id"] = qid
+    # (revealed_for_question_id was already claimed atomically above, before
+    # the DB I/O — see the SP-S1 comment near the wait-gate.)
 
     if _socketio is not None:
         _socketio.emit(
@@ -2257,7 +2329,13 @@ def sp_answer():
     puck_id_raw = data.get("puck_id")
     question_id = data.get("question_id")
     answer = data.get("answer")
-    response_time_ms = int(data.get("response_time_ms") or 0)
+    # Clamp the puck-reported time to >= 0. A negative value (buggy or
+    # tampered firmware) survives the ±2s server reconciliation below when
+    # the round just started, then gets written to trivia_answers and
+    # corrupts final-results' SUM/AVG(response_time_ms) tie-break — a puck
+    # with a negative time looks impossibly fast and wins ties it shouldn't
+    # (audit SP-S3). The server's own measurement is always >= 0.
+    response_time_ms = max(0, int(data.get("response_time_ms") or 0))
 
     if not session_code or puck_id_raw is None or question_id is None or answer is None:
         return jsonify({"error": "session_code, puck_id, question_id, answer required"}), 400
@@ -2378,6 +2456,11 @@ def sp_leave_match():
 
     puck_id = int(puck_id_raw)
 
+    # Record the deliberate departure so the ghost-sweep reconnect reconcile
+    # (audit SP-S2) does NOT re-add this puck if it keeps polling — a leave is
+    # permanent, a ghost is not.
+    state.setdefault("left_match_pucks", set()).add(puck_id)
+
     # Drop the puck from every per-puck structure so it is no longer
     # expected to answer / fire and can't keep a round open.
     state["expected_pucks"].discard(puck_id)
@@ -2495,6 +2578,45 @@ def sp_heartbeat():
     return jsonify({"ok": True, "ts": _now()})
 
 
+def _rebase_times_after_rehydrate(lobby: dict | None, sp_state: dict,
+                                  question_tracker: dict, drift: float) -> None:
+    """Shift every absolute wall-clock timestamp in the rehydrated state
+    forward by `drift` (the snapshot-to-restart gap), so the time-until /
+    time-since each event is preserved across a restart instead of being
+    interpreted as ancient. See the call site (audit SP-CR1) for why this is
+    load-bearing. No-op for a tiny drift, but cheap to always apply."""
+    if drift <= 0:
+        return
+
+    def _bump(d: dict, key: str) -> None:
+        v = d.get(key)
+        if isinstance(v, (int, float)):
+            d[key] = v + drift
+
+    if isinstance(lobby, dict):
+        _bump(lobby, "expires_at")
+        players = lobby.get("players")
+        if isinstance(players, dict):
+            for p in players.values():
+                if isinstance(p, dict):
+                    _bump(p, "joined_at")
+                    _bump(p, "last_seen")
+
+    for st in (sp_state or {}).values():
+        if not isinstance(st, dict):
+            continue
+        _bump(st, "current_round_started_at")
+        for phase_key in ("pending_category_pick", "pending_minigame"):
+            phase = st.get(phase_key)
+            if isinstance(phase, dict):
+                _bump(phase, "started_at")
+                _bump(phase, "deadline_at")
+
+    for tr in (question_tracker or {}).values():
+        if isinstance(tr, dict):
+            _bump(tr, "started_at")
+
+
 def init_pair_routes(app, socketio):
     """Wire pair_bp + sp_bp into the Flask app and stash socketio for emits."""
     global _socketio, _LOBBY, _SP_STATE, _QUESTION_TRACKER
@@ -2523,12 +2645,26 @@ def init_pair_routes(app, socketio):
         # clean lobby instead of dragging in yesterday's match.
         saved_at = restored.get("saved_at") or 0
         if saved_at and (time.time() - saved_at) < 86400:
+            # Rebase all absolute wall-clock timestamps by the downtime
+            # gap. Without this, a restart even seconds after the snapshot
+            # leaves every deadline_at / last_seen in the past, so the FIRST
+            # poll instantly ghost-sweeps every puck and auto-resolves the
+            # pending pick/minigame, and post-restart answers measure a huge
+            # response time (audit SP-CR1). Bring restored time forward so
+            # the remaining-time gaps match what they were at snapshot.
+            drift = time.time() - saved_at
+            _rebase_times_after_rehydrate(lob, sps, qt, drift)
+            # Backfill any field a pre-E-slice snapshot is missing so direct
+            # state[...] reads can't KeyError (audit SP-CR3).
+            for _st in sps.values():
+                if isinstance(_st, dict):
+                    _ensure_sp_fields(_st)
             _LOBBY = lob
             _SP_STATE.update(sps)
             _QUESTION_TRACKER.update(qt)
             print(f"[state_persistence] rehydrated "
                   f"lobby={'yes' if lob else 'no'} "
-                  f"sessions={len(sps)}", flush=True)
+                  f"sessions={len(sps)} drift={drift:.1f}s", flush=True)
         else:
             print("[state_persistence] snapshot >1d old, ignoring",
                   flush=True)

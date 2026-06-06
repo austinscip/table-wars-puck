@@ -227,6 +227,19 @@ def fix_int_keys_after_rehydrate(lobby: dict | None,
                   "cumulative_scores", "current_round_answers"):
             if isinstance(st.get(k), dict):
                 st[k] = _int_keys(st[k])
+        # pending_minigame.fires is int-keyed by puck_id (set at fire time).
+        # JSON stringifies those keys; without this re-coercion the
+        # all-fired gate (`pid in fires for pid in expected`) silently fails
+        # after a rehydrate, so a finished minigame never recognises it's
+        # done and the real fires get overwritten by zero-point fills
+        # (audit SP-CR2).
+        mg = st.get("pending_minigame")
+        if isinstance(mg, dict) and isinstance(mg.get("fires"), dict):
+            mg["fires"] = _int_keys(mg["fires"])
+        # left_match_pucks round-trips as a list when the __set__ sentinel is
+        # absent; coerce back to a set of int.
+        if isinstance(st.get("left_match_pucks"), list):
+            st["left_match_pucks"] = set(int(p) for p in st["left_match_pucks"])
         # expected_pucks was originally a set of int — round-tripped to
         # a set of int by _restore_from_json + the original sorted-list
         # branch. If it came back as a list (no __set__ sentinel for
