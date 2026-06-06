@@ -47,6 +47,7 @@ from runtime import (
     MatchManager,
     PersistenceQueue,
     PlayerIdentity,
+    TriviaContentCache,
     TickScheduler,
     HeartbeatTracker,
     IdempotencyCache,
@@ -170,6 +171,26 @@ def _get_container() -> dict:
     writer.start()
     heartbeat = HeartbeatTracker()
 
+    # Trivia content: sync the active question bank from Supabase into a
+    # local cache (offline-resilient, ADR 0008) and wire it as Speed
+    # Pyramid's question source. Best-effort — if the content table isn't
+    # present or the cloud is unreachable, the game falls back to the legacy
+    # local SQLite bank / built-in defaults.
+    trivia_cache = None
+    try:
+        import games.speed_pyramid as _sp
+
+        trivia_cache = TriviaContentCache(base_writer)
+        trivia_cache.refresh()
+        _sp.set_question_source(trivia_cache.load)
+        _log.info(
+            "trivia content cache wired (%d questions, version %s)",
+            trivia_cache.size,
+            trivia_cache.version or "—",
+        )
+    except Exception:  # noqa: BLE001
+        _log.exception("trivia content cache init failed; using local fallback")
+
     # Durable match store + shared idempotency when REDIS_URL is set. The
     # store lets a restarted worker recover active matches (and is the
     # foundation for multi-worker state sharing). Falls back to in-process
@@ -258,6 +279,7 @@ def _get_container() -> dict:
         "token_authority": token_authority,
         "tv_token_authority": tv_token_authority,
         "rate_limiter": RateLimiter(),
+        "trivia_cache": trivia_cache,
         # Player identity (ADR 0005). Phone recovery is enabled only when
         # PLAYER_PHONE_PEPPER is set (otherwise phone hashing returns None).
         "player_identity": PlayerIdentity(

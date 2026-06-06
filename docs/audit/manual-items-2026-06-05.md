@@ -41,6 +41,15 @@ without you). On the Supabase project (`tfctjqjrtjfaduirtcyk`):
    - `supabase/migrations/20260605000003_data_retention.sql` — the
      `purge_old_matches(retention_days)` function + index (ADR 0006).
      Verified against local Postgres (test_data_retention).
+   - `supabase/migrations/20260605000004_trivia_content.sql` — the
+     `trivia_questions` table + `trivia_content_version()` + RLS (public
+     reads active; super_admin writes) + 3 starter questions (ADR 0008).
+     Verified against local Postgres (test_trivia_content_db). After
+     applying, **load your real question bank** into `trivia_questions`
+     (import from the legacy SQLite `trivia_database` or the portal); the box
+     syncs it into a local cache on boot. Optionally set `TRIVIA_CACHE_PATH`
+     (defaults to `/tmp/tablewars_trivia_cache.json`) to a durable path so
+     the cache survives reboots for offline-first cold starts.
    Use the Supabase CLI (`supabase db push`) or paste into the SQL editor.
 1b. **Schedule retention** (ADR 0006): the purge function ships but does NOT
    self-schedule. Either enable Supabase **pg_cron** and

@@ -39,6 +39,7 @@ from .match import (
 from .match_store import InMemoryMatchStore, RedisMatchStore
 from .persistence import PersistenceQueue
 from .identity import PlayerIdentity
+from .trivia_content import TriviaContentCache
 from .inputs import event_from_dict
 from .pairing import PairingManager, PairingError, color_for
 from .scheduler import TickScheduler
@@ -85,6 +86,7 @@ __all__ = [
     "RedisMatchStore",
     "PersistenceQueue",
     "PlayerIdentity",
+    "TriviaContentCache",
     "event_from_dict",
     "PairingManager",
     "PairingError",

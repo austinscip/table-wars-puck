@@ -374,6 +374,32 @@ class SupabaseWriter:
                     (phone_hash, player_id),
                 )
 
+    # === Trivia content (ADR 0008) ===
+
+    def get_active_trivia_questions(self) -> list[dict]:
+        """The full active question bank. The box caches this locally and
+        selects per-match from the cache, so gameplay never waits on the
+        cloud (offline-resilient, ADR 0004). `category` is aliased to
+        `category_name` so it maps to the runtime's Question shape unchanged."""
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "select id, question_text, setup_text, "
+                    "answer_a, answer_b, answer_c, answer_d, correct_answer, "
+                    "category as category_name, difficulty, time_limit "
+                    "from trivia_questions where is_active order by id"
+                )
+                return list(cur.fetchall())
+
+    def trivia_content_version(self) -> str:
+        """Fingerprint of the active bank; changes on any content edit so a
+        box knows when to refresh its cache."""
+        with self._connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("select trivia_content_version() as v")
+                row = cur.fetchone()
+                return str(row["v"]) if row else "0"
+
     # === Scores ===
 
     def insert_score(

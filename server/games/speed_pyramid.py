@@ -50,6 +50,54 @@ from runtime import (
 )
 
 
+# An optional cloud-backed question source (ADR 0008), wired by the runtime
+# container to a TriviaContentCache.load. It returns rows in the SAME shape
+# as the SQLite bank (or None to defer). When unset, we use the legacy local
+# SQLite DB, then the built-in defaults — so tests and a first-boot dev box
+# work with no content configured.
+_question_source = None
+
+
+def set_question_source(source) -> None:  # noqa: ANN001
+    """Install the cloud-backed question source (the container does this).
+    Pass None to clear it (tests)."""
+    global _question_source
+    _question_source = source
+
+
+def _fetch_rows(
+    count: int,
+    *,
+    difficulty: str | None,
+    category_id: int | None,
+    exclude_ids: list[int] | None,
+) -> list[dict] | None:
+    """Question rows from the cloud-backed cache if configured, else the
+    legacy local SQLite bank. None when neither yields anything."""
+    if _question_source is not None:
+        try:
+            rows = _question_source(
+                count,
+                difficulty=difficulty,
+                category_id=category_id,
+                exclude_ids=exclude_ids,
+            )
+            if rows:
+                return rows
+        except Exception:  # noqa: BLE001 — never let content sourcing crash a match
+            pass
+    try:
+        from trivia_database import get_questions
+    except Exception:
+        return None
+    return get_questions(
+        count=count,
+        difficulty=difficulty,
+        category_id=category_id,
+        exclude_ids=exclude_ids,
+    )
+
+
 def _load_questions_from_db(
     count: int,
     *,
@@ -57,26 +105,17 @@ def _load_questions_from_db(
     category_id: int | None = None,
     exclude_ids: list[int] | None = None,
 ) -> list["Question"]:
-    """Pull N questions from the trivia SQLite DB and convert each row
-    into a Question dataclass. Import is local so the games package can
-    still be imported in test environments where trivia_database
-    requires SQLite to be present.
+    """Load N questions and convert each row into a Question dataclass.
+    Source order: the cloud-backed cache (ADR 0008) → the legacy local
+    SQLite DB → built-in DEFAULT_QUESTIONS — so the box keeps serving trivia
+    through an internet drop and a fresh dev box works with no content.
 
-    `exclude_ids` is passed through to get_questions so a caller can avoid
-    re-serving questions a player has recently seen. (Sourcing those ids —
-    per-puck answer history — is a separate piece: the runtime doesn't yet
-    persist question_id, so today the caller must supply them; see the
-    hardening review.)
-
-    Falls back to DEFAULT_QUESTIONS when the DB is unavailable so the
-    smoke tests + first-boot dev flow don't break."""
-    try:
-        from trivia_database import get_questions
-    except Exception:
-        return list(DEFAULT_QUESTIONS)
-
-    rows = get_questions(
-        count=count,
+    `exclude_ids` is passed through so a caller can avoid re-serving
+    questions a player recently saw. (Sourcing those ids — per-puck answer
+    history — is still a separate piece; the runtime doesn't persist
+    question_id yet, so today the caller supplies them.)"""
+    rows = _fetch_rows(
+        count,
         difficulty=difficulty,
         category_id=category_id,
         exclude_ids=exclude_ids,
