@@ -78,6 +78,39 @@ def test_double_reveal_does_not_double_score(monkeypatch, tmp_path):
         assert len(h.sio.events("reveal")) == 1
 
 
+def test_reveal_db_failure_rolls_back_claim(monkeypatch, tmp_path):
+    """Self-review of SP-S1: if the reveal's correct-answer DB read fails after
+    the atomic claim, the claim must roll back so a retry can still reveal —
+    otherwise the round is marked revealed but never scored and the match hangs."""
+    with sp_harness(monkeypatch, tmp_path) as h:
+        sc = h.pair_full([1, 2])
+        qid = h.advance_to_question(sc)["question"]["id"]
+        h.answer(sc, 1, qid, "A", rt_ms=1000)  # puck 1; not all answered yet
+
+        real_eq = pair_routes.execute_query
+        boom = {"armed": True}
+
+        def failing_eq(query, *a, **k):
+            if boom["armed"] and "host_commentary_correct" in query:
+                boom["armed"] = False
+                raise RuntimeError("simulated DB blip")
+            return real_eq(query, *a, **k)
+
+        monkeypatch.setattr(pair_routes, "execute_query", failing_eq)
+        # Puck 2 answers -> reveal attempt hits the failing DB read.
+        h.answer(sc, 2, qid, "B", rt_ms=1000)
+        st = pair_routes._SP_STATE[sc]
+        assert st["revealed_for_question_id"] is None, "claim was not rolled back"
+        assert h.sio.events("reveal") == [], "should not have revealed on failure"
+
+        # DB recovers; a force-reveal now succeeds and scores exactly once.
+        monkeypatch.setattr(pair_routes, "execute_query", real_eq)
+        h.force_reveal(sc)
+        assert st["revealed_for_question_id"] == qid
+        assert len(h.sio.events("reveal")) == 1
+        assert st["cumulative_scores"][1] == 1000
+
+
 def test_ghost_swept_puck_is_readded_on_reconnect(monkeypatch, tmp_path):
     """SP-S2: a puck aged out by the ghost sweep is re-added to
     expected_pucks when it resumes polling, instead of being stranded while

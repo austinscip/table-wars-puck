@@ -552,6 +552,12 @@ class MatchManager:
                 match_id,
                 event.puck_index,
             )
+            # The reconnect reaction (if any) already mutated game state, so
+            # surface ITS snapshot + cues rather than a bare safe-state — else
+            # the un-retire happened silently with no PLAYER_JOINED beat and no
+            # snapshot until the next input (self-review).
+            if reconnect_reaction is not None:
+                return reconnect_reaction, None, []
             return StateUpdate(state=self._safe_state(match)), None, []
 
         # Fold the reconnect reaction's cues/scores ahead of the input's so

@@ -150,6 +150,12 @@ def _load_questions_from_db(
                 time_limit_ms=(int(r.get("time_limit") or 15) * 1000),
             )
         )
+    # If EVERY row was dropped as unscoreable (e.g. a content table that stores
+    # `correct` as full text / 1-4), fall back to the built-ins rather than
+    # returning an empty list — an empty self.questions IndexErrors at match
+    # construction, dropping the whole match (self-review of RG-5).
+    if not questions:
+        return list(DEFAULT_QUESTIONS)
     return questions
 
 
@@ -486,10 +492,12 @@ class SpeedPyramid(Game):
             return None
         self.disconnected.discard(puck_index)
         lock = self.locked.get(puck_index)
-        round_open = any(
-            self.locked.get(p) is None
-            for p in self.scores
-            if p != puck_index
+        # Round is still open if any OTHER puck hasn't locked — or if this is
+        # the only player (a solo round the pre-emptive lock just advanced),
+        # in which case there's no one else to wait on (self-review).
+        others = [p for p in self.scores if p != puck_index]
+        round_open = (not others) or any(
+            self.locked.get(p) is None for p in others
         )
         if (lock is not None and lock.get("answer") is None
                 and lock.get("tier") == "TIMEOUT" and round_open):

@@ -33,6 +33,26 @@ def test_speed_pyramid_normalizes_and_drops_dirty_correct(monkeypatch):
     assert qs[0].correct == "A", "whitespace/case must be normalized"
 
 
+def test_speed_pyramid_all_dirty_rows_falls_back_to_defaults(monkeypatch):
+    """If EVERY content row is unscoreable, fall back to the built-ins — an
+    empty pool would IndexError at match construction (self-review of RG-5)."""
+    rows = [
+        {"id": 1, "question_text": "q", "setup_text": "s",
+         "answer_a": "a", "answer_b": "b", "answer_c": "c", "answer_d": "d",
+         "correct_answer": "1", "category_name": "T", "time_limit": 10},
+        {"id": 2, "question_text": "q", "setup_text": "s",
+         "answer_a": "a", "answer_b": "b", "answer_c": "c", "answer_d": "d",
+         "correct_answer": "the second one", "category_name": "T", "time_limit": 10},
+    ]
+    monkeypatch.setattr(sp, "_fetch_rows", lambda *a, **k: rows)
+    qs = sp._load_questions_from_db(2)
+    assert qs, "must not return an empty pool"
+    assert qs == list(sp.DEFAULT_QUESTIONS)
+    # And a match constructs without raising on the fallback pool.
+    game = sp.SpeedPyramid(make_players(2))
+    assert game.get_state() is not None
+
+
 def test_match_force_abandons_past_duration_cap(manager, writer):
     """A match older than MAX_MATCH_DURATION_S is closed out even if it never
     reached a natural end and a puck is still nominally present."""

@@ -1911,13 +1911,22 @@ def _maybe_emit_reveal(session_code: str, force: bool = False) -> bool:
     state["revealed_for_question_id"] = qid
 
     # Determine the correct answer + host commentary for this question.
+    # If this DB read (the yield point we claimed around) FAILS, roll the
+    # claim back — otherwise the round is marked revealed but never scored
+    # and the match hangs on it forever. Rolling back lets the TV's next
+    # force-reveal / a retry reveal it cleanly (self-review of SP-S1).
     ph = get_placeholder()
-    q = execute_query(
-        f"SELECT correct_answer, host_commentary_correct, host_commentary_wrong "
-        f"FROM trivia_questions WHERE id = {ph}",
-        (qid,),
-        fetch_one=True,
-    )
+    try:
+        q = execute_query(
+            f"SELECT correct_answer, host_commentary_correct, host_commentary_wrong "
+            f"FROM trivia_questions WHERE id = {ph}",
+            (qid,),
+            fetch_one=True,
+        )
+    except Exception as e:  # noqa: BLE001
+        state["revealed_for_question_id"] = None
+        print(f"[sp/reveal] correct-answer lookup failed, rolled back claim: {e}")
+        return False
     correct_answer = q["correct_answer"] if q else None
     commentary_correct = (q["host_commentary_correct"] if q else None) or ""
     commentary_wrong = (q["host_commentary_wrong"] if q else None) or ""
