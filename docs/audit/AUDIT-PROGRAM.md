@@ -36,7 +36,7 @@ playbook below.
 | A — Schema / RLS / multi-tenancy | ✅ done (2026-06-06) | `track-a-g-deep-review-2026-06-06.md` |
 | G — Multi-game runtime | ✅ done (2026-06-06) | same doc |
 | B — TV app — live web TV (`server/static/games/speed-pyramid`, served at `/tv/speed-pyramid`) | ✅ done (2026-06-06) | `tv-speed-pyramid-web-2026-06-06.md`. ErrorBoundary auto-reload, malformed-reveal guard, TimerBar/ShotClockBar NaN guards. First tests for this app (vitest `lib/num`). Reconnect-resync + CI wiring deferred w/ rationale. |
-| B2 — TV app — `TableWarsTV/` (react-native-tvos) | ⬜ TODO | distinct native surface (the live TV is the web app above). state mgmt, reconnection, error handling, memory leaks, perf, a11y. `src/lib` partly unit-tested. |
+| B2 — TV app — `TableWarsTV/` (react-native-tvos) | ✅ done (2026-06-06) | `tablewars-tv-2026-06-06.md`. ErrorBoundary (kiosk crash net), SmashView divide-by-zero, CueFlashOverlay tint-as-ref + rapid-cue (deferred from polish), leaderboard unmount guard. matchSource reconciliation verified solid. |
 | F1–F4 games — logic (`server/games/*.py`) | 🟡 partial | runtime audit covered disconnect/scoring/serialize; do a dedicated per-game exploit/edge pass |
 | F1–F4 games — TV views (`TableWarsTV/src/screens/games/*`) | ⬜ TODO | render robustness vs malformed snapshots, missing fields |
 | C — Polish system (cues `runtime/cues.py`, `useCues`, audio, VO `server/voices`, LED) | ✅ done (2026-06-06) | `polish-2026-06-06.md`. Fixed: VO narration cache never invalidated (mis-drove live R027 question substitution) + stalled-narration wedge. Cue dispatch verified solid (agent "CRITICAL"s were unbuilt/non-live/self-retracted). Audio bus + firmware feedback covered in TV/firmware passes. |
