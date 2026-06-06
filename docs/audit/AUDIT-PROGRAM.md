@@ -9,6 +9,12 @@ aspect." This is a permanent quality bar, not a one-off.
 Do NOT declare an area "done/hardened" until it has actually been through the
 playbook below.
 
+> **First full sweep complete (2026-06-06)** — every row in the status table is
+> ✅. Honest post-sweep gaps + next work (incl. the BIG miss: the *live*
+> `pair_routes`/`trivia_game_engines` Speed Pyramid engine was never given a
+> dedicated pass) are tracked in **`POST-SWEEP-FOLLOWUPS-2026-06-06.md`** — start
+> there.
+
 ## The playbook (run per area)
 
 1. **Fan out adversarial review.** Launch parallel review agents, each on an
