@@ -42,6 +42,16 @@ without you). On the Supabase project (`tfctjqjrtjfaduirtcyk`):
    - `supabase/migrations/20260605000003_data_retention.sql` — the
      `purge_old_matches(retention_days)` function + index (ADR 0006).
      Verified against local Postgres (test_data_retention).
+   - `supabase/migrations/20260606000000_schema_hardening.sql` — leaderboard
+     timezone bucketing, player_count maintenance, FK indexes + firmware
+     ON DELETE SET NULL, phone-hash uniqueness, trivia CHECKs, batched
+     retention procedure, matches.updated_at + autovacuum, and
+     defense-in-depth grants (deep-review audit). Verified against local
+     Postgres (test_schema_hardening). NOTE: the `revoke ... from anon,
+     authenticated` lines assume Supabase's default grants — re-check after
+     applying that the bar portal (authenticated reads) and TV (anon-by-token
+     reads) still work; SELECT is preserved, only client DML on game/content
+     tables is revoked.
    - `supabase/migrations/20260605000004_trivia_content.sql` — the
      `trivia_questions` table + `trivia_content_version()` + RLS (public
      reads active; super_admin writes) + 3 starter questions (ADR 0008).

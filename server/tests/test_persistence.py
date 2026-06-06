@@ -181,6 +181,28 @@ def test_final_write_retries_then_succeeds():
     assert any(s["score_total"] == 500 for s in fake.scores)
 
 
+class _UniqueViolationWriter(FakeWriter):
+    """Raises a Postgres unique-violation (SQLSTATE 23505) on a final insert,
+    like a retried final after an ambiguous commit."""
+
+    def insert_score(self, *args, **kwargs):
+        if kwargs.get("event_type") == "final":
+            exc = RuntimeError("duplicate key value violates unique constraint")
+            exc.sqlstate = "23505"  # type: ignore[attr-defined]
+            raise exc
+        super().insert_score(*args, **kwargs)
+
+
+def test_final_unique_violation_is_idempotent_success():
+    # A duplicate final must be treated as already-landed, NOT retried/raised
+    # (audit 1.2) — so total_matches can't inflate on replay.
+    fake = _UniqueViolationWriter()
+    q = PersistenceQueue(fake)
+    q.SYNC_RETRY_BASE_S = 0.001
+    # Does not raise; returns as success.
+    q.insert_score("m1", "mp1", 0, 0, 500, "final")
+
+
 def test_final_write_raises_after_exhausting_retries():
     fake = _FlakyWriter(fail_times=99)
     q = PersistenceQueue(fake)

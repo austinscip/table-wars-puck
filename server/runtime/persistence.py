@@ -242,6 +242,13 @@ class PersistenceQueue:
                 fn()
                 return
             except Exception as e:  # noqa: BLE001
+                # A unique violation (Postgres SQLSTATE 23505) means the row
+                # already landed — e.g. a retried final after an ambiguous
+                # commit. That's idempotent success, not a failure, and it's
+                # why total_matches can't inflate on replay (audit 1.2): the
+                # second insert is rejected so the trigger never re-fires.
+                if getattr(e, "sqlstate", None) == "23505":
+                    return
                 last = e
                 logger.warning(
                     "truth write attempt %d/%d failed: %s",
