@@ -91,3 +91,27 @@ the global error handler already routes unhandled exceptions through
 **Deferred** — client-side remote error capture (O3), PostHog (O4), legacy
 `app.py` logging sweep (O5), with rationale above.
 </content>
+
+---
+
+## Self-review follow-up (2026-06-06, followups #3)
+
+A skeptical re-review of this fix found the secret-scrub was **weaker than its
+comments claimed**:
+- `_scrub_event` only redacted secrets embedded *within a string* (`key=value`).
+  A Sentry event stores secrets **structured** (`extra={'db_password': 'x'}`,
+  `tags={'authorization': '…'}`), so a bare value matched no in-string pattern
+  and shipped verbatim. The init flags (`include_local_variables=False`,
+  `max_request_body_size="never"`) covered frame-vars + request body, but
+  `extra`/`tags`/breadcrumbs/`set_context` were exposed.
+- the `key=value` regex missed the `key: value` (JSON/header) form and padded
+  keys (`AWS_SECRET_ACCESS_KEY`, `db_password`).
+
+**Fixed:** `_scrub_event` now also redacts **by dict key** (`_SENSITIVE_KEY`) —
+any value under a password/secret/token/api_key/authorization/dsn/jwt/credential
+key becomes `<redacted>` regardless of content — and the in-string regex now
+matches `=` **or** `:` and a sensitive word anywhere in a `[\w-]` key. (The
+`Bearer` rule keeps ownership of `Authorization: Bearer <tok>`.) New
+`test_logging.py` cases cover the colon/padded-key forms and a structured Sentry
+event with secrets in `request.data`/`extra`/`tags`; non-secret structured data
+is verified preserved.

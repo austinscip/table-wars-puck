@@ -12,6 +12,40 @@ from __future__ import annotations
 import logging
 
 from runtime import configure_logging, get_logger, init_sentry
+from runtime.log import redact, _scrub_event
+
+
+def test_redact_handles_equals_colon_and_padded_keys():
+    """Self-review of the observability fix: redact() must catch `key: value`
+    (JSON/header form) and padded keys, not just `key=value`."""
+    assert "<redacted>" in redact("password=hunter2")
+    assert "hunter2" not in redact('"password": "hunter2"')
+    assert "p@ss" not in redact("AWS_SECRET_ACCESS_KEY=p@ssw0rd")
+    assert "sk-live" not in redact("X-Api-Key: sk-live-abc123")
+    # Bearer + postgres URL + JWT signature still covered.
+    assert "opaquetok" not in redact("Authorization: Bearer opaquetok123")
+    assert "<redacted>" in redact("postgres://u:topsecret@host/db")
+
+
+def test_scrub_event_redacts_structured_secrets_by_key():
+    """A Sentry event stores secrets STRUCTURED ({'password': 'x'}); the by-key
+    redaction must scrub those even though the bare value matches no pattern."""
+    event = {
+        "request": {"data": {"password": "hunter2"}},
+        "extra": {"db_password": "p@ssw0rd",
+                  "env": {"PUCK_JWT_SECRET": "topsecretsigningkey"},
+                  "harmless": "keep-me"},
+        "tags": {"authorization": "Bearer abc", "table": "5"},
+    }
+    scrubbed = _scrub_event(event)
+    flat = repr(scrubbed)
+    assert "hunter2" not in flat
+    assert "p@ssw0rd" not in flat
+    assert "topsecretsigningkey" not in flat
+    assert "abc" not in flat
+    # Non-secret structured data is preserved.
+    assert scrubbed["extra"]["harmless"] == "keep-me"
+    assert scrubbed["tags"]["table"] == "5"
 
 
 def test_configure_logging_is_idempotent():

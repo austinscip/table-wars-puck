@@ -37,12 +37,31 @@ _REDACTIONS = [
     (re.compile(r"(postgres(?:ql)?://[^:/@\s]+:)[^@\s]+(@)"), r"\1<redacted>\2"),
     # JWT (header.payload.SIGNATURE) -> keep header.payload, redact sig
     (re.compile(r"(eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.)[A-Za-z0-9_-]+"), r"\1<redacted>"),
-    # password=... / api_key=... in any query-string-ish blob
-    (re.compile(r"((?:password|api[_-]?key|secret|token)=)[^\s&;]+", re.I), r"\1<redacted>"),
+    # A sensitive key followed by `=` OR `:` and its value, in a query-string
+    # or a serialized dict/JSON/header dump. The key may be padded
+    # (AWS_SECRET_ACCESS_KEY, db_password) — match the sensitive word anywhere
+    # in a [\w-] key. Covers both `password=x` and `"password": "x"` shapes.
+    # NB: no "authorization" here — the Bearer rule below owns the
+    # "Authorization: Bearer <tok>" string form (this rule would eat just
+    # "Bearer" and strand the token). Structured `authorization` keys are
+    # caught by _SENSITIVE_KEY.
+    (re.compile(
+        r"([\w-]*(?:password|passwd|pwd|api[_-]?key|secret|token"
+        r"|dsn|credential)[\w-]*[\"']?\s*[=:]\s*[\"']?)[^\s&;,}\"']+",
+        re.I), r"\1<redacted>"),
     # Authorization: Bearer <opaque-token> -> redact. The (?!eyJ) lookahead
     # leaves JWTs for the rule above (which keeps header.payload for debugging).
     (re.compile(r"(Bearer\s+)(?!eyJ)[A-Za-z0-9._~+/=-]+", re.I), r"\1<redacted>"),
 ]
+
+# Dict KEYS whose VALUE is a secret regardless of the value's own content. The
+# in-string `redact()` only catches secrets embedded as `key=value` inside ONE
+# string; a Sentry event stores secrets STRUCTURED (key "password", value bare
+# "hunter2"), so the leaf-string scrub alone misses them (self-review of the
+# observability fix). Redacting by key closes extra/tags/breadcrumb leaks.
+_SENSITIVE_KEY = re.compile(
+    r"(?:password|passwd|pwd|secret|token|api[_-]?key|authorization|dsn|jwt"
+    r"|credential|signing[_-]?key|private[_-]?key)", re.I)
 
 
 def redact(text: str) -> str:
@@ -52,16 +71,23 @@ def redact(text: str) -> str:
 
 
 def _scrub_event(event: Any, _depth: int = 0) -> Any:
-    """Recursively redact secret-looking substrings from a Sentry event before
-    it ships off-box. Belt-and-suspenders on top of the init() hardening below
-    (frame locals + request bodies disabled): catches a DSN / JWT / Bearer
-    token / password that slipped into an exception message, a breadcrumb, a
-    tag, or a remaining stack-frame var. Pure + depth-bounded so it's
-    unit-testable without the Sentry SDK installed."""
+    """Recursively redact secret-looking values from a Sentry event before it
+    ships off-box. Two layers: a leaf-string `redact()` for secrets embedded in
+    a message/URL, AND a by-KEY redaction so a structured `{"password": "x"}`
+    in extra/tags/breadcrumbs/context is scrubbed even though the bare value
+    "x" matches no in-string pattern. Belt-and-suspenders on top of the init()
+    hardening (frame locals + request bodies disabled). Pure + depth-bounded so
+    it's unit-testable without the Sentry SDK installed."""
     if _depth > 16:
         return event
     if isinstance(event, dict):
-        return {k: _scrub_event(v, _depth + 1) for k, v in event.items()}
+        out = {}
+        for k, v in event.items():
+            if isinstance(k, str) and _SENSITIVE_KEY.search(k):
+                out[k] = "<redacted>"  # value is a secret by virtue of its key
+            else:
+                out[k] = _scrub_event(v, _depth + 1)
+        return out
     if isinstance(event, (list, tuple)):
         return [_scrub_event(v, _depth + 1) for v in event]
     if isinstance(event, str):
