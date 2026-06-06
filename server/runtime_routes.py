@@ -253,6 +253,7 @@ def _get_container() -> dict:
         TvMatchTokenAuthority(supabase_secret) if supabase_secret else None
     )
 
+    rate_limiter = RateLimiter()
     manager = MatchManager(
         registry=game_registry,
         writer=writer,
@@ -262,6 +263,9 @@ def _get_container() -> dict:
         # Local-first TV push (ADR 0004): emit each frame to the match's LAN
         # SocketIO room. No-op until init_runtime_routes wires a socketio.
         state_sink=_state_sink,
+        # When a terminal match is reaped, drop its rate-limiter buckets so
+        # they don't leak (audit 1.3/1.4).
+        on_match_reaped=lambda mid: rate_limiter.drop(f"{mid}:"),
     )
     scheduler = TickScheduler(match_manager=manager)
     manager.scheduler = scheduler
@@ -307,7 +311,7 @@ def _get_container() -> dict:
         "idempotency": idempotency,
         "token_authority": token_authority,
         "tv_token_authority": tv_token_authority,
-        "rate_limiter": RateLimiter(),
+        "rate_limiter": rate_limiter,
         "trivia_cache": trivia_cache,
         # Player identity (ADR 0005). Phone recovery is enabled only when
         # PLAYER_PHONE_PEPPER is set (otherwise phone hashing returns None).

@@ -74,8 +74,12 @@ class TickScheduler:
             self._thread.join(timeout=2.0)
             self._thread = None
 
+    # How often to evict terminal matches from the manager (audit 1.3).
+    REAP_INTERVAL_S = 10.0
+
     def _run(self) -> None:
         prev = time.perf_counter()
+        last_reap = prev
         while not self._stop.is_set():
             tick_start = time.perf_counter()
             # Real elapsed since the previous iteration — the dt each match
@@ -83,6 +87,16 @@ class TickScheduler:
             # tick runs late. Clamped so a long stall can't teleport physics.
             dt = self._clamp_dt(tick_start - prev)
             prev = tick_start
+
+            # Periodically reap terminal matches so the manager dict + their
+            # rate-limiter buckets don't leak over a long-running box.
+            if tick_start - last_reap >= self.REAP_INTERVAL_S:
+                last_reap = tick_start
+                try:
+                    self.match_manager.reap_terminal()
+                except Exception:  # noqa: BLE001
+                    logger.exception("reap_terminal raised; continuing")
+
             with self._lock:
                 snapshot = list(self._active)
 

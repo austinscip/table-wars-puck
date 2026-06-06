@@ -196,6 +196,11 @@ class MatchManager:
     # stale threshold so a brief Wi-Fi blip never abandons a live table.
     ABANDON_AFTER_S = 120.0
 
+    # How long a terminal (finished/abandoned) match lingers in `matches`
+    # before the reaper evicts it (audit 1.3). Long enough that late
+    # idempotent retries + the TV's final-frame fetch still resolve.
+    REAP_GRACE_S = 300.0
+
     def __init__(
         self,
         registry: GameRegistry,
@@ -207,10 +212,19 @@ class MatchManager:
         store=None,
         lock_provider=None,
         state_sink: Optional["StateSink"] = None,
+        reap_grace_s: Optional[float] = None,
+        on_match_reaped=None,
     ) -> None:
         self.registry = registry
         self.writer = writer
         self.scheduler = scheduler
+        self.reap_grace_s = (
+            reap_grace_s if reap_grace_s is not None else self.REAP_GRACE_S
+        )
+        # Optional callback fired when a terminal match is evicted, with the
+        # match_id — the container uses it to drop that match's rate-limiter
+        # buckets so they don't leak (audit 1.4).
+        self.on_match_reaped = on_match_reaped
         # Optional transport-agnostic push sink. When set, the manager calls
         # state_sink(envelope) on every state-changing input/tick — OUTSIDE
         # the per-match lock — so the TV gets the frame over the LAN socket
@@ -316,6 +330,36 @@ class MatchManager:
             recovered.append(match.id)
             logger.info("recovered match %s (%s)", match.id, match.game_slug)
         return recovered
+
+    def reap_terminal(self) -> int:
+        """Evict terminal (finished/abandoned) matches whose grace window has
+        elapsed, so `matches` doesn't grow without bound over a long-running
+        box (audit 1.3). Fires on_match_reaped per eviction (rate-limiter
+        cleanup, audit 1.4). Returns the number reaped. Cheap + called from
+        the scheduler loop; safe against a concurrent insert (skips a sweep
+        if the dict resizes under us)."""
+        now = time.monotonic()
+        try:
+            items = list(self.matches.items())
+        except RuntimeError:
+            return 0  # dict changed size mid-iteration; reap next sweep
+        reaped = 0
+        for match_id, match in items:
+            if (
+                match.terminal_at is not None
+                and (now - match.terminal_at) > self.reap_grace_s
+            ):
+                self.matches.pop(match_id, None)
+                reaped += 1
+                if self.on_match_reaped is not None:
+                    try:
+                        self.on_match_reaped(match_id)
+                    except Exception:  # noqa: BLE001
+                        logger.exception(
+                            "on_match_reaped failed for %s", match_id
+                        )
+                logger.info("reaped terminal match %s", match_id)
+        return reaped
 
     # === Create ===
 
