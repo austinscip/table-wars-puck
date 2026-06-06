@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { requireSuperAdmin } from "@/lib/auth/roles";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -11,6 +12,9 @@ import {
 } from "@/components/ui/table";
 
 export default async function AdminDashboard() {
+  // Authorize at the data-access layer, not just the layout (layouts don't
+  // re-run on every navigation). No extra DB cost — getUserContext is cached.
+  await requireSuperAdmin();
   const supabase = await createClient();
 
   const [

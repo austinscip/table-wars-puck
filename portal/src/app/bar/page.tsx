@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { requireAnyRole } from "@/lib/auth/roles";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -11,6 +12,9 @@ import {
 } from "@/components/ui/table";
 
 export default async function BarDashboard() {
+  // Authorize at the data-access layer, not just the layout. No extra DB cost
+  // (getUserContext is cached). Row scoping itself is enforced by RLS below.
+  await requireAnyRole();
   const supabase = await createClient();
 
   // RLS scopes all of these to the locations the user can see.
