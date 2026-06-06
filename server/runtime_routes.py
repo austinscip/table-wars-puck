@@ -479,7 +479,12 @@ def match_input(match_id: str):
     if limiter is not None and not limiter.allow(f"{match_id}:{puck_index}"):
         return _bad("rate limited", 429)
 
-    event = event_from_dict(puck_index, body)
+    # event_from_dict is defensive (coerces/clamps, never raises), but guard
+    # the route anyway so a future stricter parser returns 400, not 500.
+    try:
+        event = event_from_dict(puck_index, body)
+    except (ValueError, TypeError):
+        return _bad("invalid input payload", 400)
     # Idempotency key: prefer the standard header, fall back to an
     # event_id in the body so firmware that can't set headers still gets
     # dedupe. None means "no key" — processed every time (legacy pucks).

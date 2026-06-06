@@ -437,13 +437,25 @@ class MatchManager:
                 return StateUpdate(state=cached), None
 
         if match.status != "active":
-            return StateUpdate(state=match.game.get_state()), None
+            return StateUpdate(state=self._safe_state(match)), None
 
         match.last_input_at = time.monotonic()
         if self.heartbeat is not None:
             self.heartbeat.ping(match_id, event.puck_index)
 
-        update = match.game.on_input(event)
+        # Contain a buggy game: an exception in on_input must not 500 the
+        # request thread or leave the match wedged (the scheduler already
+        # guards the tick path; this is the input-path equivalent — audit
+        # 0.3). We drop the offending frame and return the last good state.
+        try:
+            update = match.game.on_input(event)
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "game.on_input raised (match=%s puck=%s); dropping frame",
+                match_id,
+                event.puck_index,
+            )
+            return StateUpdate(state=self._safe_state(match)), None
         self._persist_scores(match, update.score_events)
         # Always write a snapshot on input — every input is, by
         # definition, something the player did that the TV should react
@@ -604,10 +616,27 @@ class MatchManager:
 
     # === Internals ===
 
+    def _safe_state(self, match: Match) -> dict:
+        """get_state() that can't crash the caller — a game whose get_state
+        raises returns an empty dict (logged) rather than propagating."""
+        try:
+            return match.game.get_state()
+        except Exception:  # noqa: BLE001
+            logger.exception("game.get_state raised (match=%s)", match.id)
+            return {}
+
     def _persist_scores(self, match: Match, events: list[ScoreEvent]) -> None:
         for se in events:
             mp_id = match.match_puck_ids.get(se.puck_index)
             if mp_id is None:
+                # A game emitted a score for a puck not in this match — a
+                # real game bug. Surface it instead of silently dropping
+                # (audit 2.10 observability).
+                logger.warning(
+                    "score for unknown puck_index %s in match %s; dropped",
+                    se.puck_index,
+                    match.id,
+                )
                 continue
             self.writer.insert_score(
                 match_id=match.id,
