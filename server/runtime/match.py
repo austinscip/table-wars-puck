@@ -296,7 +296,12 @@ class MatchManager:
         if self.store is None or not getattr(match.game, "serializable", False):
             return
         try:
-            self.store.save(match.id, serialize_match(match))
+            data = serialize_match(match)
+            # Persist heartbeat state too (audit 1.8) so recovery keeps
+            # exactly-once disconnect semantics across a restart.
+            if self.heartbeat is not None:
+                data["heartbeat"] = self.heartbeat.export(match.id)
+            self.store.save(match.id, data)
         except Exception:  # noqa: BLE001
             logger.exception("failed to persist match %s", match.id)
 
@@ -325,6 +330,12 @@ class MatchManager:
                 self.heartbeat.register(
                     match.id, [p.puck_index for p in match.players]
                 )
+                # Restore the persisted heartbeat state (last_seen offsets +
+                # stale_emitted) so a puck that already disconnected pre-crash
+                # doesn't re-fire its PLAYER_LEFT cue on boot (audit 1.8).
+                hb = data.get("heartbeat")
+                if hb:
+                    self.heartbeat.restore(match.id, hb)
             if self.scheduler is not None:
                 self.scheduler.register(match.id)
             recovered.append(match.id)

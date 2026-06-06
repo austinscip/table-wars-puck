@@ -307,11 +307,21 @@ class PuckGolf(Game):
 
     def final_scores(self) -> dict[int, int]:
         # Sum of per-hole strokes as a NEGATIVE total so leaderboards
-        # interprets fewer strokes = higher score.
-        return {
-            p.puck_index: sum(self.player_state[p.puck_index].holes_strokes) * STROKE_PENALTY
-            for p in self.players
-        }
+        # interprets fewer strokes = higher score. A player who left early
+        # (disconnect) is CHARGED MAX_STROKES for every hole they never
+        # completed (audit 1.6) — otherwise quitting after one good hole
+        # would rank ABOVE someone who played the whole course (fewer total
+        # strokes). At a normal finish everyone has played every hole, so
+        # there are no unplayed holes and this is a no-op.
+        total_holes = len(self.course)
+        scores: dict[int, int] = {}
+        for p in self.players:
+            st = self.player_state[p.puck_index]
+            played_strokes = sum(st.holes_strokes)
+            unplayed = max(0, total_holes - len(st.holes_strokes))
+            charged = played_strokes + unplayed * MAX_STROKES
+            scores[p.puck_index] = charged * STROKE_PENALTY
+        return scores
 
     def get_state(self) -> dict[str, Any]:
         hole = self.current_hole if not self.finished else None

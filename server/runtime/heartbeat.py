@@ -131,3 +131,36 @@ class HeartbeatTracker:
                 }
                 for puck_index, beat in beats.items()
             }
+
+    # === Durability (audit 1.8) ===
+
+    def export(self, match_id: str) -> dict[int, dict]:
+        """Serializable heartbeat state for one match: last_seen as an
+        ELAPSED offset (monotonic doesn't survive a restart) plus the
+        stale_emitted flag. Persisted alongside the match so recovery
+        preserves the exactly-once disconnect semantics — a puck that already
+        disconnected pre-crash won't re-fire its PLAYER_LEFT cue on boot."""
+        now = time.monotonic()
+        with self._lock:
+            beats = self._beats.get(match_id, {})
+            return {
+                puck_index: {
+                    "last_seen_elapsed_s": now - beat.last_seen,
+                    "stale_emitted": beat.stale_emitted,
+                }
+                for puck_index, beat in beats.items()
+            }
+
+    def restore(self, match_id: str, data: dict) -> None:
+        """Re-seed heartbeats from export() output, re-basing the elapsed
+        offset onto the current monotonic clock. Tolerates JSON string keys
+        (Redis/JSON store round-trips int dict keys to strings)."""
+        now = time.monotonic()
+        with self._lock:
+            beats = self._beats.setdefault(match_id, {})
+            for raw_idx, entry in data.items():
+                idx = int(raw_idx)
+                beats[idx] = _PuckHeartbeat(
+                    last_seen=now - float(entry.get("last_seen_elapsed_s", 0.0)),
+                    stale_emitted=bool(entry.get("stale_emitted", False)),
+                )
