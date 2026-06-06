@@ -325,24 +325,31 @@ class Smash(Game):
     def deserialize(cls, players: list[Player], data: dict[str, Any]) -> "Smash":
         game = cls(players)
         game._pending_cues = []
-        game.tick_count = data["tick_count"]
-        game.elapsed_s = data.get("elapsed_s", data["tick_count"] * TICK_DT)
-        game.finished = data["finished"]
-        game.winner_index = data["winner_index"]
-        for key, fd in data["fighters"].items():
+        # Tolerate missing fields (forward/back schema skew) by keeping the
+        # freshly-constructed default instead of KeyError, which would drop the
+        # whole match on recovery (audit runtime-games-2026-06-06).
+        game.tick_count = data.get("tick_count", game.tick_count)
+        game.elapsed_s = data.get("elapsed_s", game.tick_count * TICK_DT)
+        game.finished = data.get("finished", game.finished)
+        game.winner_index = data.get("winner_index", game.winner_index)
+        for key, fd in data.get("fighters", {}).items():
             f = game.fighters.get(int(key))
             if f is None:
                 continue
-            f.x, f.y = fd["x"], fd["y"]
-            f.damage_pct = fd["damage_pct"]
-            f.stocks = fd["stocks"]
-            f.facing_x, f.facing_y = fd["facing_x"], fd["facing_y"]
-            f.move_vx, f.move_vy = fd["move_vx"], fd["move_vy"]
-            f.knockback_vx, f.knockback_vy = fd["knockback_vx"], fd["knockback_vy"]
-            f.special_ready_at = fd["special_ready_at"]
-            f.kos_landed = fd["kos_landed"]
-            f.eliminated = fd["eliminated"]
-            f.last_hit_by = fd["last_hit_by"]
+            f.x = fd.get("x", f.x)
+            f.y = fd.get("y", f.y)
+            f.damage_pct = fd.get("damage_pct", f.damage_pct)
+            f.stocks = fd.get("stocks", f.stocks)
+            f.facing_x = fd.get("facing_x", f.facing_x)
+            f.facing_y = fd.get("facing_y", f.facing_y)
+            f.move_vx = fd.get("move_vx", f.move_vx)
+            f.move_vy = fd.get("move_vy", f.move_vy)
+            f.knockback_vx = fd.get("knockback_vx", f.knockback_vx)
+            f.knockback_vy = fd.get("knockback_vy", f.knockback_vy)
+            f.special_ready_at = fd.get("special_ready_at", f.special_ready_at)
+            f.kos_landed = fd.get("kos_landed", f.kos_landed)
+            f.eliminated = fd.get("eliminated", f.eliminated)
+            f.last_hit_by = fd.get("last_hit_by", f.last_hit_by)
         return game
 
     def is_over(self) -> bool:

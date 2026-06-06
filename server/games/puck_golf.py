@@ -301,23 +301,30 @@ class PuckGolf(Game):
         course = [Hole(**hd) for hd in data["course"]]
         game = cls(players, course=course)
         game._pending_cues = []
-        game.hole_index = data["hole_index"]
-        game.turn_queue = [int(x) for x in data["turn_queue"]]
-        game.turn_index = data["turn_index"]
-        game.finished = data["finished"]
+        # Tolerate missing fields (forward/back schema skew) by falling back
+        # to the freshly-constructed default instead of KeyError, which would
+        # drop the whole match on recovery (audit runtime-games-2026-06-06).
+        game.hole_index = data.get("hole_index", game.hole_index)
+        if "turn_queue" in data:
+            game.turn_queue = [int(x) for x in data["turn_queue"]]
+        game.turn_index = data.get("turn_index", game.turn_index)
+        game.finished = data.get("finished", game.finished)
         now = time.monotonic()
-        for key, sd in data["player_state"].items():
+        for key, sd in data.get("player_state", {}).items():
             s = game.player_state.get(int(key))
             if s is None:
                 continue
-            s.aim_x, s.aim_y = sd["aim_x"], sd["aim_y"]
-            s.power = sd["power"]
-            s.last_power_update = now - sd["power_elapsed_s"]
-            s.holes_strokes = list(sd["holes_strokes"])
-            s.hole_done = sd["hole_done"]
-            s.distance_remaining = sd["distance_remaining"]
-            s.ball_x, s.ball_y = sd["ball_x"], sd["ball_y"]
-            s.disconnected = sd["disconnected"]
+            s.aim_x = sd.get("aim_x", s.aim_x)
+            s.aim_y = sd.get("aim_y", s.aim_y)
+            s.power = sd.get("power", s.power)
+            if "power_elapsed_s" in sd:
+                s.last_power_update = now - sd["power_elapsed_s"]
+            s.holes_strokes = list(sd.get("holes_strokes", s.holes_strokes))
+            s.hole_done = sd.get("hole_done", s.hole_done)
+            s.distance_remaining = sd.get("distance_remaining", s.distance_remaining)
+            s.ball_x = sd.get("ball_x", s.ball_x)
+            s.ball_y = sd.get("ball_y", s.ball_y)
+            s.disconnected = sd.get("disconnected", s.disconnected)
         return game
 
     def is_over(self) -> bool:

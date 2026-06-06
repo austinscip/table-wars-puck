@@ -125,6 +125,15 @@ def _load_questions_from_db(
 
     questions: list[Question] = []
     for r in rows:
+        # Normalize the correct letter: the locked-in answer is always an
+        # uppercase A-D (from tilt_to_letter), but a content row can carry
+        # "a" / " A " / "B ". Without this, the question is UNSCOREABLE —
+        # every player gets WRONG and the reveal highlights a letter no tilt
+        # maps to. Drop a row whose correct isn't a clean A-D rather than
+        # load broken content (audit runtime-games-2026-06-06).
+        correct = (r["correct_answer"] or "").strip().upper()
+        if correct not in ("A", "B", "C", "D"):
+            continue
         questions.append(
             Question(
                 id=int(r["id"]),
@@ -136,7 +145,7 @@ def _load_questions_from_db(
                     "C": r["answer_c"],
                     "D": r["answer_d"],
                 },
-                correct=r["correct_answer"],
+                correct=correct,
                 category=r.get("category_name") or "",
                 time_limit_ms=(int(r.get("time_limit") or 15) * 1000),
             )
@@ -562,14 +571,20 @@ class SpeedPyramid(Game):
         questions = [Question(**qd) for qd in data["questions"]]
         game = cls(players, questions=questions)
         game._pending_cues = []  # don't replay match_start/round_start
-        game.scores = {int(k): v for k, v in data["scores"].items()}
-        game.round_index = data["round_index"]
-        game.selected = {int(k): v for k, v in data["selected"].items()}
-        game.locked = {int(k): v for k, v in data["locked"].items()}
-        game.disconnected = set(data["disconnected"])
-        game.finished = data["finished"]
+        # Tolerate missing fields (forward/back schema skew) by keeping the
+        # freshly-constructed default instead of KeyError, which would drop the
+        # whole match on recovery (audit runtime-games-2026-06-06).
+        if "scores" in data:
+            game.scores = {int(k): v for k, v in data["scores"].items()}
+        game.round_index = data.get("round_index", game.round_index)
+        if "selected" in data:
+            game.selected = {int(k): v for k, v in data["selected"].items()}
+        if "locked" in data:
+            game.locked = {int(k): v for k, v in data["locked"].items()}
+        game.disconnected = set(data.get("disconnected", ()))
+        game.finished = data.get("finished", game.finished)
         game.round_started_at = (
-            time.monotonic() - data["round_elapsed_ms"] / 1000.0
+            time.monotonic() - data.get("round_elapsed_ms", 0) / 1000.0
         )
         return game
 

@@ -196,6 +196,14 @@ class MatchManager:
     # stale threshold so a brief Wi-Fi blip never abandons a live table.
     ABANDON_AFTER_S = 120.0
 
+    # Hard wall-clock ceiling on an active match. A wedged game (a stuck
+    # state machine that never reaches is_over, kept alive by one live-but-
+    # idle puck so the all-stale abandon gate never trips) would otherwise
+    # tick at 10 Hz forever. No real match approaches an hour, so this is a
+    # pure backstop (audit runtime-games-2026-06-06). Survives a restart
+    # because it's measured off the persisted wall-clock started_at.
+    MAX_MATCH_DURATION_S = 3600.0
+
     # How long a terminal (finished/abandoned) match lingers in `matches`
     # before the reaper evicts it (audit 1.3). Long enough that late
     # idempotent retries + the TV's final-frame fetch still resolve.
@@ -597,6 +605,10 @@ class MatchManager:
         if match.status != "active":
             return StateUpdate(state=self._safe_state(match)), None, []
 
+        # Floor dt at 0 — the live scheduler already clamps, but a direct
+        # caller must never run a timed game's physics/clock BACKWARD
+        # (audit runtime-games-2026-06-06). One clamp here protects every game.
+        dt = max(0.0, dt)
         try:
             update = match.game.tick(dt)
         except Exception:  # noqa: BLE001
@@ -732,6 +744,13 @@ class MatchManager:
         stale AND no input has landed for abandon_after_s. The input-age
         gate (on top of all-stale) keeps a match that's merely between
         turns from being reaped."""
+        # Hard ceiling first: a match running absurdly long is force-closed
+        # regardless of liveness, so a wedged state machine + one idle-but-
+        # pinging puck can't keep it 'active' forever (audit
+        # runtime-games-2026-06-06).
+        age_s = (datetime.now(timezone.utc) - match.started_at).total_seconds()
+        if age_s >= self.MAX_MATCH_DURATION_S:
+            return True
         if self.heartbeat is None:
             return False
         if not self.heartbeat.all_stale(match.id):

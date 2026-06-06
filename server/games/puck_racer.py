@@ -312,24 +312,29 @@ class PuckRacer(Game):
     def deserialize(cls, players: list[Player], data: dict[str, Any]) -> "PuckRacer":
         game = cls(players)
         game._pending_cues = []  # don't replay match_start on restore
-        game.tick_count = data["tick_count"]
-        game.elapsed_s = data.get("elapsed_s", data["tick_count"] * TICK_DT)
-        game.first_finish_time = data["first_finish_time"]
-        game.finished = data["finished"]
-        game.warning_fired = data["warning_fired"]
-        for key, rd in data["racers"].items():
+        # Tolerate a snapshot written by older/newer code missing a field:
+        # fall back to the freshly-constructed default rather than KeyError,
+        # which would drop the WHOLE match on recovery (audit
+        # runtime-games-2026-06-06). Core identity (players->racers) is rebuilt
+        # by the ctor, so only the mutable progress fields are restored.
+        game.tick_count = data.get("tick_count", game.tick_count)
+        game.elapsed_s = data.get("elapsed_s", game.tick_count * TICK_DT)
+        game.first_finish_time = data.get("first_finish_time", game.first_finish_time)
+        game.finished = data.get("finished", game.finished)
+        game.warning_fired = data.get("warning_fired", game.warning_fired)
+        for key, rd in data.get("racers", {}).items():
             r = game.racers.get(int(key))
             if r is None:
                 continue
-            r.lane = rd["lane"]
-            r.position = rd["position"]
-            r.speed = rd["speed"]
-            r.throttle_held = rd["throttle_held"]
-            r.boosts_remaining = rd["boosts_remaining"]
-            r.boost_until = rd["boost_until"]
-            r.finished = rd["finished"]
-            r.finish_time = rd["finish_time"]
-            r.disconnected = rd["disconnected"]
+            r.lane = rd.get("lane", r.lane)
+            r.position = rd.get("position", r.position)
+            r.speed = rd.get("speed", r.speed)
+            r.throttle_held = rd.get("throttle_held", r.throttle_held)
+            r.boosts_remaining = rd.get("boosts_remaining", r.boosts_remaining)
+            r.boost_until = rd.get("boost_until", r.boost_until)
+            r.finished = rd.get("finished", r.finished)
+            r.finish_time = rd.get("finish_time", r.finish_time)
+            r.disconnected = rd.get("disconnected", r.disconnected)
         return game
 
     def is_over(self) -> bool:
@@ -418,7 +423,11 @@ class PuckRacer(Game):
             return
         self.finished = True
         finals = self.final_scores()
-        winner = max(finals.items(), key=lambda kv: kv[1])[0]
+        # Guard the empty-finals case (e.g. a recovery that dropped every
+        # racer) so max() can't raise ValueError and wedge the tick loop —
+        # matches the defensive pattern in PuckGolf (audit games-2026-06-06 /
+        # runtime-games-2026-06-06).
+        winner = max(finals.items(), key=lambda kv: kv[1])[0] if finals else None
         cues.append(cue_match_end(winner_index=winner))
 
     def _drain_pending(self) -> list[CueEvent]:

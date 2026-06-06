@@ -57,8 +57,19 @@ class RedisMatchStore:
         return f"{self._ns}:active"
 
     def save(self, match_id: str, data: dict) -> None:
-        self._r.set(self._k(match_id), json.dumps(data))
-        self._r.sadd(self._index(), match_id)
+        # allow_nan=False so a stray NaN/Inf physics float surfaces LOUDLY
+        # here (caught by the caller's persist try/except) instead of being
+        # written as a non-standard JSON token that poisons the durable copy
+        # and either fails a strict reader or hangs the game's comparisons on
+        # reload (audit runtime-games-2026-06-06).
+        payload = json.dumps(data, allow_nan=False)
+        # Pipeline the key write + index add so a kill -9 can't land BETWEEN
+        # them (data written but id absent from the active set -> the match is
+        # silently not recovered). MULTI/EXEC makes the pair atomic.
+        pipe = self._r.pipeline()
+        pipe.set(self._k(match_id), payload)
+        pipe.sadd(self._index(), match_id)
+        pipe.execute()
 
     def load(self, match_id: str) -> Optional[dict]:
         raw = self._r.get(self._k(match_id))
