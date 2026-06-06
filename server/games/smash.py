@@ -208,6 +208,16 @@ class Smash(Game):
         # of the real tick interval (gap #5b).
         decay = KNOCKBACK_DECAY ** (dt / TICK_DT)
 
+        # Snapshot who was already out BEFORE this tick. KO credit is voided
+        # only for a killer eliminated in a PRIOR tick (a stale marker) — a
+        # killer who lands a fatal hit and then dies in this SAME tick still
+        # earns the KO. Without this, two fighters who ring each other out on
+        # the same tick both lost their KO credit, corrupting the winner
+        # (audit games-2026-06-06).
+        eliminated_before = {
+            idx for idx, f in self.fighters.items() if f.eliminated
+        }
+
         for fighter in self.fighters.values():
             if fighter.eliminated:
                 continue
@@ -226,7 +236,7 @@ class Smash(Game):
 
             # KO check.
             if not self._in_arena(fighter.x, fighter.y):
-                self._handle_ko(fighter, cues, score_events)
+                self._handle_ko(fighter, cues, score_events, eliminated_before)
 
         # Win condition: only one fighter left with stocks (or only one
         # not eliminated even if others have stocks — match-time
@@ -408,6 +418,7 @@ class Smash(Game):
         fighter: Fighter,
         cues: list[CueEvent],
         score_events: list[ScoreEvent],
+        eliminated_before: Optional[set[int]] = None,
     ) -> None:
         fighter.stocks -= 1
         fighter.damage_pct = 0.0
@@ -440,7 +451,16 @@ class Smash(Game):
         fighter.last_hit_by = None
         if killer_index is not None and killer_index != fighter.puck_index:
             credited = self.fighters.get(killer_index)
-            if credited is not None and not credited.eliminated:
+            # Credit unless the killer was already out at the START of this tick
+            # (a stale marker). A killer eliminated in this same tick still
+            # earns the KO. `eliminated_before` is None only on legacy/direct
+            # calls — fall back to the live flag then.
+            killer_was_out = (
+                killer_index in eliminated_before
+                if eliminated_before is not None
+                else (credited.eliminated if credited else True)
+            )
+            if credited is not None and not killer_was_out:
                 credited.kos_landed += 1
                 score_events.append(
                     ScoreEvent(

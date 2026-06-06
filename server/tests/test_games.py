@@ -10,6 +10,7 @@ from conftest import make_players
 
 from games.smash import Smash, ARENA_X
 from games.speed_pyramid import SpeedPyramid
+from games.puck_golf import PuckGolf
 
 
 def test_speed_pyramid_threads_exclude_ids_to_db(monkeypatch):
@@ -67,3 +68,49 @@ def test_smash_self_destruct_credits_no_one():
     fB.x = ARENA_X[0] - 100.0
     game.tick()
     assert fA.kos_landed == 0
+
+
+def test_smash_simultaneous_ko_still_credits_a_same_tick_killer():
+    """A hits B, then BOTH ring out on the same tick. A must still get the KO
+    credit for B even though A also dies this tick (audit games-2026-06-06).
+    The old code marked A eliminated mid-loop, so B's KO check saw A as out
+    and silently dropped the credit."""
+    game = Smash(players=make_players(2))
+    fA, fB = game.fighters[1], game.fighters[2]
+    fA.stocks = fB.stocks = 1  # one stock each -> ring-out eliminates
+
+    # A is B's last hitter.
+    fB.last_hit_by = 1
+    # Both off opposite edges so both ring out in the same tick.
+    fA.x = ARENA_X[0] - 100.0
+    fB.x = ARENA_X[1] + 100.0
+
+    game.tick()
+
+    assert fA.eliminated and fB.eliminated
+    assert fA.kos_landed == 1, "A must keep KO credit for B despite dying the same tick"
+    assert fB.kos_landed == 0
+
+
+def test_smash_stale_killer_from_prior_tick_gets_no_credit():
+    """If the killer was already eliminated in an EARLIER tick, a later KO
+    carrying their stale last_hit_by marker credits no one."""
+    game = Smash(players=make_players(3))
+    fA, fB, fC = game.fighters[1], game.fighters[2], game.fighters[3]
+    fA.eliminated = True  # A left in a previous tick
+    fC.last_hit_by = 1    # stale marker pointing at A
+    fC.stocks = 1
+    fC.x = ARENA_X[1] + 100.0
+    game.tick()
+    assert fA.kos_landed == 0, "a killer out since a prior tick earns no credit"
+
+
+def test_puck_golf_winner_with_no_players_does_not_crash():
+    """Finishing the course with an empty roster must not raise from max() on
+    an empty finals dict (audit games-2026-06-06)."""
+    game = PuckGolf(players=[])
+    # Force completion of the (skeleton) course and finalisation.
+    game.hole_index = len(game.course)
+    game._advance_turn()  # drives the finish path that computes the winner
+    assert game.finished
+    assert game.final_scores() == {}

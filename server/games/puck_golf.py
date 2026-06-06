@@ -434,7 +434,12 @@ class PuckGolf(Game):
             # Winner = least strokes (highest final score since we
             # negate).
             finals = self.final_scores()
-            winner_index = max(finals.items(), key=lambda kv: kv[1])[0]
+            # Guard the empty-finals case (no players) so this matches the
+            # defensive pattern in on_puck_disconnected and can't raise
+            # ValueError from max() (audit games-2026-06-06).
+            winner_index = (
+                max(finals.items(), key=lambda kv: kv[1])[0] if finals else None
+            )
             self._pending_cues.append(cue_match_end(winner_index=winner_index))
             return
         # Next hole: reset per-hole state, queue hole_start cue.
