@@ -22,9 +22,11 @@
 // CONFIGURATION
 // ============================================================================
 
-// WiFi credentials (set these for your network)
-#define TW_WIFI_SSID       "ATT2UJj3HT"     // Your WiFi SSID
-#define TW_WIFI_PASSWORD   "9dmg67p8ydq4"   // Your WiFi password
+// WiFi credentials (set these for your network). Legacy/archived file — the
+// real creds were scrubbed out of source; live firmware reads them from the
+// gitignored secrets.ini (audit firmware-2026-06-06, finding H4).
+#define TW_WIFI_SSID       "YOUR_WIFI_SSID"      // Your WiFi SSID
+#define TW_WIFI_PASSWORD   "YOUR_WIFI_PASSWORD"  // Your WiFi password
 #define TW_WIFI_TIMEOUT    15000            // 15 seconds to connect
 
 // Server configuration

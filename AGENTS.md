@@ -71,7 +71,8 @@ In `platformio.ini`, these can be toggled:
 - **WiFi + ESP-NOW**: Cannot use WiFi and ESP-NOW simultaneously on all channels
 - **FastLED + WiFi**: LED updates can cause WiFi instability - use show() sparingly
 - **Memory Constraints**: ESP32 has 320KB RAM - avoid large buffers
-- **OTA Password**: Default is `puck2024`, change in `platformio.ini`
+- **OTA Password**: set via the gitignored `secrets.ini` (`[ota] auth = ...`),
+  referenced as `${ota.auth}` in `platformio.ini` — never hardcode it
 
 ## Important Directories
 

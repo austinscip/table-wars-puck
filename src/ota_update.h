@@ -344,7 +344,10 @@ bool performUpdate() {
  */
 void initArduinoOTA() {
     ArduinoOTA.setHostname("TableWarsPuck");
-    ArduinoOTA.setPassword("puck2024");  // Change this!
+    // Legacy/archived OTA path (not in the live build). Scrubbed default — set
+    // a strong per-puck password via secrets.ini if this is ever revived
+    // (audit firmware-2026-06-06, finding H4).
+    ArduinoOTA.setPassword("CHANGE_ME");
 
     ArduinoOTA.onStart([]() {
         String type;
