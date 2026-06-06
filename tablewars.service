@@ -17,6 +17,11 @@
 Description=Table Wars WebSocket Server
 After=network.target postgresql.service
 Wants=postgresql.service
+# Restart-storm protection. These MUST live in [Unit] — modern systemd ignores
+# StartLimitBurst/StartLimitIntervalSec when placed in [Service], which left the
+# rate limit silently disabled (audit deploy-2026-06-06).
+StartLimitIntervalSec=60
+StartLimitBurst=3
 
 [Service]
 Type=simple
@@ -39,11 +44,9 @@ ExecStart=/opt/table-wars-puck/server/venv/bin/gunicorn \
     --chdir /opt/table-wars-puck/server \
     app:app
 
-# Restart policy
+# Restart policy (StartLimit* moved to [Unit] above)
 Restart=always
 RestartSec=10
-StartLimitBurst=3
-StartLimitInterval=60
 
 # Security hardening
 NoNewPrivileges=true
