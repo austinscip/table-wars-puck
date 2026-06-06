@@ -1217,11 +1217,19 @@ def _narration_url(question_id: int) -> str:
 
 _NARRATED_QIDS_CACHE: set | None = None
 _NARRATED_QIDS_DIR_MTIME: float | None = None
+_NARRATED_QIDS_CACHED_AT: float = 0.0
 # Files smaller than this are treated as "no narration" — a crashed/partial
 # TTS run can leave a 0-byte or truncated q_<id>.mp3 that would otherwise be
 # served as narration and either play silence or stall the question screen
 # (audit polish-2026-06-06).
 _MIN_NARRATION_BYTES = 256
+# Belt-and-suspenders TTL on the narrated-set cache. Directory-mtime
+# invalidation was verified on macOS APFS, but some container filesystems
+# (overlayfs in particular) don't reliably bump a directory's mtime when a
+# file is added/removed inside it — which would pin a stale set until restart.
+# Re-scanning at most once per TTL bounds that staleness without making the
+# hot path (every load-question) re-glob the dir each call (audit followups #5).
+_NARRATED_QIDS_TTL_S = 60.0
 
 
 def _narrated_qids() -> set:
@@ -1234,7 +1242,7 @@ def _narrated_qids() -> set:
     doesn't change set membership; the browser cache-bust in `_narration_url`
     handles that.) Audit polish-2026-06-06.
     """
-    global _NARRATED_QIDS_CACHE, _NARRATED_QIDS_DIR_MTIME
+    global _NARRATED_QIDS_CACHE, _NARRATED_QIDS_DIR_MTIME, _NARRATED_QIDS_CACHED_AT
     import os
     import glob
     d = os.path.join(
@@ -1245,7 +1253,10 @@ def _narrated_qids() -> set:
         dir_mtime: float | None = os.path.getmtime(d)
     except OSError:
         dir_mtime = None
-    if _NARRATED_QIDS_CACHE is None or dir_mtime != _NARRATED_QIDS_DIR_MTIME:
+    ttl_expired = (_now() - _NARRATED_QIDS_CACHED_AT) > _NARRATED_QIDS_TTL_S
+    if (_NARRATED_QIDS_CACHE is None
+            or dir_mtime != _NARRATED_QIDS_DIR_MTIME
+            or ttl_expired):
         ids = set()
         for p in glob.glob(os.path.join(d, "q_*.mp3")):
             try:
@@ -1256,6 +1267,7 @@ def _narrated_qids() -> set:
                 pass
         _NARRATED_QIDS_CACHE = ids
         _NARRATED_QIDS_DIR_MTIME = dir_mtime
+        _NARRATED_QIDS_CACHED_AT = _now()
     return _NARRATED_QIDS_CACHE
 
 

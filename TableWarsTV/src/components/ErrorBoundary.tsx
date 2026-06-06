@@ -4,12 +4,42 @@ import { colors, fonts } from '../theme';
 
 interface Props {
   children: ReactNode;
-  /** Auto-recovery delay after a crash (ms). */
+  /** Base auto-recovery delay after a crash (ms); backs off per attempt. */
   recoverAfterMs?: number;
+  /** Stop auto-recovering after this many rapid re-crashes (loop guard). */
+  maxRecover?: number;
 }
 
 interface State {
   hasError: boolean;
+  /** True once we've given up auto-recovering (persistent crash loop). */
+  gaveUp: boolean;
+}
+
+// If the view survives this long after a recovery, the prior crash was
+// transient — reset the loop counter.
+const HEALTHY_RESET_MS = 60_000;
+
+/**
+ * Decide what to do on a crash given how many recoveries already happened this
+ * loop. Pure + exported so it's unit-testable. Below the cap: recover, backing
+ * off exponentially from `baseMs` (capped at 60s). At/above the cap: give up and
+ * hold a static card instead of flapping card<->crash every few seconds forever.
+ */
+export function computeRecoverPlan(
+  priorAttempts: number,
+  baseMs: number,
+  maxRecover: number,
+): { recover: boolean; delayMs: number; nextAttempts: number } {
+  const nextAttempts = priorAttempts + 1;
+  if (nextAttempts > maxRecover) {
+    return { recover: false, delayMs: 0, nextAttempts };
+  }
+  return {
+    recover: true,
+    delayMs: Math.min(baseMs * 2 ** priorAttempts, 60_000),
+    nextAttempts,
+  };
 }
 
 /**
@@ -29,10 +59,14 @@ interface State {
  * defence for the render tree (audit tablewars-tv-2026-06-06).
  */
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false };
+  state: State = { hasError: false, gaveUp: false };
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private healthyTimer: ReturnType<typeof setTimeout> | null = null;
+  // In-memory (state survives recovery — no reload here), so consecutive
+  // re-crashes accumulate toward the give-up cap (audit followups #5).
+  private attempts = 0;
 
-  static getDerivedStateFromError(): State {
+  static getDerivedStateFromError(): Partial<State> {
     return { hasError: true };
   }
 
@@ -40,23 +74,44 @@ export class ErrorBoundary extends Component<Props, State> {
     // Surface to the console (and any future crash reporter) so the crash
     // isn't silent even though the UI auto-recovers.
     console.error('[TV ErrorBoundary] render crash:', error);
-    const ms = this.props.recoverAfterMs ?? 6000;
+    if (this.healthyTimer) {
+      clearTimeout(this.healthyTimer);
+      this.healthyTimer = null;
+    }
+    const baseMs = this.props.recoverAfterMs ?? 6000;
+    const maxRecover = this.props.maxRecover ?? 5;
+    const plan = computeRecoverPlan(this.attempts, baseMs, maxRecover);
+    this.attempts = plan.nextAttempts;
+    if (!plan.recover) {
+      // Persistent loop — stop flapping; hold the terminal card.
+      this.setState({ gaveUp: true });
+      return;
+    }
     this.timer = setTimeout(() => {
       this.timer = null;
       this.setState({ hasError: false });
-    }, ms);
+      // If we now stay healthy for a while, the crash was transient — reset.
+      this.healthyTimer = setTimeout(() => {
+        this.attempts = 0;
+      }, HEALTHY_RESET_MS);
+    }, plan.delayMs);
   }
 
   componentWillUnmount() {
     if (this.timer) clearTimeout(this.timer);
+    if (this.healthyTimer) clearTimeout(this.healthyTimer);
   }
 
   render() {
     if (!this.state.hasError) return this.props.children;
+    const title = this.state.gaveUp ? 'Needs attention' : 'One sec…';
+    const sub = this.state.gaveUp
+      ? 'Please ask staff to restart the TV.'
+      : 'Table Wars is reconnecting.';
     return (
       <View style={styles.root}>
-        <Text style={styles.title}>One sec…</Text>
-        <Text style={styles.sub}>Table Wars is reconnecting.</Text>
+        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.sub}>{sub}</Text>
       </View>
     );
   }

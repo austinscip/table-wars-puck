@@ -50,7 +50,13 @@ and deserves the full per-game adversarial treatment:
 Cross-check against the firmware (`docs/audit/firmware-2026-06-06.md`) and web TV
 (`tv-speed-pyramid-web-2026-06-06.md`) since both talk to these endpoints.
 
-## 2. Dependency CVE bump (concrete; never actually audited)
+> **Status (2026-06-06): items #1–#5 all DONE.** #1 `live-speed-pyramid`, #2
+> `deps`, #3 self-review (folded into the fix commits), #4 firmware ANSWERING
+> heartbeat (appended to `firmware-2026-06-06.md`), #5 `followups-smaller`.
+> Remaining below = the OWNER manual items + the deferred-with-rationale tail
+> documented in each area doc.
+
+## 2. ✅ DONE — Dependency CVE bump (`deps-2026-06-06.md`)
 
 The first sweep claimed "deps pinned" but never ran a CVE check. Known-vuln
 versions in `server/requirements.txt`:
