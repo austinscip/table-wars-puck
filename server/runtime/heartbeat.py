@@ -51,19 +51,25 @@ class HeartbeatTracker:
 
     def ping(
         self, match_id: str, puck_index: int, now: float | None = None
-    ) -> None:
+    ) -> bool:
+        """Refresh last_seen for a puck. Returns True iff this ping is a
+        RECONNECT transition — the puck had previously been swept stale and
+        is now talking again. The manager uses that to call the game's
+        on_puck_reconnected so a recovered puck is un-retired (audit
+        runtime-games-2026-06-06)."""
         ts = now if now is not None else time.monotonic()
         with self._lock:
             beats = self._beats.setdefault(match_id, {})
             existing = beats.get(puck_index)
             if existing is None:
                 beats[puck_index] = _PuckHeartbeat(last_seen=ts)
-            else:
-                # Re-pinging clears any prior stale flag — disconnect
-                # transitions can fire again if the puck dies a
-                # second time.
-                existing.last_seen = ts
-                existing.stale_emitted = False
+                return False
+            # Re-pinging clears any prior stale flag — disconnect
+            # transitions can fire again if the puck dies a second time.
+            was_stale = existing.stale_emitted
+            existing.last_seen = ts
+            existing.stale_emitted = False
+            return was_stale
 
     def register(self, match_id: str, puck_indices: list[int]) -> None:
         """Seed last_seen for every puck in a freshly-created match

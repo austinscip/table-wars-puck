@@ -274,6 +274,13 @@ class PuckRacer(Game):
             is_final=self.finished,
         )
 
+    def on_puck_reconnected(self, puck_index: int) -> StateUpdate | None:
+        # Intentionally NON-resumable (audit runtime-games-2026-06-06): a racer
+        # frozen for the 8s+ it took to be swept stale is hopelessly behind, so
+        # a reconnect does not un-freeze it — it stays a DNF. Explicit override
+        # so this is a documented decision, not an accidental inherited no-op.
+        return None
+
     # === Durability ===
 
     def serialize(self) -> dict[str, Any]:

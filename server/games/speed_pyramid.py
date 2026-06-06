@@ -462,6 +462,36 @@ class SpeedPyramid(Game):
             is_final=self.finished,
         )
 
+    def on_puck_reconnected(self, puck_index: int) -> StateUpdate | None:
+        """A puck that dropped (force-locked TIMEOUT each round by
+        _settle_disconnected) is back. Drop it from `disconnected` so future
+        rounds accept its real input again (audit runtime-games-2026-06-06).
+
+        _settle_disconnected pre-emptively force-locks the freshly-advanced
+        round too, so clear THAT lock (a no-answer TIMEOUT on a round still
+        open — at least one other puck unlocked) so the returning puck can
+        actually answer the round it rejoined. A forced TIMEOUT scored 0
+        points, so there's nothing to refund. Rounds genuinely missed while it
+        was gone (already resolved) stay scored as-is."""
+        if self.finished or puck_index not in self.disconnected:
+            return None
+        self.disconnected.discard(puck_index)
+        lock = self.locked.get(puck_index)
+        round_open = any(
+            self.locked.get(p) is None
+            for p in self.scores
+            if p != puck_index
+        )
+        if (lock is not None and lock.get("answer") is None
+                and lock.get("tier") == "TIMEOUT" and round_open):
+            self.locked[puck_index] = None
+            self.selected[puck_index] = None
+        return StateUpdate(
+            state=self.get_state(),
+            cues=[CueEvent(cue=Cue.PLAYER_JOINED, target=puck_index,
+                           payload={"reason": "reconnect"})],
+        )
+
     def _settle_disconnected(self) -> tuple[list[ScoreEvent], list[CueEvent]]:
         """Force-lock every known-disconnected puck that hasn't committed
         the current round, advancing rounds as the locks complete them.

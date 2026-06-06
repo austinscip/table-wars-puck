@@ -240,6 +240,24 @@ class PuckGolf(Game):
             state=self.get_state(), cues=cues, is_final=self.finished
         )
 
+    def on_puck_reconnected(self, puck_index: int) -> StateUpdate | None:
+        """A retired puck is back. Clear its disconnected flag so the NEXT
+        hole reset deals it back in (_reset_hole_state keys hole_done off
+        disconnected); the current hole stays skipped. It's still in
+        turn_queue, so clearing the flag is enough (audit
+        runtime-games-2026-06-06)."""
+        if self.finished or puck_index not in self.player_state:
+            return None
+        st = self.player_state[puck_index]
+        if not st.disconnected:
+            return None
+        st.disconnected = False
+        return StateUpdate(
+            state=self.get_state(),
+            cues=[CueEvent(cue=Cue.PLAYER_JOINED, target=puck_index,
+                           payload={"reason": "reconnect"})],
+        )
+
     # === Durability ===
 
     def serialize(self) -> dict[str, Any]:

@@ -511,8 +511,26 @@ class MatchManager:
             return StateUpdate(state=self._safe_state(match)), None, []
 
         match.last_input_at = time.monotonic()
+        reconnected = False
         if self.heartbeat is not None:
-            self.heartbeat.ping(match_id, event.puck_index)
+            reconnected = self.heartbeat.ping(match_id, event.puck_index)
+
+        # A puck that was swept stale and is now talking again is a RECONNECT.
+        # Un-retire it BEFORE processing its input so the input applies to the
+        # restored state (audit runtime-games-2026-06-06). Contained like
+        # on_input — a buggy reconnect hook must not wedge the match.
+        reconnect_reaction = None
+        if reconnected:
+            try:
+                reconnect_reaction = match.game.on_puck_reconnected(
+                    event.puck_index
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception(
+                    "game.on_puck_reconnected raised (match=%s puck=%s)",
+                    match_id,
+                    event.puck_index,
+                )
 
         # Contain a buggy game: an exception in on_input must not 500 the
         # request thread or leave the match wedged (the scheduler already
@@ -527,6 +545,17 @@ class MatchManager:
                 event.puck_index,
             )
             return StateUpdate(state=self._safe_state(match)), None, []
+
+        # Fold the reconnect reaction's cues/scores ahead of the input's so
+        # the PLAYER_JOINED beat precedes anything the input produced; the
+        # input update already carries the post-reconnect state snapshot.
+        if reconnect_reaction is not None:
+            update.cues = reconnect_reaction.cues + update.cues
+            update.score_events = (
+                reconnect_reaction.score_events + update.score_events
+            )
+            if reconnect_reaction.is_final:
+                update.is_final = True
         self._persist_scores(match, update.score_events)
         # Always write a snapshot on input — every input is, by
         # definition, something the player did that the TV should react

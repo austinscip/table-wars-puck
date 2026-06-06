@@ -288,6 +288,13 @@ class Smash(Game):
             state=self.get_state(), cues=cues, is_final=self.finished
         )
 
+    def on_puck_reconnected(self, puck_index: int) -> StateUpdate | None:
+        # Intentionally NON-resumable (audit runtime-games-2026-06-06): a
+        # disconnect forfeits the fighter's remaining stocks (elimination), and
+        # a reconnect does not revive them. Explicit override so this is a
+        # documented decision, not an accidental inherited no-op.
+        return None
+
     # === Durability ===
 
     def serialize(self) -> dict[str, Any]:

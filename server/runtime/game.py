@@ -163,6 +163,27 @@ class Game(ABC):
         """
         return None
 
+    def on_puck_reconnected(self, puck_index: int) -> Optional[StateUpdate]:
+        """Called by the MatchManager when a puck that had been marked stale
+        (on_puck_disconnected) sends input again — its heartbeat ping cleared
+        the stale flag. The mirror of on_puck_disconnected: un-retire the puck
+        so a transient Wi-Fi blip isn't a *permanent* removal. Without this, a
+        dropped puck that recovers is stranded — turn-based games would keep
+        scoring it zero every remaining round (audit runtime-games-2026-06-06).
+
+        Override where resume is semantically safe:
+        - SpeedPyramid drops the puck from `disconnected` so future rounds
+          accept its input again (rounds already force-locked TIMEOUT while it
+          was gone stay scored as-is).
+        - PuckGolf clears its retired flag so the next hole deals it back in.
+
+        Real-time / elimination games (PuckRacer, Smash) deliberately do NOT
+        resume — a racer frozen 8s+ is hopelessly behind and an eliminated
+        fighter is out — so they keep the no-op. Folded into the current input
+        update exactly like on_puck_disconnected. Default returns None.
+        """
+        return None
+
     @abstractmethod
     def get_state(self) -> dict[str, Any]:
         """Return the full game state for the TV view. Must be
