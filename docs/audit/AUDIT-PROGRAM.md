@@ -43,7 +43,7 @@ playbook below.
 | D — Firmware (ESP32 C++, live Speed Pyramid path) | ✅ done (2026-06-06) | `firmware-2026-06-06.md`. Heartbeat/ghost-sweep, WiFi reconnect, consolidated polling, secrets-in-repo, answer-loss, broken prod build env + more. First firmware host-test harness (`testing/firmware/`). Legacy monoliths / OTA / NVS provisioning / TLS deferred with rationale. |
 | E — Customer self-serve (attract, onboarding) | ⬜ TODO | mostly unbuilt; audit what exists |
 | Portal (Next.js, `portal/`) | ✅ done (2026-06-06) | `portal-2026-06-06.md`. DAL authz guards (layout-only authz → co-located check), security headers, metadata/noindex, .env.example. Anon-key-only + CSRF framework-handled verified solid. Open-signup + email-enum deferred to Supabase dashboard (owner). |
-| Legacy Flask stack (`multiplayer_routes`, `trivia_routes`, `tv_game_routes`, `app.py`) | ⬜ TODO | older code still mounted; admin auth gate added but not fully audited |
+| Legacy Flask stack (`multiplayer_routes`, `trivia_routes`, `tv_game_routes`, `app.py`) | ✅ done (2026-06-06) | `legacy-flask-2026-06-06.md`. Fixed: DEBUG-default RCE, reflected XSS, socket CORS `*`, /api/score validation, SECRET_KEY fallback. No SQLi found (solid). Open game endpoints documented as by-design puck protocol (superseded by Speed Pyramid) — mitigate via network isolation, not per-route auth. First app.py route test. |
 | Observability (Sentry/PostHog) | ⬜ TODO | barely wired; audit + complete |
 | Deploy / ops (Dockerfile, systemd, secrets) | 🟡 partial | hardened during runtime work; do a dedicated pass |
 
