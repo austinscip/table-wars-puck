@@ -204,11 +204,17 @@ class PersistenceQueue:
             try:
                 self._writer.update_match_snapshot(match_id, snapshot)
             except Exception:  # noqa: BLE001
-                # Best-effort: a superseding snapshot will follow; the TV
-                # renders local-first anyway. Log and drop.
+                # The STATE is best-effort (a superseding snapshot will
+                # follow), but the CUES are not — re-merge the failed
+                # snapshot's cues back into the slot so they get another
+                # attempt rather than being lost from the cloud copy
+                # (audit 2.9). The TV dedupes cues on seq, so re-delivery is
+                # safe; non-delivery is what we must avoid.
                 logger.exception(
-                    "snapshot flush failed for match %s; dropping", match_id
+                    "snapshot flush failed for match %s; re-queueing cues",
+                    match_id,
                 )
+                self._requeue_cues(match_id, snapshot)
         for row in rounds:
             try:
                 self._writer.insert_score(**row)
@@ -217,6 +223,26 @@ class PersistenceQueue:
                     "round-score flush failed for match %s; dropping",
                     row.get("match_id"),
                 )
+
+    def _requeue_cues(self, match_id: str, failed: dict) -> None:
+        """Merge a failed snapshot's cues back into the pending slot so a
+        transient cloud failure doesn't drop them (audit 2.9)."""
+        cues = failed.get("cues")
+        if not cues:
+            return
+        with self._lock:
+            current = self._snapshots.get(match_id)
+            if current is None:
+                # No newer snapshot pending — re-queue the failed one whole so
+                # its cues (and state) get another attempt.
+                self._snapshots[match_id] = failed
+            else:
+                merged = list(cues)
+                merged.extend(current.get("cues") or [])
+                if len(merged) > self.MAX_COALESCED_CUES:
+                    merged = merged[-self.MAX_COALESCED_CUES :]
+                self._snapshots[match_id] = {**current, "cues": merged}
+        self._wake.set()
 
     def _run(self) -> None:
         while not self._stop.is_set():

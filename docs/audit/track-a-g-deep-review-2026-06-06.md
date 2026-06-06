@@ -227,3 +227,45 @@ status guard; disconnect-resolution contract; dt-based physics; atomic
 2. **1.1 / 1.2** (leaderboard correctness) + **1.3/1.4** (leaks) + **1.5/1.7**
    (my own runtime rough edges).
 3. **Tier 2** as scale/hardening, with 2.6 gated on actually wanting >1 worker.
+
+---
+
+## Resolution (2026-06-06)
+
+All findings addressed except the three deliberately deferred below. Each
+fix shipped with a regression test; CI green throughout.
+
+**Fixed:** 0.1 (admin/firmware auth gate), 0.2 (input NaN/Inf/clamp), 0.3
+(on_input + tick exception containment), 0.4 (bind-once), 0.5 (fail-closed
+puck auth in prod), 1.1 (leaderboard timezone), 1.2 (idempotent final write),
+1.3 (match reaper), 1.4 (rate-limiter cleanup), 1.5 (finals off the lock),
+1.6 (golf quit-early scoring), 1.7 (recover-before-start + shutdown drain),
+1.8 (heartbeat serialized), 2.1 (defense-in-depth grants), 2.2 (FK indexes +
+firmware SET NULL), 2.3 (matches.updated_at + autovacuum), 2.4 (player_count
+maintained, phone unique, trivia CHECKs), 2.5 (batched purge), 2.7
+(game-options clamp + create() error wrap), 2.8 (trivia cache: private dir,
+row validation, thread-safe read, never-raise), 2.9 (cue re-queue on failed
+flush), 2.10-partial (TV-token TTL 2h→20m, scheduler overrun warning,
+unknown-puck score warning).
+
+**Deliberately deferred (documented, not coded):**
+- **2.6 — full multi-worker.** The correct action is NOT to wire a partial
+  distributed lock (the half-measure CONTEXT.md warns against). The system
+  runs `--workers 1` (enforced in Dockerfile/systemd), so the in-process
+  RLock is correct and sufficient; Redis idempotency/store are
+  cross-worker-ready seams. True multi-worker needs the full 4-part spec
+  (reload-under-lock, single ticker, shared heartbeat, lock_provider) shipped
+  together — a deliberate future unit, not this pass.
+- **2.10 — round-timer basis.** SpeedPyramid's speed-tier timer starts at
+  match construction, not first TV render; fixing it cleanly needs the
+  manager to stamp a "round shown at" the game reads. Accepted as a known
+  limitation until the round-render handshake is built.
+- **2.10 — tilt sign normalization.** A firmware with inverted tilt_y would
+  map A↔C. This needs a per-firmware calibration/sign convention — a
+  firmware-coordination item, not a server-only fix.
+
+The leaderboards.puck_id `ON DELETE CASCADE` (flagged under 2.2) was kept
+intentionally: deleting a puck is a deliberate destructive admin action, and
+the human-facing aggregates (player_leaderboards) survive it (keyed by
+player_id, SET NULL on match_pucks). The retention ADR's "aggregates
+retained" is about age-based match purging, not puck deletion.

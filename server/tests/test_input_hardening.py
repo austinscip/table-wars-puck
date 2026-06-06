@@ -104,6 +104,31 @@ def test_on_input_exception_is_contained(monkeypatch):
         registry._games.pop("boom", None)  # don't leak into other tests
 
 
+class _BadConstructorGame:
+    slug = "badctor"
+    min_players = 1
+    max_players = 8
+    serializable = False
+
+    def __init__(self, players, **opts):
+        raise RuntimeError("kaboom in constructor")
+
+
+def test_create_wraps_constructor_error_as_valueerror():
+    # Audit 2.7: a bad game option / constructor failure surfaces as a clean
+    # ValueError (4xx), not an opaque 500.
+    registry.register(_BadConstructorGame)
+    try:
+        mgr = MatchManager(registry=registry, writer=FakeWriter())
+        import pytest
+
+        with pytest.raises(ValueError, match="invalid options for game"):
+            mgr.create(location_id="loc", game_slug="badctor",
+                       table_number=1, players=make_players(1))
+    finally:
+        registry._games.pop("badctor", None)
+
+
 def test_speed_pyramid_still_works_after_hardening():
     # Sanity: a real game with real input still plays.
     mgr = MatchManager(registry=registry, writer=FakeWriter())

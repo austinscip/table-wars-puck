@@ -208,6 +208,7 @@ DEFAULT_QUESTIONS: list[Question] = [
 # selection.
 
 MIN_TILT = 12.0  # below this we treat the puck as flat
+_MAX_QUESTION_COUNT = 50  # clamp on the question_count option (audit 2.7)
 
 
 def tilt_to_letter(tilt_x: float, tilt_y: float) -> str | None:
@@ -281,12 +282,20 @@ class SpeedPyramid(Game):
             # Explicit fixture, typically used by tests.
             self.questions = list(questions)
         else:
+            # Clamp question_count to a sane range (audit 2.7) so a bad option
+            # (0, negative, absurd) can't reach random.sample(k<0) or yield an
+            # empty question set that IndexErrors in __init__.
+            try:
+                count = int(question_count)
+            except (TypeError, ValueError):
+                count = 5
+            count = max(1, min(count, _MAX_QUESTION_COUNT))
             # Production path: pull from the trivia DB at match creation
             # time. Falls back to DEFAULT_QUESTIONS when the DB is empty
             # or unavailable. exclude_ids lets the caller avoid re-serving
             # recently-seen questions (dedup across matches).
             self.questions = _load_questions_from_db(
-                count=question_count,
+                count=count,
                 difficulty=difficulty,
                 category_id=category_id,
                 exclude_ids=exclude_ids,

@@ -62,6 +62,35 @@ def test_snapshots_are_async_and_coalesced():
     assert snap["snapshot_seq"] == 2
 
 
+class _FlakySnapshotWriter(FakeWriter):
+    def __init__(self):
+        super().__init__()
+        self.fail_next = False
+
+    def update_match_snapshot(self, match_id, snapshot):
+        if self.fail_next:
+            self.fail_next = False
+            raise RuntimeError("cloud down")
+        super().update_match_snapshot(match_id, snapshot)
+
+
+def test_failed_snapshot_requeues_cues():
+    # Audit 2.9: a transient snapshot-write failure must not lose cues — they
+    # are re-queued and delivered on the next drain.
+    fake = _FlakySnapshotWriter()
+    q = PersistenceQueue(fake)
+    q.update_match_snapshot(
+        "m1", {"snapshot_seq": 0, "cues": [{"cue": "correct", "seq": 0}]}
+    )
+    fake.fail_next = True
+    q.flush()  # write fails -> cues re-queued, nothing landed
+    assert fake.snapshots == []
+    q.flush()  # retry succeeds
+    assert fake.snapshots
+    _mid, snap = fake.snapshots[-1]
+    assert [c["cue"] for c in snap["cues"]] == ["correct"]  # cue survived
+
+
 def test_coalescing_accumulates_cues_so_none_are_lost():
     fake = FakeWriter()
     q = PersistenceQueue(fake)

@@ -80,6 +80,8 @@ class TickScheduler:
     def _run(self) -> None:
         prev = time.perf_counter()
         last_reap = prev
+        overruns = 0
+        last_overrun_warn = prev
         while not self._stop.is_set():
             tick_start = time.perf_counter()
             # Real elapsed since the previous iteration — the dt each match
@@ -127,3 +129,18 @@ class TickScheduler:
             remaining = self.TICK_INTERVAL - elapsed
             if remaining > 0:
                 self._stop.wait(remaining)
+            else:
+                # Couldn't hold the 10 Hz budget — a degraded box runs games
+                # slower than wall-clock advertises. Warn occasionally
+                # (rate-limited) so it's visible in logs instead of silent
+                # slow-motion (audit 2.10).
+                overruns += 1
+                if tick_start - last_overrun_warn >= 5.0:
+                    last_overrun_warn = tick_start
+                    logger.warning(
+                        "tick loop over budget: %d ticks > %.0fms "
+                        "(last tick %.0fms) — box may be overloaded",
+                        overruns,
+                        self.TICK_INTERVAL * 1000,
+                        elapsed * 1000,
+                    )

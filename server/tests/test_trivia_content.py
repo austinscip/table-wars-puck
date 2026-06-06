@@ -135,6 +135,29 @@ def test_speed_pyramid_pulls_from_configured_source(cache_path):
     assert all(q.id in {101, 102, 103} for q in game.questions)
 
 
+def test_load_skips_invalid_rows(cache_path):
+    # Audit 2.8: a corrupt/poisoned cache row must be skipped, not crash load.
+    cache = TriviaContentCache(FakeReader([_q(1)]), cache_path=cache_path)
+    cache.refresh()
+    cache._bank.append({"id": 2})  # missing required keys
+    got = cache.load(10)
+    assert got and all(q["id"] == 1 for q in got)
+
+
+def test_load_returns_none_on_all_invalid(cache_path):
+    cache = TriviaContentCache(FakeReader([]), cache_path=cache_path)
+    cache._bank = [{"garbage": True}]  # no valid rows
+    assert cache.load(5) is None  # graceful fallback, no crash
+
+
+def test_speed_pyramid_clamps_bad_question_count():
+    # Audit 2.7: a bad question_count can't crash construction.
+    g0 = SpeedPyramid(players=make_players(2), question_count=0)
+    assert len(g0.questions) >= 1
+    gneg = SpeedPyramid(players=make_players(2), question_count=-5)
+    assert len(gneg.questions) >= 1
+
+
 def test_speed_pyramid_falls_back_gracefully_without_source():
     # No source configured -> the game still gets a playable question set
     # (legacy local SQLite if present, else built-in defaults). The

@@ -140,9 +140,12 @@ class MatchTokenAuthority:
         )
 
 
-# Default TV-token lifetime — long enough to watch a match through, short
-# enough to expire by close.
-DEFAULT_TV_TTL_SECONDS = 2 * 60 * 60
+# Default TV-token lifetime. Kept short (audit 2.10): these anon tokens ride
+# the LAN and are replayable for their whole lifetime, and the TV is now
+# local-first (the cloud path is a fallback it re-mints on each reconnect),
+# so a long TTL buys nothing. 20 min outlasts a typical match while bounding
+# the replay window; the TV re-mints if a longer match outlives it.
+DEFAULT_TV_TTL_SECONDS = 20 * 60
 
 
 class TvMatchTokenAuthority:

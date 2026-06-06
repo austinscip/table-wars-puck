@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 import os
 import random
-from typing import Any, Optional, Protocol
+from typing import Optional, Protocol
 
 from .log import get_logger
 
@@ -37,14 +37,37 @@ class TriviaReader(Protocol):
     def trivia_content_version(self) -> str: ...
 
 
+# Keys a cached question row must have to be usable (audit 2.8 — never trust
+# the cache file blindly; a corrupt/poisoned row must be skipped, not crash
+# match creation).
+_REQUIRED_KEYS = (
+    "id", "question_text",
+    "answer_a", "answer_b", "answer_c", "answer_d", "correct_answer",
+)
+
+
+def _default_cache_path() -> str:
+    """An app-private path (NOT world-writable /tmp, audit 2.8). Overridable
+    via TRIVIA_CACHE_PATH."""
+    env = os.environ.get("TRIVIA_CACHE_PATH")
+    if env:
+        return env
+    base = os.path.join(os.path.expanduser("~"), ".tablewars")
+    return os.path.join(base, "trivia_cache.json")
+
+
+def _valid_row(row: object) -> bool:
+    return isinstance(row, dict) and all(
+        row.get(k) is not None for k in _REQUIRED_KEYS
+    )
+
+
 class TriviaContentCache:
     def __init__(
         self, reader: TriviaReader, cache_path: Optional[str] = None
     ) -> None:
         self._reader = reader
-        self._cache_path = cache_path or os.environ.get(
-            "TRIVIA_CACHE_PATH", "/tmp/tablewars_trivia_cache.json"
-        )
+        self._cache_path = cache_path or _default_cache_path()
         self._bank: list[dict] = []
         self._version: str = ""
         self._load_cache_file()  # warm from disk so a cold boot offline works
@@ -86,30 +109,42 @@ class TriviaContentCache:
         exclude_ids: Optional[list[int]] = None,
     ) -> Optional[list[dict]]:
         """Select up to `count` questions from the cached bank. Returns None
-        when the cache is empty so the caller can fall back."""
-        if not self._bank:
-            # Lazy first sync (e.g. the container didn't pre-warm).
-            self.refresh()
-        if not self._bank:
-            return None
-        excluded = set(exclude_ids or [])
-        pool = [
-            q
-            for q in self._bank
-            if (difficulty is None or q.get("difficulty") == difficulty)
-            and int(q["id"]) not in excluded
-        ]
-        if not pool:
-            # Exclusions/filters emptied the pool — relax exclusions before
-            # giving up, so a player who's seen everything still gets a game.
+        when the cache is empty/unusable so the caller can fall back. Never
+        raises — bad cache data degrades to the fallback, it doesn't 500 a
+        match (audit 2.8)."""
+        try:
+            if not self._bank:
+                # Lazy first sync (e.g. the container didn't pre-warm).
+                self.refresh()
+            # Snapshot the bank reference once so a concurrent refresh() that
+            # reassigns self._bank can't change what we iterate.
+            bank = self._bank
+            if not bank:
+                return None
+            excluded = set(exclude_ids or [])
             pool = [
-                q for q in self._bank
-                if difficulty is None or q.get("difficulty") == difficulty
+                q
+                for q in bank
+                if _valid_row(q)
+                and (difficulty is None or q.get("difficulty") == difficulty)
+                and int(q["id"]) not in excluded
             ]
-        if not pool:
+            if not pool:
+                # Exclusions/filters emptied the pool — relax exclusions
+                # before giving up, so a player who's seen everything still
+                # gets a game.
+                pool = [
+                    q for q in bank
+                    if _valid_row(q)
+                    and (difficulty is None or q.get("difficulty") == difficulty)
+                ]
+            if not pool:
+                return None
+            k = min(count, len(pool))
+            return random.sample(pool, k)
+        except Exception:  # noqa: BLE001
+            logger.exception("trivia load failed; falling back")
             return None
-        k = min(count, len(pool))
-        return random.sample(pool, k)
 
     @property
     def version(self) -> str:
@@ -125,7 +160,10 @@ class TriviaContentCache:
         try:
             with open(self._cache_path, "r", encoding="utf-8") as fh:
                 data = json.load(fh)
-            self._bank = data.get("bank", [])
+            raw = data.get("bank", [])
+            # Validate every row (audit 2.8): a corrupt/poisoned cache file
+            # must not inject bad rows that crash selection later.
+            self._bank = [r for r in raw if _valid_row(r)]
             self._version = data.get("version", "")
             if self._bank:
                 logger.info(
@@ -138,15 +176,10 @@ class TriviaContentCache:
 
     def _save_cache_file(self) -> None:
         try:
+            os.makedirs(os.path.dirname(self._cache_path) or ".", exist_ok=True)
             tmp = f"{self._cache_path}.tmp"
             with open(tmp, "w", encoding="utf-8") as fh:
                 json.dump({"version": self._version, "bank": self._bank}, fh)
             os.replace(tmp, self._cache_path)  # atomic
         except Exception:  # noqa: BLE001
             logger.exception("failed to write trivia cache file")
-
-
-def _row_to_dict(row: Any) -> dict:
-    """psycopg dict_row already yields dicts; this is a hook if a reader
-    returns tuples."""
-    return dict(row)

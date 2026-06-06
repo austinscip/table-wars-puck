@@ -400,10 +400,19 @@ class MatchManager:
             raise ValueError(f"duplicate puck_index in players: {indices}")
 
         # Build the game first so its initial state seeds the snapshot in
-        # the SAME transaction as the match + puck rows. A game
-        # constructor that rejects its options raises here, before any DB
-        # write — no half-created match.
-        game = game_class(players=players, **game_options)
+        # the SAME transaction as the match + puck rows. A game constructor
+        # that rejects its options raises here, before any DB write — no
+        # half-created match. Wrap any constructor error as a clear
+        # ValueError so a bad game_option surfaces as a 4xx, not an opaque
+        # 500 (audit 2.7).
+        try:
+            game = game_class(players=players, **game_options)
+        except ValueError:
+            raise
+        except Exception as e:  # noqa: BLE001
+            raise ValueError(
+                f"invalid options for game {game_slug!r}: {e}"
+            ) from e
 
         pucks: list[tuple[str, str, Optional[str]]] = [
             (p.puck_uuid, "host" if i == 0 else "sibling", p.name)
