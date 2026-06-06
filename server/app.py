@@ -7,6 +7,7 @@ Access at: http://localhost:5000
 """
 
 from flask import Flask, render_template, request, jsonify
+from markupsafe import escape
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 from datetime import datetime
@@ -50,15 +51,32 @@ from admin_auth import require_admin
 
 app = Flask(__name__)
 
-# Sprint 1E: Use environment variables for production configuration
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'tablewars_secret_2024_dev')
+# Sprint 1E: Use environment variables for production configuration.
+# SECRET_KEY: never ship the hardcoded dev constant to a real deploy — a known
+# signing key lets anyone forge Flask-signed cookies. Nothing here uses the
+# Flask session for AUTH (the admin gate is a bearer token, not a cookie), so a
+# random per-process key when the env is unset is both safe and strictly better
+# than a public constant (audit legacy-flask-2026-06-06).
+import secrets as _secrets
+_secret = os.environ.get('SECRET_KEY')
+if not _secret:
+    _secret = _secrets.token_hex(32)
+    _BOOT_SECRET_WARNING = True  # logged once the logger is up (below)
+else:
+    _BOOT_SECRET_WARNING = False
+app.config['SECRET_KEY'] = _secret
+# Defense-in-depth cookie flags (no auth cookie exists today, but harmless and
+# correct). SECURE is left off so the LAN http deployment keeps working.
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax')
 # CORS: lock to explicit origins in prod via CORS_ALLOWED_ORIGINS
 # (comma-separated). Defaults to '*' for dev — the portal is a separate
 # origin, so set this to the portal/TV origins before going live.
 _cors_origins = os.environ.get('CORS_ALLOWED_ORIGINS', '*').strip()
 if _cors_origins and _cors_origins != '*':
-    CORS(app, origins=[o.strip() for o in _cors_origins.split(',') if o.strip()])
+    _cors_list = [o.strip() for o in _cors_origins.split(',') if o.strip()]
+    CORS(app, origins=_cors_list)
 else:
+    _cors_list = '*'  # dev: allow all
     CORS(app)  # dev: allow all
 
 # Structured logging + optional Sentry for the runtime AND this Flask app.
@@ -74,13 +92,21 @@ _flask_log = get_logger("flask")
 # eliminates the noisy 500 in logs when the client opens a websocket.
 # Production should still run under gunicorn + eventlet.
 # logger=False/engineio_logger=False mute the warning chatter.
+# Drive the websocket CORS from the SAME env as the HTTP CORS above — it used
+# to be hardcoded "*", so the socket accepted connections from ANY origin even
+# when the HTTP API was locked down (audit legacy-flask-2026-06-06).
 socketio = SocketIO(
     app,
-    cors_allowed_origins="*",
+    cors_allowed_origins=_cors_list,
     async_mode="threading",
     logger=False,
     engineio_logger=False,
 )
+if _BOOT_SECRET_WARNING:
+    _flask_log.warning(
+        "SECRET_KEY unset — using a random per-process key. Set SECRET_KEY in "
+        "the environment for stable signing across restarts/workers."
+    )
 
 
 # Slice I — robustness: any uncaught exception returns a structured
@@ -237,18 +263,31 @@ def api_submit_score():
         "session_id": "optional_session_id"
     }
     """
-    data = request.get_json()
+    # silent=True: a missing/204 Content-Type or malformed body yields None
+    # instead of raising — otherwise trivially-malformed input becomes a 503
+    # that the puck's tight poll loop retries into a storm.
+    data = request.get_json(silent=True)
 
     if not data:
         return jsonify({'error': 'No JSON data provided'}), 400
 
-    puck_id = data.get('puck_id')
     game_type = data.get('game_type')
-    score = data.get('score')
-    session_id = data.get('session_id')
 
-    if not all([puck_id, game_type, score is not None]):
-        return jsonify({'error': 'Missing required fields'}), 400
+    # Coerce + bound the numerics so a non-numeric or absurd value can't 500
+    # the save path or poison the leaderboard (audit legacy-flask-2026-06-06).
+    try:
+        puck_id = int(data['puck_id'])
+        score = int(data['score'])
+    except (KeyError, TypeError, ValueError):
+        return jsonify({'error': 'puck_id and score must be integers'}), 400
+    if not game_type or not isinstance(game_type, str):
+        return jsonify({'error': 'game_type required'}), 400
+    if not (0 <= score <= 1_000_000):
+        return jsonify({'error': 'score out of range [0, 1000000]'}), 400
+
+    session_id = data.get('session_id')
+    if session_id is not None and not isinstance(session_id, str):
+        return jsonify({'error': 'session_id must be a string'}), 400
 
     try:
         save_score(puck_id, game_type, score, session_id)
@@ -258,8 +297,11 @@ def api_submit_score():
             'puck_id': puck_id,
             'score': score
         })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except Exception:
+        # Don't leak the exception detail to the caller; the global handler /
+        # Sentry capture the traceback server-side.
+        _flask_log.exception("save_score failed")
+        return jsonify({'error': 'could not save score'}), 500
 
 @app.route('/api/register', methods=['POST'])
 def api_register_puck():
@@ -331,7 +373,7 @@ def customer_dashboard(bar_slug, table_num):
     bar = execute_query(f'SELECT * FROM bars WHERE slug = {ph}', (bar_slug,), fetch_one=True)
 
     if not bar:
-        return f"Bar '{bar_slug}' not found", 404
+        return f"Bar '{escape(bar_slug)}' not found", 404
 
     return render_template('customer_dashboard_v2.html',
                           bar_name=bar['name'],
@@ -347,7 +389,7 @@ def skill_games_dashboard(bar_slug, table_num):
     bar = execute_query(f'SELECT * FROM bars WHERE slug = {ph}', (bar_slug,), fetch_one=True)
 
     if not bar:
-        return f"Bar '{bar_slug}' not found", 404
+        return f"Bar '{escape(bar_slug)}' not found", 404
 
     return render_template('customer_dashboard.html',
                           bar_name=bar['name'],
@@ -364,7 +406,7 @@ def bar_tv_dashboard(bar_slug):
     bar = execute_query(f'SELECT * FROM bars WHERE slug = {ph}', (bar_slug,), fetch_one=True)
 
     if not bar:
-        return f"Bar '{bar_slug}' not found", 404
+        return f"Bar '{escape(bar_slug)}' not found", 404
 
     return render_template('bar_tv_dashboard.html', bar=bar)
 
@@ -575,7 +617,7 @@ def admin_qr_codes(bar_slug):
     bar = execute_query(f'SELECT * FROM bars WHERE slug = {ph}', (bar_slug,), fetch_one=True)
 
     if not bar:
-        return f"Bar '{bar_slug}' not found", 404
+        return f"Bar '{escape(bar_slug)}' not found", 404
 
     return render_template('admin_qr_codes.html', bar=bar)
 
@@ -863,7 +905,10 @@ if __name__ == '__main__':
     # Sprint 1E: Use environment variables for production configuration
     host = os.environ.get('HOST', '0.0.0.0')
     port = int(os.environ.get('PORT', 5001))
-    debug = os.environ.get('DEBUG', 'True').lower() == 'true'
+    # Default OFF: the Werkzeug debugger is an RCE console if exposed, and this
+    # box can be internet-facing (Railway/nginx). Opt IN with DEBUG=true for
+    # local dev (audit legacy-flask-2026-06-06).
+    debug = os.environ.get('DEBUG', 'False').lower() == 'true'
 
     # Slice J — bar deployment. Advertise via mDNS so pucks find the
     # server as `tablewars-server.local` (or `<instance>.local` if
