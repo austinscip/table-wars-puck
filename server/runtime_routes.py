@@ -158,6 +158,18 @@ def _get_container() -> dict:
     configure_logging()
     init_sentry()
 
+    # Fail FAST on missing security config in a production-marked deploy,
+    # before any expensive setup — refuse to run with spoofable puck input
+    # (audit 0.5). Dev/open deploys (no production env marker) proceed with a
+    # warning at the authority-construction step below.
+    if not os.environ.get("PUCK_JWT_SECRET") and _is_production():
+        raise RuntimeError(
+            "PUCK_JWT_SECRET is required in production (TABLEWARS_ENV/"
+            "FLASK_ENV=production) — refusing to run with spoofable puck "
+            "input. Set PUCK_JWT_SECRET, or unset the production env marker "
+            "for an explicit dev/open deploy."
+        )
+
     # Pooled writer in the live runtime so a score write doesn't pay a
     # fresh TCP+TLS handshake each time. Falls back to per-call connect
     # when psycopg_pool isn't installed.
@@ -215,17 +227,21 @@ def _get_container() -> dict:
 
     # Puck auth: enforced only when PUCK_JWT_SECRET is configured. In prod
     # set it to require signed tokens on every input; unset in dev for the
-    # open flow. We log loudly which mode we're in so a misconfigured prod
-    # box doesn't silently run unauthenticated.
+    # open flow. Without it, any LAN device can drive any puck_index (audit
+    # 0.5) — so FAIL CLOSED in a production-marked deploy: refuse to boot the
+    # runtime unauthenticated rather than silently run spoofable.
     secret = os.environ.get("PUCK_JWT_SECRET")
     if secret:
         token_authority = MatchTokenAuthority(secret)
         _log.info("puck auth ENABLED (PUCK_JWT_SECRET set)")
     else:
+        # Production-without-secret already raised above (audit 0.5); reaching
+        # here means an explicit dev/open deploy.
         token_authority = None
         _log.warning(
             "puck auth DISABLED — set PUCK_JWT_SECRET to require signed "
-            "puck tokens on match input"
+            "puck tokens on match input (any LAN device can otherwise drive "
+            "any puck_index)"
         )
 
     # TV match-token authority, signed with the Supabase JWT secret so
@@ -296,6 +312,15 @@ def _get_container() -> dict:
 
 def _location_id() -> str:
     return os.environ.get("LOCATION_ID") or DEV_FALLBACK_LOCATION_ID
+
+
+def _is_production() -> bool:
+    """A deploy that marks itself production via TABLEWARS_ENV or FLASK_ENV.
+    Used to fail closed on missing security config (audit 0.5)."""
+    for var in ("TABLEWARS_ENV", "FLASK_ENV"):
+        if os.environ.get(var, "").lower() in ("production", "prod"):
+            return True
+    return False
 
 
 def _bad(message: str, status: int = 400):
@@ -567,9 +592,14 @@ def match_bind(match_id: str):
         player_id, created = writer.resolve_or_create_player(
             ident.hash_token(token), display_name=display_name
         )
-        writer.bind_player_to_match_puck(
+        # Bind-once (audit 0.4): refuse if the seat is already claimed by a
+        # DIFFERENT player, so a LAN attacker can't steal/de-attribute it.
+        # The same player re-binding their own seat succeeds (idempotent).
+        claimed = writer.bind_player_to_match_puck(
             mp_id, player_id, display_name=display_name
         )
+        if not claimed:
+            return _bad("seat already claimed by another player", 409)
         phone = (body.get("phone") or "").strip()
         phone_linked = False
         if phone and ident.phone_recovery_enabled:

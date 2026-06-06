@@ -52,6 +52,7 @@ class FakeWriter:
         self.players_by_token: dict[str, str] = {}
         self.player_names: dict[str, str | None] = {}
         self.bindings: list[tuple[str, str, str | None]] = []
+        self.bound_seats: dict[str, str] = {}  # match_puck_id -> player_id
         self.phone_hashes: dict[str, str] = {}
         self._player_seq = 0
 
@@ -130,7 +131,13 @@ class FakeWriter:
         return pid, True
 
     def bind_player_to_match_puck(self, match_puck_id, player_id, display_name=None):
+        # Bind-once: refuse to overwrite a different player's claim.
+        existing = self.bound_seats.get(match_puck_id)
+        if existing is not None and existing != player_id:
+            return False
+        self.bound_seats[match_puck_id] = player_id
         self.bindings.append((match_puck_id, player_id, display_name))
+        return True
 
     def find_player_id_by_phone_hash(self, phone_hash):
         for pid, ph in self.phone_hashes.items():

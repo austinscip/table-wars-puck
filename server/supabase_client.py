@@ -329,26 +329,27 @@ class SupabaseWriter:
         match_puck_id: str,
         player_id: str,
         display_name: Optional[str] = None,
-    ) -> None:
-        """Attach a Player to a Match Participant (the binding moment).
-        Optionally refresh the per-match display name. Scoping (which
-        match_puck) is the caller's responsibility — the runtime resolves it
-        from the live match's puck_index map."""
+    ) -> bool:
+        """Attach a Player to a Match Participant (the binding moment) —
+        BIND-ONCE (audit 0.4). The update only lands if the seat is unclaimed
+        OR already held by this same player (idempotent re-bind). It will NOT
+        overwrite a different player's claim, so a LAN attacker can't steal an
+        already-bound seat's score or de-attribute a rival. Returns True if
+        the seat is now bound to player_id, False if it was claimed by someone
+        else (caller returns 409). Scoping (which match_puck) is the caller's
+        responsibility — the runtime resolves it from the live match's
+        puck_index map."""
         with self._connection() as conn:
             with conn.cursor() as cur:
-                if display_name:
-                    cur.execute(
-                        "update match_pucks "
-                        "set player_id = %s, "
-                        "    player_name = coalesce(%s, player_name) "
-                        "where id = %s",
-                        (player_id, display_name, match_puck_id),
-                    )
-                else:
-                    cur.execute(
-                        "update match_pucks set player_id = %s where id = %s",
-                        (player_id, match_puck_id),
-                    )
+                cur.execute(
+                    "update match_pucks "
+                    "set player_id = %s, "
+                    "    player_name = coalesce(%s, player_name) "
+                    "where id = %s "
+                    "  and (player_id is null or player_id = %s)",
+                    (player_id, display_name, match_puck_id, player_id),
+                )
+                return cur.rowcount > 0
 
     def find_player_id_by_phone_hash(
         self, phone_hash: str
