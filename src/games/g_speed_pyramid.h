@@ -79,6 +79,13 @@ inline uint32_t _question_started_at_ms = 0;  // millis() when puck saw it
 inline uint32_t _question_time_limit_ms = 10000;
 inline uint32_t _last_poll_ms = 0;
 inline uint32_t _last_dial_tap_ms = 0;  // for post-TAP input lockout in PAIR_DIALING
+// Last time we touched the server with our puck_id (any match-state poll
+// counts, since the server refreshes last_seen on those). ANSWERING is the
+// only in-game state that does NOT poll match-state, so we explicitly ping
+// /api/sp/heartbeat on this cadence while answering so a long question can't
+// let the ghost-sweep drop us mid-answer (audit followups #4).
+inline uint32_t _last_heartbeat_ms = 0;
+static constexpr uint32_t kAnsweringHeartbeatMs = 5000;  // << GHOST_TIMEOUT_S (30s)
 
 // Track the last quadrant we mirrored to the server during answering
 // so we only POST when it actually changes (network is expensive, the
@@ -386,6 +393,16 @@ inline bool _post_answer(char letter, uint32_t response_time_ms, bool* is_correc
   return true;
 }
 
+// POST /api/sp/heartbeat — explicit "still here" ping. The server bumps
+// last_seen for our puck_id so the ghost-sweep doesn't drop us. Used during
+// ANSWERING, the one in-game state with no match-state poll (audit
+// followups #4). Fire-and-forget; a missed ping is retried next cadence.
+inline void _post_heartbeat() {
+  if (_session_code.length() == 0) return;
+  String body = "{\"puck_id\":" + String(PUCK_ID) + "}";
+  sp_net::post_json("/api/sp/heartbeat", body, nullptr);
+}
+
 // POST /api/trivia/answer-preview — real-time mirror of the currently
 // aimed quadrant so the TV can softly highlight which pill the player
 // is hovering on before they tap to lock.
@@ -631,6 +648,7 @@ inline bool pair_mode_loop() {
          _state == State::IN_GAME_MINIGAME) &&
         now - _last_poll_ms > 500) {
       _last_poll_ms = now;
+      _last_heartbeat_ms = now;  // a match-state poll heartbeats too
 
       // One match-state fetch satisfies complete / pick / minigame (and
       // heartbeats this puck). If the GET failed (ms.ok == false) we hold
@@ -675,6 +693,16 @@ inline bool pair_mode_loop() {
         Serial.println("[STATE] IN_GAME_IDLE -> IN_GAME_ANSWERING");
         _state = State::IN_GAME_ANSWERING;
       }
+    }
+
+    // ANSWERING does NOT poll match-state, so it never refreshes the
+    // server's last_seen. Heartbeat explicitly on a 5s cadence (<< the 30s
+    // ghost timeout) so a long question can't get the puck swept mid-answer
+    // (audit followups #4). Other in-game states heartbeat via the poll above.
+    if (_state == State::IN_GAME_ANSWERING &&
+        millis() - _last_heartbeat_ms > kAnsweringHeartbeatMs) {
+      _last_heartbeat_ms = millis();
+      _post_heartbeat();
     }
 
     // Picker interaction: tilt LEFT/RIGHT scrolls offer index, tap
