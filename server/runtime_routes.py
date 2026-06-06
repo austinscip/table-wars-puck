@@ -36,6 +36,7 @@ GET  /api/runtime/registry
 
 from __future__ import annotations
 
+import atexit
 import os
 from typing import Optional
 
@@ -273,8 +274,9 @@ def _get_container() -> dict:
         token_authority=token_authority,
         lobby_writer=base_writer,
     )
-    scheduler.start()
-    # Restart recovery: rebuild any active matches the store still holds.
+    # Restart recovery BEFORE the tick loop starts (audit 1.7): rebuild any
+    # active matches the store still holds, then start ticking — so the
+    # scheduler never ticks a match that recovery is mid-rebuilding.
     # (Single-worker safe; multi-worker ownership claiming is the next step
     # — see CONTEXT.md.)
     if store is not None:
@@ -284,6 +286,17 @@ def _get_container() -> dict:
                 _log.info("recovered %d active match(es) on boot", len(recovered))
         except Exception:  # noqa: BLE001
             _log.exception("match recovery failed on boot")
+    scheduler.start()
+    # Graceful shutdown: stop the tick loop (no new ticks), then drain the
+    # persistence queue so queued snapshots/scores aren't lost on a SIGTERM
+    # redeploy (audit 1.7). atexit fires on a clean gunicorn worker exit.
+    def _shutdown() -> None:
+        try:
+            scheduler.stop()
+        finally:
+            writer.stop(drain=True)
+
+    atexit.register(_shutdown)
     _container = {
         "writer": base_writer,
         "persistence": writer,

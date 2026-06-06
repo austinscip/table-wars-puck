@@ -14,6 +14,7 @@ monotonic `snapshot_seq` so the TV never renders an older frame on failover.
 
 from __future__ import annotations
 
+import functools
 import threading
 import time
 from dataclasses import dataclass, field
@@ -117,6 +118,10 @@ class Match:
     # to a snapshot. The TV dedupes cues on this strictly-increasing seq
     # instead of a wall-clock ts (which NTP/restart can run backwards).
     cue_seq: int = 0
+    # Monotonic time the match went terminal (finished/abandoned), or None
+    # while live. The reaper evicts terminal matches from MatchManager.matches
+    # after a grace window (audit 1.3); None means "don't reap".
+    terminal_at: Optional[float] = None
     # Per-match monotonic counter stamped onto every *snapshot* (one per
     # state-changing write), distinct from the per-cue cue_seq. Carried on
     # both the local SocketIO emit and the cloud snapshot write so the TV's
@@ -403,12 +408,14 @@ class MatchManager:
     ) -> StateUpdate:
         match = self._must_get(match_id)
         with self._lock_cm(match_id):
-            update, payload = self._on_input_locked(
+            update, payload, deferred = self._on_input_locked(
                 match, match_id, event, event_id
             )
-        # Push to the local TV sink OUTSIDE the lock — never hold the
-        # per-match lock across the socket write (ADR 0004).
+        # Push to the local TV sink AND run the durable match-end writes
+        # OUTSIDE the lock — never hold the per-match lock across a socket
+        # write or a synchronous Supabase round-trip (ADR 0004, audit 1.5).
         self._emit(match, payload)
+        self._run_deferred(deferred, match_id)
         return update
 
     def _on_input_locked(
@@ -417,7 +424,7 @@ class MatchManager:
         match_id: str,
         event: InputEvent,
         event_id: Optional[str],
-    ) -> tuple[StateUpdate, Optional[dict]]:
+    ) -> tuple[StateUpdate, Optional[dict], list]:
         # Idempotency: a retried request (same logical event_id from the
         # same puck in the same match) replays the first response without
         # re-applying the input. Checked before the status guard so a
@@ -434,10 +441,10 @@ class MatchManager:
                 # backed. The side effects (scores, snapshot) already
                 # happened on the first arrival; a replay re-emits no cues
                 # or score events — and no local frame (payload None).
-                return StateUpdate(state=cached), None
+                return StateUpdate(state=cached), None, []
 
         if match.status != "active":
-            return StateUpdate(state=self._safe_state(match)), None
+            return StateUpdate(state=self._safe_state(match)), None, []
 
         match.last_input_at = time.monotonic()
         if self.heartbeat is not None:
@@ -455,7 +462,7 @@ class MatchManager:
                 match_id,
                 event.puck_index,
             )
-            return StateUpdate(state=self._safe_state(match)), None
+            return StateUpdate(state=self._safe_state(match)), None, []
         self._persist_scores(match, update.score_events)
         # Always write a snapshot on input — every input is, by
         # definition, something the player did that the TV should react
@@ -463,15 +470,16 @@ class MatchManager:
         # lock, by the caller) so local and cloud carry the same seq.
         payload = self._snapshot_payload(match, update)
         self.writer.update_match_snapshot(match_id, payload)
+        deferred: list = []
         if update.is_final or match.game.is_over():
-            self._finalize(match)
+            deferred = self._finalize(match)
         else:
             self._persist(match)
         if key is not None and self.idempotency is not None:
             # Store the JSON-able response state for replay (see the get
             # path above). A Redis cache serialises this directly.
             self.idempotency.put(key, update.state)
-        return update, payload
+        return update, payload, deferred
 
     def tick(
         self, match_id: str, dt: float = DEFAULT_TICK_DT
@@ -482,20 +490,28 @@ class MatchManager:
         Defaults to the nominal step so synthetic test ticks are deterministic."""
         match = self._must_get(match_id)
         with self._lock_cm(match_id):
-            update, payload = self._tick_locked(match, match_id, dt)
-        # Push to the local TV sink OUTSIDE the lock (ADR 0004). payload is
-        # None on a no-op tick (no state change), so quiet ticks emit
-        # nothing — emit volume tracks meaningful change, not 10 Hz.
+            update, payload, deferred = self._tick_locked(match, match_id, dt)
+        # Push to the local TV sink + run match-end writes OUTSIDE the lock
+        # (ADR 0004, audit 1.5). payload is None on a no-op tick (no state
+        # change), so quiet ticks emit nothing — volume tracks real change.
         self._emit(match, payload)
+        self._run_deferred(deferred, match_id)
         return update
 
     def _tick_locked(
         self, match: Match, match_id: str, dt: float = DEFAULT_TICK_DT
-    ) -> tuple[StateUpdate, Optional[dict]]:
+    ) -> tuple[StateUpdate, Optional[dict], list]:
         if match.status != "active":
-            return StateUpdate(state=match.game.get_state()), None
+            return StateUpdate(state=self._safe_state(match)), None, []
 
-        update = match.game.tick(dt)
+        try:
+            update = match.game.tick(dt)
+        except Exception:  # noqa: BLE001
+            # Defense in depth: the scheduler already logs+continues on a
+            # tick exception, but containing it here keeps the public tick()
+            # (and any direct caller) safe too.
+            logger.exception("game.tick raised (match=%s); skipping", match_id)
+            return StateUpdate(state=self._safe_state(match)), None, []
 
         # Heartbeat sweep — any puck that hasn't pinged in
         # STALE_THRESHOLD_S gets a PLAYER_LEFT cue appended to this
@@ -539,52 +555,84 @@ class MatchManager:
         if update.score_events or update.cues or update.is_final:
             payload = self._snapshot_payload(match, update)
             self.writer.update_match_snapshot(match_id, payload)
+        deferred: list = []
         if update.is_final or match.game.is_over():
-            self._finalize(match)
+            deferred = self._finalize(match)
         elif self._is_abandoned(match):
             # No natural end and the table's gone quiet — close it out as
             # abandoned so it doesn't sit 'active' forever. Checked after
             # finalisation so a game that ends itself wins the race.
-            self._abandon(match)
+            deferred = self._abandon(match)
         elif update.score_events or update.cues:
             # State changed this tick — persist the durable snapshot.
             self._persist(match)
-        return update, payload
+        return update, payload, deferred
 
     # === Finalise ===
 
-    def _finalize(self, match: Match) -> None:
+    def _run_deferred(self, deferred: list, match_id: str) -> None:
+        """Run the durable match-end writes returned by _finalize/_abandon,
+        OUTSIDE the per-match lock (audit 1.5). The match is already terminal
+        in memory; a cloud failure here is logged, not raised at the puck
+        (the writer's own bounded retry handles transient blips)."""
+        for write in deferred:
+            try:
+                write()
+            except Exception:  # noqa: BLE001
+                logger.exception(
+                    "deferred match-end write failed (match=%s)", match_id
+                )
+
+    def _finalize(self, match: Match) -> list:
+        """In-memory finalise transition under the lock; RETURNS the durable
+        Supabase writes (final scores + finished) for the caller to run
+        outside the lock, so a slow write at match-end never holds it."""
         if match.status == "finished":
-            return
+            return []
         match.status = "finished"
         match.ended_at = datetime.now(timezone.utc)
 
+        deferred: list = []
         finals = match.game.final_scores()
         for puck_index, total in finals.items():
             mp_id = match.match_puck_ids.get(puck_index)
             if mp_id is None:
-                # Puck wasn't in the lobby — final score has nowhere to
-                # land. Skip silently rather than fail the whole finish.
+                # Puck wasn't in the lobby — final score has nowhere to land.
+                logger.warning(
+                    "final score for unknown puck_index %s in match %s; "
+                    "dropped",
+                    puck_index,
+                    match.id,
+                )
                 continue
-            self.writer.insert_score(
-                match_id=match.id,
-                match_puck_id=mp_id,
-                round_number=0,
-                score_delta=0,
-                score_total=total,
-                event_type="final",
+            deferred.append(
+                functools.partial(
+                    self.writer.insert_score,
+                    match_id=match.id,
+                    match_puck_id=mp_id,
+                    round_number=0,
+                    score_delta=0,
+                    score_total=total,
+                    event_type="final",
+                )
             )
-        self.writer.update_match_finished(
-            match_id=match.id, ended_at=match.ended_at
+        deferred.append(
+            functools.partial(
+                self.writer.update_match_finished,
+                match_id=match.id,
+                ended_at=match.ended_at,
+            )
         )
         if self.scheduler is not None:
             self.scheduler.unregister(match.id)
         if self.heartbeat is not None:
             self.heartbeat.drop_match(match.id)
+        match.terminal_at = time.monotonic()
         self._drop_lock(match.id)
         if self.store is not None:
             self.store.delete(match.id)
         logger.info("match %s finished", match.id)
+        return deferred
 
     def _is_abandoned(self, match: Match) -> bool:
         """A still-active match is abandoned when every puck has gone
@@ -597,22 +645,30 @@ class MatchManager:
             return False
         return (time.monotonic() - match.last_input_at) >= self.abandon_after_s
 
-    def _abandon(self, match: Match) -> None:
+    def _abandon(self, match: Match) -> list:
+        """In-memory abandon transition; RETURNS the durable write for the
+        caller to run outside the lock (audit 1.5)."""
         if match.status != "active":
-            return
+            return []
         match.status = "abandoned"
         match.ended_at = datetime.now(timezone.utc)
-        self.writer.update_match_abandoned(
-            match_id=match.id, ended_at=match.ended_at
-        )
+        deferred: list = [
+            functools.partial(
+                self.writer.update_match_abandoned,
+                match_id=match.id,
+                ended_at=match.ended_at,
+            )
+        ]
         if self.scheduler is not None:
             self.scheduler.unregister(match.id)
         if self.heartbeat is not None:
             self.heartbeat.drop_match(match.id)
+        match.terminal_at = time.monotonic()
         self._drop_lock(match.id)
         if self.store is not None:
             self.store.delete(match.id)
         logger.info("match %s abandoned (all pucks stale, no input)", match.id)
+        return deferred
 
     # === Internals ===
 
