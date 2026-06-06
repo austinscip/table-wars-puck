@@ -77,3 +77,14 @@ jobs:
         # Scoped to src/lib: App.test.tsx fails on a pre-existing
         # @react-navigation jest transform issue, tracked separately.
         run: npx jest src/lib
+
+  firmware-tests:
+    name: Firmware host tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pure host-side unit tests for src/hal/sp_json.h (the puck's JSON
+      # parsers) via a minimal Arduino String shim — no ESP32 toolchain.
+      - name: sp_json parser tests
+        run: ./testing/firmware/run.sh

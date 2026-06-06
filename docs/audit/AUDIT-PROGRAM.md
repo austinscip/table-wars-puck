@@ -39,7 +39,7 @@ playbook below.
 | F1–F4 games — logic (`server/games/*.py`) | 🟡 partial | runtime audit covered disconnect/scoring/serialize; do a dedicated per-game exploit/edge pass |
 | F1–F4 games — TV views (`TableWarsTV/src/screens/games/*`) | ⬜ TODO | render robustness vs malformed snapshots, missing fields |
 | C — Polish system (cues `runtime/cues.py`, `useCues`, audio, VO `server/voices`, LED) | ⬜ TODO | cue ordering/dispatch, audio pipeline, asset handling |
-| D — Firmware (ESP32 C++, `src/`) | ⬜ TODO | **highest-stakes / hardest to patch.** Memory safety, buffer overflows, OTA signature/rollback, ESP-NOW parsing, watchdog, battery, NVS |
+| D — Firmware (ESP32 C++, live Speed Pyramid path) | ✅ done (2026-06-06) | `firmware-2026-06-06.md`. Heartbeat/ghost-sweep, WiFi reconnect, consolidated polling, secrets-in-repo, answer-loss, broken prod build env + more. First firmware host-test harness (`testing/firmware/`). Legacy monoliths / OTA / NVS provisioning / TLS deferred with rationale. |
 | E — Customer self-serve (attract, onboarding) | ⬜ TODO | mostly unbuilt; audit what exists |
 | Portal (Next.js, `portal/`) | ⬜ TODO | auth, RLS reliance, XSS, server actions, secrets |
 | Legacy Flask stack (`multiplayer_routes`, `trivia_routes`, `tv_game_routes`, `app.py`) | ⬜ TODO | older code still mounted; admin auth gate added but not fully audited |
