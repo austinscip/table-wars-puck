@@ -9,7 +9,7 @@ import logging
 import os
 
 from runtime import harden_secrets, redact
-from runtime.log import RedactingFilter, scrub_env
+from runtime.log import RedactingFilter, _scrub_event, scrub_env
 
 
 def test_redacts_postgres_dsn():
@@ -36,6 +36,43 @@ def test_token_eq_value_fully_redacted():
 def test_redacts_keyed_secrets():
     assert "hunter2" not in redact("password=hunter2&user=bob")
     assert "abc123" not in redact("api_key=abc123")
+
+
+def test_redacts_bearer_authorization_header():
+    out = redact("Authorization: Bearer puck2024SECRETtoken")
+    assert "puck2024SECRETtoken" not in out
+    assert "Bearer <redacted>" in out
+
+
+def test_scrub_event_redacts_secrets_in_a_sentry_event_shape():
+    # A Sentry event still carrying a secret in an exception message, a
+    # leftover frame var, and a breadcrumb -> all must be redacted before send.
+    event = {
+        "exception": {
+            "values": [
+                {
+                    "value": "boom while connecting to "
+                    "postgresql://u:topsecret@db/app",
+                    "stacktrace": {
+                        "frames": [
+                            {"vars": {"auth": "Bearer abc.def.SIGNATUREXYZ"}},
+                        ]
+                    },
+                }
+            ]
+        },
+        "breadcrumbs": {
+            "values": [{"message": "set token=leakedvalue123"}],
+        },
+        "extra": {"safe": 42, "count": [1, 2, 3]},
+    }
+    scrubbed = _scrub_event(event)
+    flat = repr(scrubbed)
+    assert "topsecret" not in flat
+    assert "SIGNATUREXYZ" not in flat
+    assert "leakedvalue123" not in flat
+    # Non-secret data is preserved unchanged.
+    assert scrubbed["extra"] == {"safe": 42, "count": [1, 2, 3]}
 
 
 def test_redacting_filter_scrubs_record_args():

@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 import os
 import re
-from typing import Optional
+from typing import Any, Optional
 
 
 _LOG_CONFIGURED = False
@@ -39,6 +39,9 @@ _REDACTIONS = [
     (re.compile(r"(eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.)[A-Za-z0-9_-]+"), r"\1<redacted>"),
     # password=... / api_key=... in any query-string-ish blob
     (re.compile(r"((?:password|api[_-]?key|secret|token)=)[^\s&;]+", re.I), r"\1<redacted>"),
+    # Authorization: Bearer <opaque-token> -> redact. The (?!eyJ) lookahead
+    # leaves JWTs for the rule above (which keeps header.payload for debugging).
+    (re.compile(r"(Bearer\s+)(?!eyJ)[A-Za-z0-9._~+/=-]+", re.I), r"\1<redacted>"),
 ]
 
 
@@ -46,6 +49,24 @@ def redact(text: str) -> str:
     for pattern, repl in _REDACTIONS:
         text = pattern.sub(repl, text)
     return text
+
+
+def _scrub_event(event: Any, _depth: int = 0) -> Any:
+    """Recursively redact secret-looking substrings from a Sentry event before
+    it ships off-box. Belt-and-suspenders on top of the init() hardening below
+    (frame locals + request bodies disabled): catches a DSN / JWT / Bearer
+    token / password that slipped into an exception message, a breadcrumb, a
+    tag, or a remaining stack-frame var. Pure + depth-bounded so it's
+    unit-testable without the Sentry SDK installed."""
+    if _depth > 16:
+        return event
+    if isinstance(event, dict):
+        return {k: _scrub_event(v, _depth + 1) for k, v in event.items()}
+    if isinstance(event, (list, tuple)):
+        return [_scrub_event(v, _depth + 1) for v in event]
+    if isinstance(event, str):
+        return redact(event)
+    return event
 
 
 class RedactingFilter(logging.Filter):
@@ -140,6 +161,15 @@ def init_sentry() -> bool:
             os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.0")
         ),
         environment=os.environ.get("ENVIRONMENT", "dev"),
+        # Privacy hardening (audit observability-2026-06-06): don't ship PII,
+        # exception stack-frame LOCAL VARIABLES (which routinely hold a DB
+        # password / JWT / token), or request BODIES (puck answers, tokens).
+        # before_send is the final net — it redacts any secret that still
+        # slipped into a message/breadcrumb/tag.
+        send_default_pii=False,
+        include_local_variables=False,
+        max_request_body_size="never",
+        before_send=lambda event, _hint: _scrub_event(event),
     )
     _SENTRY_INITED = True
     return True
