@@ -45,7 +45,7 @@ playbook below.
 | Portal (Next.js, `portal/`) | ✅ done (2026-06-06) | `portal-2026-06-06.md`. DAL authz guards (layout-only authz → co-located check), security headers, metadata/noindex, .env.example. Anon-key-only + CSRF framework-handled verified solid. Open-signup + email-enum deferred to Supabase dashboard (owner). |
 | Legacy Flask stack (`multiplayer_routes`, `trivia_routes`, `tv_game_routes`, `app.py`) | ✅ done (2026-06-06) | `legacy-flask-2026-06-06.md`. Fixed: DEBUG-default RCE, reflected XSS, socket CORS `*`, /api/score validation, SECRET_KEY fallback. No SQLi found (solid). Open game endpoints documented as by-design puck protocol (superseded by Speed Pyramid) — mitigate via network isolation, not per-route auth. First app.py route test. |
 | Observability (Sentry/PostHog) | ✅ done (2026-06-06) | `observability-2026-06-06.md`. Fixed Sentry secret/PII leak (frame locals + request bodies + before_send scrub) + Bearer redaction. Log redactor verified solid. Client-side remote capture + PostHog deferred (feature, needs DSN/product decision). |
-| Deploy / ops (Dockerfile, systemd, secrets) | 🟡 partial | hardened during runtime work; do a dedicated pass |
+| Deploy / ops (Dockerfile, systemd, secrets) | ✅ done (2026-06-06) | `deploy-2026-06-06.md`. compose secrets fail-closed, postgres host port removed, no-new-privileges, healthcheck, systemd StartLimit fix, nginx Referrer-Policy. Dockerfile/systemd hardening verified solid. Worker-class unify + nginx rate-limit (NAT'd pucks) deferred w/ rationale. |
 
 ## Suggested order (highest risk / leverage first)
 
