@@ -66,6 +66,27 @@ def test_answer_requires_valid_puck_token(monkeypatch, tmp_path):
         assert pair_routes._SP_STATE[sc]["current_round_answers"][2]["answer"] == "A"
 
 
+def test_control_plane_requires_operator_token_when_configured(monkeypatch, tmp_path):
+    """When SP_OPERATOR_TOKEN is set, the TV-only control plane (force-reveal)
+    rejects a call without the operator token, so a random LAN device can't
+    cut every round short. Unset (dev) it stays open."""
+    monkeypatch.setenv("SP_OPERATOR_TOKEN", "op-secret")
+    with sp_harness(monkeypatch, tmp_path) as h:
+        sc = h.pair_full([1, 2])
+        h.advance_to_question(sc)
+        # No operator token -> 401.
+        r = h.client.post(f"/api/sp/force-reveal/{sc}")
+        assert r.status_code == 401
+        # Wrong token -> 401.
+        r = h.client.post(f"/api/sp/force-reveal/{sc}",
+                          headers={"X-Operator-Token": "nope"})
+        assert r.status_code == 401
+        # Correct operator token -> allowed.
+        r = h.client.post(f"/api/sp/force-reveal/{sc}",
+                          headers={"X-Operator-Token": "op-secret"})
+        assert r.status_code == 200
+
+
 def test_non_host_cannot_start_without_token(monkeypatch, tmp_path):
     """Spoofing the host_puck_id can't start the match without the host's token."""
     with sp_harness(monkeypatch, tmp_path) as h:

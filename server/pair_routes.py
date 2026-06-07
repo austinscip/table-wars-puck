@@ -39,6 +39,7 @@ from trivia_database import (
     get_random_question,
 )
 from database import execute_query, get_placeholder
+from admin_auth import require_operator, require_admin
 
 pair_bp = Blueprint("pair", __name__, url_prefix="/api/pair")
 sp_bp = Blueprint("sp", __name__, url_prefix="/api/sp")
@@ -488,6 +489,7 @@ def lobby_state():
 
 
 @pair_bp.route("/clear", methods=["POST"])
+@require_admin()
 def clear_lobby_endpoint():
     """Admin/debug: full server reset. Clears the active lobby AND every
     cached Speed Pyramid session state + question tracker. Without the
@@ -1888,6 +1890,7 @@ def sp_final_results(session_code: str):
 
 
 @sp_bp.route("/reset/<session_code>", methods=["POST"])
+@require_operator
 def sp_reset(session_code: str):
     # Play-Again reuses the SAME trivia_sessions row, so the prior match's
     # trivia_answers rows must be cleared. final-results aggregates
@@ -2294,6 +2297,7 @@ def sp_minigame_fire():
 
 
 @sp_bp.route("/minigame/finish/<session_code>", methods=["POST"])
+@require_operator
 def sp_minigame_finish(session_code: str):
     """Slice E2 — TV-side belt-and-suspenders. Forces resolution at
     the deadline so a missed puck fire doesn't strand the match."""
@@ -2363,6 +2367,7 @@ def sp_select_category(session_code: str):
 
 
 @sp_bp.route("/start-timer/<session_code>", methods=["POST"])
+@require_operator
 def sp_start_timer(session_code: str):
     """Mark the question countdown as starting NOW. Decouples the timer
     from question-load so the TV can pause the countdown during the
@@ -2395,6 +2400,7 @@ def sp_start_timer(session_code: str):
 
 
 @sp_bp.route("/force-reveal/<session_code>", methods=["POST"])
+@require_operator
 def sp_force_reveal(session_code: str):
     """Called by the TV when the question timer expires. Forces the
     aggregate reveal, marking unanswered pucks as TIMEOUT."""

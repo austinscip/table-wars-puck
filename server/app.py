@@ -841,7 +841,32 @@ def speed_pyramid_app(subpath: str | None = None):
         candidate = os.path.join(SPEED_PYRAMID_DIST, subpath)
         if os.path.isfile(candidate):
             return send_from_directory(SPEED_PYRAMID_DIST, subpath)
-    return send_from_directory(SPEED_PYRAMID_DIST, 'index.html')
+    return _serve_tv_index()
+
+
+def _serve_tv_index():
+    """Serve the SPA index, injecting the operator token (when SP_OPERATOR_TOKEN
+    is set) as a meta tag the TV reads to authenticate its control-plane calls
+    (force-reveal / start-timer / minigame-finish / reset). The token only
+    reaches a client that loads the actual TV page, not a blind script — the
+    realistic griefing vector. When the env is unset, serve the static file
+    unchanged (dev fast path)."""
+    op = os.environ.get('SP_OPERATOR_TOKEN')
+    index_path = os.path.join(SPEED_PYRAMID_DIST, 'index.html')
+    if not op or not os.path.isfile(index_path):
+        return send_from_directory(SPEED_PYRAMID_DIST, 'index.html')
+    try:
+        from markupsafe import escape
+        with open(index_path, 'r', encoding='utf-8') as f:
+            html = f.read()
+        meta = f'<meta name="sp-operator-token" content="{escape(op)}">'
+        html = html.replace('<head>', '<head>' + meta, 1) if '<head>' in html \
+            else meta + html
+        resp = app.make_response(html)
+        resp.headers['Content-Type'] = 'text/html; charset=utf-8'
+        return resp
+    except OSError:
+        return send_from_directory(SPEED_PYRAMID_DIST, 'index.html')
 
 # ============================================================================
 # MAIN

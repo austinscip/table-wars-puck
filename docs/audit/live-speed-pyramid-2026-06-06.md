@@ -192,3 +192,26 @@ longer a bare assertion on writes:
 
 The TV control-plane endpoints (`force-reveal`/`start-timer`/`minigame/finish`)
 remain operator-trusted (separate operator-token concern, still deferred).
+
+---
+
+## Follow-up (2026-06-06): operator token for the TV control plane
+
+The TV-only control-plane endpoints (`force-reveal`, `start-timer`,
+`minigame/finish`, `reset`) were callable by any LAN device — a griefing vector
+(cut every round short, spam the timer, end a minigame early). They're now gated
+by `require_operator` on `SP_OPERATOR_TOKEN`, mirroring the opt-in `require_admin`
+posture: enforced (401) when the env is set, open + a loud log in dev so test/dev
+flows are unchanged. `/api/pair/clear` (full reset) is gated with `require_admin`.
+
+The token is delivered to the TV by injecting a `<meta name="sp-operator-token">`
+into the served SPA HTML (`app.py:_serve_tv_index`) only when the env is set;
+the web TV reads it (`lib/api.ts operatorHeaders`) and sends `X-Operator-Token`
+on those four calls. It only reaches a client that loads the actual TV page (not
+a blind script / a guest on the join flow) — the realistic vector. A truly
+secret-free control plane would require serving the TV from an authenticated
+kiosk, a deployment decision left to the owner.
+
+Distinct from the per-puck token (which protects answer/score writes); this
+protects the operator/TV plane. Test: with `SP_OPERATOR_TOKEN` set, force-reveal
+is 401 without / with a wrong token and 200 with the right one.

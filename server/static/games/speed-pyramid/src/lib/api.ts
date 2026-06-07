@@ -3,10 +3,35 @@
 // (localhost:5001), Railway (tablewars.up.railway.app), or any custom
 // domain without rebuild.
 
-async function postJson<T>(path: string, body: unknown): Promise<T> {
+// Operator token for the TV-only control plane (force-reveal / start-timer /
+// minigame-finish / reset). The server injects it as a <meta> tag into the TV
+// page when SP_OPERATOR_TOKEN is configured; absent in dev (gate open). Read
+// once and cached.
+let _operatorToken: string | null = null
+function operatorToken(): string {
+  if (_operatorToken === null) {
+    const el = typeof document !== 'undefined'
+      ? document.querySelector('meta[name="sp-operator-token"]')
+      : null
+    _operatorToken = el?.getAttribute('content') ?? ''
+  }
+  return _operatorToken
+}
+
+/** Header bundle carrying the operator token, for control-plane POSTs. */
+export function operatorHeaders(): Record<string, string> {
+  const tok = operatorToken()
+  return tok ? { 'X-Operator-Token': tok } : {}
+}
+
+async function postJson<T>(
+  path: string,
+  body: unknown,
+  extraHeaders: Record<string, string> = {},
+): Promise<T> {
   const res = await fetch(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...extraHeaders },
     body: JSON.stringify(body),
   })
   if (!res.ok) {
@@ -148,6 +173,7 @@ export const api = {
       postJson<{ ok: boolean; session_code: string }>(
         `/api/sp/reset/${session_code}`,
         {},
+        operatorHeaders(),
       ),
     answer: (
       session_code: string,
@@ -174,11 +200,13 @@ export const api = {
       postJson<{ ok: boolean; emitted: boolean }>(
         `/api/sp/force-reveal/${session_code}`,
         {},
+        operatorHeaders(),
       ),
     startTimer: (session_code: string) =>
       postJson<{ ok: boolean; started_at: number }>(
         `/api/sp/start-timer/${session_code}`,
         {},
+        operatorHeaders(),
       ),
     selectCategory: (
       session_code: string,
@@ -208,6 +236,7 @@ export const api = {
       postJson<{ ok: boolean; emitted?: boolean; noop?: boolean }>(
         `/api/sp/minigame/finish/${session_code}`,
         {},
+        operatorHeaders(),
       ),
     minigamePreview: (
       session_code: string,
