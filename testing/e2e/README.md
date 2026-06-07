@@ -43,21 +43,32 @@ across a whole match** — a regression in how the pick→minigame→question→
 transitions chain, or in cumulative scoring across 7 rounds, surfaces here even
 when each unit still passes.
 
-## Deferred: the browser-rendered layer (owner / next step)
+## Browser-rendered layer (now built) — `test_browser_tv.py`
 
-The one thing this scaffold does NOT do is render the actual **web TV SPA in a
-browser**. The server-side e2e asserts the *events* the TV consumes, but not that
-the React app paints them correctly (that's covered piecemeal by the web TV's
-vitest unit tests + the ErrorBoundary). A full browser e2e would:
+A real headless **Chromium (Playwright)** renders the actual built TV bundle
+served by the real Flask app, and drives it over the wire:
 
-1. `npm --prefix server/static/games/speed-pyramid run build` to produce `dist/`,
-2. boot the real Flask app (`SP_PERSIST_DISABLE=1`, a temp DB, a free port),
-3. open `/tv/speed-pyramid` in a headless browser (Playwright),
-4. run a scripted puck (HTTP via the `pair`/`sp` endpoints, carrying its token)
-   through a full match,
-5. assert the TV DOM transitions (title → lobby → question → reveal →
-   scoreboard) and that the operator-token control-plane calls succeed.
+- `test_tv_title_renders` — the React SPA actually paints ("SPEED PYRAMID" +
+  the pair prompt) when Flask serves `dist/`. Proves the build + serve + render
+  path, not just the data.
+- `test_tv_navigates_to_pair_when_a_puck_requests` — the TV's title screen joins
+  the lobby room on its socket; a puck `POST /api/pair/request` makes the server
+  emit `pair_started`, and **the browser navigates itself to the pair screen** —
+  a genuine Flask + Socket.IO + browser round-trip.
 
-This needs a browser in CI (Playwright) + the built bundle, so it's left as the
-next infra step. The server-side e2e above is the foundation it would layer on:
-the same match-driving flow, with a browser observing the rendered result.
+`conftest.py` boots `python app.py` on a free port (`SP_MDNS_DISABLE` +
+`SP_PERSIST_DISABLE`), waits for readiness, and tears it down.
+
+Run it (kept out of the main suite — it needs a browser):
+
+```bash
+cd server && . venv/bin/activate
+python -m playwright install chromium      # one time
+python -m pytest ../testing/e2e -q
+```
+
+CI runs it as the **`browser-e2e`** job (builds the bundle + installs Playwright
+chromium). The server-side full-match e2e covers the deep game logic; this covers
+that the TV actually renders and reacts. The remaining stretch (driving a *full
+match* in the browser end-to-end and asserting the scoreboard DOM) layers
+directly on this — same fixture, more steps.
