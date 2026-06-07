@@ -19,6 +19,7 @@
 #include "../hal/sp_feedback.h"
 #include "../hal/sp_net.h"
 #include "../hal/sp_json.h"
+#include "../hal/sp_ota.h"
 
 #ifndef PUCK_ID
 #define PUCK_ID 1
@@ -463,6 +464,9 @@ inline void begin() {
   sp_led::begin();
   sp_feedback::begin();
   sp_net::connect();
+  // If we just booted into a freshly-OTA'd image and reconnected, confirm it
+  // healthy so the bootloader won't roll it back (no-op otherwise).
+  sp_ota::markHealthy();
   sp_led::clear();
   _state = State::IDLE;
   _dial_pos = 0;
@@ -477,6 +481,12 @@ inline bool pair_mode_loop() {
 
   // Idle: HOLD_1S enters pair mode.
   if (_state == State::IDLE) {
+    // While genuinely idle (no button activity), allow a rate-limited signed-
+    // OTA check. Refuses anything not signed by the operator's key, so it's a
+    // safe no-op until OTA is provisioned; never runs mid-game (IDLE only).
+    if (be == SpButtonEvent::NONE) {
+      sp_ota::maybePeriodicCheck(String(SPEED_PYRAMID_SERVER_URL), PUCK_ID);
+    }
     if (be == SpButtonEvent::HOLD_1S) {
       _state = State::PAIR_REQUESTING;
       sp_feedback::beep(1500, 60);

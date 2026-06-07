@@ -29,15 +29,16 @@ a known-good copy to roll back to.
 | Signing core (`server/firmware_signing.py`) — ECDSA P-256 sign/verify/hash | ✅ done + host-tested (`tests/test_firmware_signing.py`) |
 | Keygen + sign CLIs (`server/tools/firmware_keygen.py`, `firmware_sign.py`) | ✅ done |
 | Server distribution (`firmware_routes.py`) — SHA-256 + signature in manifest, publish-time verify, `/firmware/version` surfaces it | ✅ done + tested |
-| **Firmware OTA client** — check / download / **mbedTLS-verify** / install via `Update.h` with **A/B-partition rollback** | 🔜 next chunk — **compile-only; MUST pass a hardware smoke test before any field use** (untested on-device crypto is dangerous) |
+| **Firmware OTA client** (`src/hal/sp_ota.h`) — check / stream-download / SHA-256 + **mbedTLS ECDSA verify** / install via `Update.h`, with rollback hooks (`markHealthy`) | ✅ built + **compile-verified** (both prod + dev envs; +136 KB, still fits the 1.25 MB slot with the other slot free). Wired into the live firmware: `markHealthy()` on boot, a rate-limited check only in IDLE. **MUST pass the hardware smoke (below) before field use** — on-device crypto is untested until then; fail-closed in the meantime (placeholder key + unsigned images are refused). |
 
-## How to use (once the firmware client lands)
+## How to use
 
 ```bash
 # 1. ONE TIME — generate your keypair (keep the private .pem safe).
 cd server && python tools/firmware_keygen.py
-#    -> paste the printed FIRMWARE_PUBKEY_PEM into src/hal/sp_ota_pubkey.h,
-#       reflash pucks ONCE over USB so they carry your public key.
+#    -> paste the printed FIRMWARE_PUBKEY_PEM into src/hal/sp_ota_pubkey.h
+#       (it currently holds a placeholder that REFUSES all OTA), then reflash
+#       pucks ONCE over USB so they carry your public key.
 
 # 2. Build firmware, then sign + publish from your laptop:
 python tools/firmware_sign.py .pio/build/puck1_speed_pyramid/firmware.bin \
