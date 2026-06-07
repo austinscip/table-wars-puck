@@ -83,3 +83,10 @@ server/static/games/speed-pyramid/audio/questions/.piper_backup/
 # every POST by state_persistence.py
 server/state_snapshot.json
 server/state_snapshot.json.tmp
+
+# Firmware-signing operator SECRET — never commit
+firmware_private_key.pem
+server/firmware_private_key.pem
+server/tools/firmware_private_key.pem
+# Uploaded firmware binaries / manifest (server-local artifacts)
+server/firmware_versions/

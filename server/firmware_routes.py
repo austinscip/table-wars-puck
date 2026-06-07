@@ -10,8 +10,28 @@ import hashlib
 import json
 
 from admin_auth import require_admin
+import firmware_signing
 
 firmware_bp = Blueprint('firmware', __name__)
+
+
+def _operator_public_pem():
+    """The operator's firmware-signing PUBLIC key (PEM bytes) if configured via
+    FIRMWARE_PUBLIC_KEY_PATH, else None. Used to verify an uploaded signature at
+    publish time so a wrong/missing signature is caught before a puck ever sees
+    it. The puck verifies independently against its embedded copy."""
+    path = os.environ.get('FIRMWARE_PUBLIC_KEY_PATH')
+    if path and os.path.isfile(path):
+        with open(path, 'rb') as f:
+            return f.read()
+    return None
+
+
+def _version_info(manifest, version):
+    for v in manifest.get('versions', []):
+        if v.get('version') == version:
+            return v
+    return {}
 
 # ============================================================================
 # CONFIGURATION
@@ -112,6 +132,10 @@ def check_version():
 
     md5_checksum = calculate_md5(firmware_path)
     file_size = os.path.getsize(firmware_path)
+    # Authenticity: surface the stored SHA-256 + ECDSA signature so the puck
+    # can verify the image came from the operator (not a prankster on the bar
+    # Wi-Fi) before installing. MD5 is kept only for backward-compat.
+    info = _version_info(load_manifest(), latest_version)
 
     response = {
         "version": latest_version,
@@ -119,6 +143,10 @@ def check_version():
         "update_available": latest_version != current_version,
         "url": f"/firmware/download/{latest_version}",
         "md5": md5_checksum,
+        "sha256": info.get("sha256", ""),
+        "signature": info.get("signature", ""),
+        "pubkey_fingerprint": info.get("pubkey_fingerprint", ""),
+        "signed": bool(info.get("signature")),
         "size": file_size,
         "release_date": datetime.now().isoformat()
     }
@@ -270,9 +298,30 @@ def upload_firmware():
     firmware_path = get_firmware_path(version)
     file.save(firmware_path)
 
-    # Calculate MD5
-    md5_checksum = calculate_md5(firmware_path)
+    with open(firmware_path, 'rb') as f:
+        data = f.read()
+    md5_checksum = calculate_md5(firmware_path)  # back-compat
+    sha256 = firmware_signing.sha256_hex(data)
     file_size = os.path.getsize(firmware_path)
+
+    # Signature (operator signed the binary locally with their private key;
+    # the private key never touches the server). If a public key is configured,
+    # VERIFY at publish time so a wrong/missing signature is caught here rather
+    # than failing silently on every puck.
+    signature = (request.form.get('signature') or '').strip()
+    pub = _operator_public_pem()
+    pubkey_fp = ''
+    if pub is not None:
+        pubkey_fp = firmware_signing.public_key_fingerprint(pub)
+        if not signature:
+            os.remove(firmware_path)
+            return jsonify({"error": "signature required (a signing public key "
+                                     "is configured); sign with "
+                                     "tools/firmware_sign.py"}), 400
+        if not firmware_signing.verify(data, signature, pub):
+            os.remove(firmware_path)
+            return jsonify({"error": "signature does not verify against the "
+                                     "configured public key"}), 400
 
     # Update manifest
     manifest = load_manifest()
@@ -281,6 +330,9 @@ def upload_firmware():
         "version": version,
         "upload_date": datetime.now().isoformat(),
         "md5": md5_checksum,
+        "sha256": sha256,
+        "signature": signature,
+        "pubkey_fingerprint": pubkey_fp,
         "size": file_size,
         "release_notes": release_notes
     }
@@ -302,6 +354,8 @@ def upload_firmware():
         "message": "Firmware uploaded successfully",
         "version": version,
         "md5": md5_checksum,
+        "sha256": sha256,
+        "signed": bool(signature),
         "size": file_size
     })
 
