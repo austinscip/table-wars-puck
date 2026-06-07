@@ -6,6 +6,7 @@ import { api, type SpeedPyramidQuestion } from '../lib/api'
 import { audio } from '../lib/audio'
 import AnswerPill from '../components/AnswerPill'
 import TimerBar from '../components/TimerBar'
+import OnboardingOverlay from '../components/OnboardingOverlay'
 
 type Phase = 'awaiting_question' | 'answering' | 'reveal'
 
@@ -603,6 +604,10 @@ export default function QuestionScreen() {
 
   return (
     <main className="relative flex h-full w-full flex-row gap-8 px-8 py-8">
+      {/* Track E — first-time 'how to play' card for a cold walk-up. Self-gates
+          (shows once per browser via localStorage) and auto-fades, so it only
+          ever appears on a TV's very first question. */}
+      <OnboardingOverlay />
       {/* Slice G — ROUND N intro card. Fires once per round during
           host narration (phase='awaiting_question'), fades out before
           answering begins. AnimatePresence keyed on round so the
