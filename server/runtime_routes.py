@@ -59,6 +59,7 @@ from runtime import (
     configure_logging,
     get_logger,
     init_sentry,
+    init_analytics,
     harden_secrets,
     registry as game_registry,
     event_from_dict,
@@ -158,6 +159,7 @@ def _get_container() -> dict:
     # tick-loop exception is captured rather than lost to stdout.
     configure_logging()
     init_sentry()
+    init_analytics()  # PostHog — dormant unless POSTHOG_API_KEY is set
 
     # Fail FAST on missing security config in a production-marked deploy,
     # before any expensive setup — refuse to run with spoofable puck input

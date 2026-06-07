@@ -33,6 +33,7 @@ from .cues import Cue, CueEvent
 from .heartbeat import HeartbeatTracker
 from .idempotency import IdempotencyCache
 from .log import get_logger
+from .analytics import capture as _analytics_capture
 from .registry import GameRegistry
 
 logger = get_logger("match")
@@ -489,6 +490,12 @@ class MatchManager:
             table_number,
             len(players),
         )
+        # Product analytics (no-op unless PostHog is configured). Non-PII:
+        # venue id as distinct_id, game + table + player COUNT only.
+        _analytics_capture(location_id, "match_created", {
+            "match_id": match_id, "game_slug": game_slug,
+            "table_number": table_number, "player_count": len(players),
+        })
         return match
 
     # === Drive ===
@@ -761,6 +768,13 @@ class MatchManager:
         if self.store is not None:
             self.store.delete(match.id)
         logger.info("match %s finished", match.id)
+        _analytics_capture(match.location_id, "match_finished", {
+            "match_id": match.id, "game_slug": match.game_slug,
+            "table_number": match.table_number,
+            "player_count": len(match.players),
+            "duration_s": round(
+                (match.ended_at - match.started_at).total_seconds(), 1),
+        })
         return deferred
 
     def _is_abandoned(self, match: Match) -> bool:
@@ -804,6 +818,13 @@ class MatchManager:
         if self.store is not None:
             self.store.delete(match.id)
         logger.info("match %s abandoned (all pucks stale, no input)", match.id)
+        _analytics_capture(match.location_id, "match_abandoned", {
+            "match_id": match.id, "game_slug": match.game_slug,
+            "table_number": match.table_number,
+            "player_count": len(match.players),
+            "duration_s": round(
+                (match.ended_at - match.started_at).total_seconds(), 1),
+        })
         return deferred
 
     # === Internals ===

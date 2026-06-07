@@ -83,9 +83,10 @@ else:
 # When SENTRY_DSN is set (and sentry-sdk is installed) Sentry auto-
 # instruments Flask + the logging path, so the error handler below and any
 # logger.exception() ship off-box; otherwise both no-op cleanly.
-from runtime import configure_logging, init_sentry, get_logger
+from runtime import configure_logging, init_sentry, init_analytics, get_logger
 configure_logging()
 init_sentry()
+init_analytics()  # PostHog product analytics — dormant unless POSTHOG_API_KEY set
 _flask_log = get_logger("flask")
 # async_mode='threading' avoids the werkzeug websocket-upgrade quirk
 # on Python 3.14 dev server ("write() before start_response"). It also

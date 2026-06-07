@@ -32,3 +32,8 @@ zeroconf>=0.140.0
 # init_sentry() no-ops when sentry_sdk is absent or SENTRY_DSN is unset —
 # but installed in prod so tick-loop exceptions ship off-box.
 sentry-sdk>=2.0.0
+
+# Product analytics (PostHog) — OPTIONAL + dormant. runtime.init_analytics()
+# no-ops unless POSTHOG_API_KEY is set AND this is installed, so it's left
+# commented until the operator opts in (then: uncomment + set the key).
+# posthog>=3.0.0

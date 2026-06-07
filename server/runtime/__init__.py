@@ -55,6 +55,7 @@ from .log import (
     harden_secrets,
     redact,
 )
+from .analytics import init_analytics, capture as capture_event
 from .cues import (
     Cue,
     CueChannel,
@@ -106,6 +107,8 @@ __all__ = [
     "init_sentry",
     "harden_secrets",
     "redact",
+    "init_analytics",
+    "capture_event",
     "Cue",
     "CueChannel",
     "CueEvent",

@@ -115,3 +115,22 @@ matches `=` **or** `:` and a sensitive word anywhere in a `[\w-]` key. (The
 `test_logging.py` cases cover the colon/padded-key forms and a structured Sentry
 event with secrets in `request.data`/`extra`/`tags`; non-secret structured data
 is verified preserved.
+
+---
+
+## Follow-up (2026-06-07): PostHog product-analytics plumbing (O4 → built, dormant)
+
+O4 (PostHog) was deferred pending a product decision. The **plumbing** is now
+built so that decision no longer needs a code change — and it commits to nothing:
+`runtime/analytics.py` (`init_analytics` + `capture`) is a **no-op unless
+`POSTHOG_API_KEY` is set AND the `posthog` SDK is installed** (mirrors the Sentry
+posture; the SDK is left commented in `requirements.txt`). The `MatchManager`
+fires `match_created` / `match_finished` / `match_abandoned` for **all four
+runtime games** (per-game pilot analytics, master-plan step 63), carrying only
+**non-PII** props (game slug, table number, player COUNT, duration, status) with
+the venue `location_id` as `distinct_id` — no puck answers, names, phone hashes,
+or tokens. Capture never raises into gameplay.
+
+To enable: `pip install posthog` + set `POSTHOG_API_KEY` (and optionally
+`POSTHOG_HOST`). Tests (`test_analytics.py`): no-op when unconfigured, forwards
+when configured, a real match emits created+finished with no PII keys.
