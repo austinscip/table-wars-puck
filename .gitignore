@@ -32,6 +32,8 @@ package-lock.json
 # actions/setup-node cache-dependency-path. Without it the job fails at the
 # cache step before any code runs.
 !TableWarsTV/package-lock.json
+# Same for the web TV (speed-pyramid) — the browser-e2e CI job npm-ci's + builds it.
+!server/static/games/speed-pyramid/package-lock.json
 
 # Playwright
 tests/playwright-report/
