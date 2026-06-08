@@ -24,6 +24,9 @@ export default async function AdminDashboard() {
     { data: pucks },
     { data: tvs },
     { data: firmware },
+    { data: recentMatches },
+    { count: totalMatches },
+    { count: activeMatches },
   ] = await Promise.all([
     supabase.from("tenants").select("id, name, slug, status, created_at"),
     supabase.from("organizations").select("id, name, tenant_id"),
@@ -45,7 +48,40 @@ export default async function AdminDashboard() {
       .select("id, version, channel, hw_revision, released_at")
       .order("released_at", { ascending: false })
       .limit(10),
+    // Recent activity — what's actually being played (joins the game name +
+    // venue). The per-game analytics live in PostHog (server-side); this is the
+    // operational at-a-glance for the fleet.
+    supabase
+      .from("matches")
+      .select("id, status, table_number, started_at, ended_at, player_count, games(slug, display_name), locations(name)")
+      .order("started_at", { ascending: false })
+      .limit(15),
+    supabase.from("matches").select("id", { count: "exact", head: true }),
+    supabase
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "active"),
   ]);
+
+  // Fleet-health signals — turn the raw rows into the handful of numbers that
+  // actually need attention (Mike's "watch the pucks + the TV storage").
+  const offlinePucks = (pucks ?? []).filter((p) => !p.is_online).length;
+  const lowBatteryPucks = (pucks ?? []).filter(
+    (p) => p.battery_pct != null && p.battery_pct < 25,
+  ).length;
+  const lowStorageTvs = (tvs ?? []).filter(
+    (tv) => tv.storage_free_kb != null && tv.storage_free_kb < 50_000,
+  ).length;
+  // Embedded relations come back loosely typed without generated DB types;
+  // normalise object-or-array for the game/venue name.
+  const gameName = (m: { games?: unknown }) => {
+    const g = m.games as { display_name?: string } | { display_name?: string }[] | null;
+    return (Array.isArray(g) ? g[0]?.display_name : g?.display_name) ?? "—";
+  };
+  const venueName = (m: { locations?: unknown }) => {
+    const l = m.locations as { name?: string } | { name?: string }[] | null;
+    return (Array.isArray(l) ? l[0]?.name : l?.name) ?? "—";
+  };
 
   return (
     <div className="grid gap-6">
@@ -80,6 +116,76 @@ export default async function AdminDashboard() {
           </CardHeader>
         </Card>
       </div>
+
+      {/* Fleet health — the numbers that need attention, not raw counts. */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Fleet health</CardTitle>
+          <CardDescription>What needs attention right now.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+            <HealthStat label="Pucks offline" value={offlinePucks} alert={offlinePucks > 0} />
+            <HealthStat label="Low battery (<25%)" value={lowBatteryPucks} alert={lowBatteryPucks > 0} />
+            <HealthStat label="TVs low storage" value={lowStorageTvs} alert={lowStorageTvs > 0} />
+            <HealthStat label="Matches live now" value={activeMatches ?? 0} alert={false} />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Live activity — what's actually being played across the fleet. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Recent matches</CardTitle>
+          <CardDescription>
+            {(totalMatches ?? 0).toLocaleString()} total · {activeMatches ?? 0} live
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {recentMatches && recentMatches.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Game</TableHead>
+                  <TableHead>Venue</TableHead>
+                  <TableHead>Table</TableHead>
+                  <TableHead>Players</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Started</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recentMatches.map((m) => (
+                  <TableRow key={m.id}>
+                    <TableCell>{gameName(m)}</TableCell>
+                    <TableCell>{venueName(m)}</TableCell>
+                    <TableCell>{m.table_number ?? "—"}</TableCell>
+                    <TableCell>{m.player_count}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          m.status === "active"
+                            ? "default"
+                            : m.status === "finished"
+                              ? "secondary"
+                              : "outline"
+                        }
+                      >
+                        {m.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(m.started_at).toLocaleString()}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="text-sm text-muted-foreground">No matches played yet.</p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -249,6 +355,15 @@ export default async function AdminDashboard() {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function HealthStat({ label, value, alert }: { label: string; value: number; alert: boolean }) {
+  return (
+    <div className="rounded-lg border p-3">
+      <div className="text-sm text-muted-foreground">{label}</div>
+      <div className={`text-2xl font-semibold ${alert ? "text-red-600" : ""}`}>{value}</div>
     </div>
   );
 }
